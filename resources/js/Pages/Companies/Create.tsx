@@ -5,11 +5,17 @@ import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
+import type { MembershipPlan } from '@/types';
 
-export default function CompanyCreate() {
+interface Props {
+    membershipPlans: Pick<MembershipPlan, 'id' | 'name' | 'max_staff_users' | 'max_employees'>[];
+}
+
+export default function CompanyCreate({ membershipPlans }: Props) {
     const [preview, setPreview] = useState<string | null>(null);
 
     const { data, setData, processing, errors } = useForm({
@@ -20,6 +26,9 @@ export default function CompanyCreate() {
         email: '',
         logo: null as File | null,
         is_active: true,
+        membership_plan_id: '',
+        membership_started_at: '',
+        membership_ends_at: '',
     });
 
     const submit = (e: FormEvent) => {
@@ -85,6 +94,41 @@ export default function CompanyCreate() {
                                     </span>
                                 </label>
                                 {errors.logo && <p className="text-xs text-rose-500">{errors.logo}</p>}
+                            </div>
+                        </Card>
+
+                        <Card>
+                            <CardHeader title="Membresia" />
+                            <div className="mt-4 space-y-4">
+                                <Select
+                                    label="Plan"
+                                    options={membershipPlans.map((p) => ({
+                                        value: String(p.id),
+                                        label: p.name,
+                                        description:
+                                            p.max_staff_users == null
+                                                ? 'Usuarios staff ilimitados'
+                                                : `Hasta ${p.max_staff_users} usuarios staff`,
+                                    }))}
+                                    placeholder="Predeterminado (primer plan activo)"
+                                    value={data.membership_plan_id === '' ? '' : String(data.membership_plan_id)}
+                                    onChange={(e) => setData('membership_plan_id', e.target.value)}
+                                    error={errors.membership_plan_id}
+                                />
+                                <Input
+                                    type="date"
+                                    label="Inicio membresia (opcional)"
+                                    value={data.membership_started_at}
+                                    onChange={(e) => setData('membership_started_at', e.target.value)}
+                                    error={errors.membership_started_at}
+                                />
+                                <Input
+                                    type="date"
+                                    label="Fin membresia (opcional)"
+                                    value={data.membership_ends_at}
+                                    onChange={(e) => setData('membership_ends_at', e.target.value)}
+                                    error={errors.membership_ends_at}
+                                />
                             </div>
                         </Card>
 

@@ -6,11 +6,14 @@ use App\Http\Requests\Payroll\CalculatePayrollRequest;
 use App\Http\Requests\Payroll\StorePayrollRequest;
 use App\Models\Company;
 use App\Models\Payroll;
+use App\Models\PayrollConcept;
+use App\Models\PayrollEmployee;
 use App\Models\PayrollPeriodicity;
 use App\Models\Production;
 use App\Models\WorkDaySession;
 use App\Services\PayrollCalculationService;
 use App\Support\CompanyContext;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -27,12 +30,12 @@ class PayrollController extends Controller
         $year = (int) $request->input('year', now()->year);
         $companyId = CompanyContext::id($user);
 
-        $query = Payroll::query()->withCount('payrollEmployees');
+        $query = Payroll::query()
+            ->with(['company:id,name'])
+            ->withCount('payrollEmployees');
 
         if ($companyId) {
             $query->where('company_id', $companyId);
-        } elseif ($user->isSuperAdmin()) {
-            $query->whereRaw('1 = 0');
         }
 
         if ($status !== 'all') {
@@ -103,63 +106,121 @@ class PayrollController extends Controller
         $this->authorize('view', $payroll);
         $this->ensurePayrollBelongsToActiveCompany($request, $payroll);
 
-        $payroll->load([
-            'payrollEmployees.employee:id,first_name,last_name,document_number,payroll_mode,daily_salary,minutes_per_full_workday',
-            'payrollEmployees.advances',
-        ]);
+        $payrollConcepts = collect();
+        if ($user->can('payrolls.show.manage_adjustments')) {
+            $payrollConcepts = PayrollConcept::query()
+                ->where('company_id', $payroll->company_id)
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']);
+        }
 
-        $workSessionsByEmployee = WorkDaySession::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $payroll->company_id)
-            ->whereBetween('work_date', [
-                $payroll->period_start->format('Y-m-d'),
-                $payroll->period_end->format('Y-m-d'),
-            ])
-            ->orderBy('work_date')
-            ->orderBy('id')
-            ->get()
-            ->groupBy(fn ($s) => (string) $s->employee_id)
-            ->map(fn ($sessions) => $sessions->values()->all())
-            ->all();
-
-        $productionsByEmployee = Production::query()
-            ->withoutGlobalScopes()
-            ->with(['reference:id,code,name', 'operation:id,name'])
-            ->whereBetween('date', [
-                $payroll->period_start->format('Y-m-d'),
-                $payroll->period_end->format('Y-m-d'),
-            ])
-            ->whereIn('status', [Production::STATUS_CONFIRMED, Production::STATUS_PENDING])
-            ->where(function ($q) use ($payroll) {
-                $cid = (int) $payroll->company_id;
-                $q->where('company_id', $cid)
-                    ->orWhereHas('reference', fn ($r) => $r->where('company_id', $cid));
-            })
-            ->orderBy('date')
-            ->orderBy('id')
-            ->get()
-            ->groupBy(fn ($p) => (string) $p->employee_id)
-            ->map(fn ($rows) => $rows->values()->all())
-            ->all();
+        $peBase = PayrollEmployee::query()->where('payroll_id', $payroll->id);
 
         if ($user->isEmployee() && ! $user->isAdmin()) {
-            $payroll->setRelation(
-                'payrollEmployees',
-                $payroll->payrollEmployees->where('employee_id', $user->employee_id)->values()
-            );
-            $eid = (string) $user->employee_id;
-            $workSessionsByEmployee = array_key_exists($eid, $workSessionsByEmployee)
-                ? [$eid => $workSessionsByEmployee[$eid]]
-                : [];
-            $productionsByEmployee = array_key_exists($eid, $productionsByEmployee)
-                ? [$eid => $productionsByEmployee[$eid]]
-                : [];
+            $peBase->where('employee_id', $user->employee_id);
+        }
+
+        $totalsRow = (clone $peBase)
+            ->selectRaw('
+                COUNT(*) as employee_count,
+                COALESCE(SUM(production_total), 0) as total_production,
+                COALESCE(SUM(daily_work_subtotal), 0) as total_daily,
+                COALESCE(SUM(adjustments_subtotal), 0) as total_adjustments,
+                COALESCE(SUM(advances_discount), 0) as total_advances,
+                COALESCE(SUM(
+                    COALESCE(production_total, 0)
+                    + COALESCE(daily_work_subtotal, 0)
+                    + COALESCE(adjustments_subtotal, 0)
+                ), 0) as total_gross
+            ')
+            ->first();
+
+        $totalDeductions = (float) (clone $peBase)->get(['deductions'])->sum(function (PayrollEmployee $pe) {
+            $ded = $pe->deductions ?? [];
+            if (! is_array($ded)) {
+                return 0.0;
+            }
+
+            return (float) collect($ded)->sum(fn ($d) => (float) ($d['amount'] ?? 0));
+        });
+
+        $showDailyColumn = (clone $peBase)->where('daily_work_subtotal', '>', 0)->exists();
+
+        $payrollEmployees = (clone $peBase)
+            ->with([
+                'employee:id,first_name,last_name,document_number,payroll_mode,daily_salary,minutes_per_full_workday',
+                'advances',
+                'adjustments.payrollConcept:id,name,code',
+            ])
+            ->join('employees', 'payroll_employees.employee_id', '=', 'employees.id')
+            ->orderBy('employees.first_name')
+            ->orderBy('employees.last_name')
+            ->select('payroll_employees.*')
+            ->paginate(15)
+            ->withQueryString();
+
+        $idsOnPage = $payrollEmployees->getCollection()->pluck('employee_id')->filter()->values()->all();
+
+        $workSessionsByEmployee = [];
+        if ($idsOnPage !== []) {
+            $workSessionsByEmployee = WorkDaySession::query()
+                ->withoutGlobalScopes()
+                ->where('company_id', $payroll->company_id)
+                ->whereBetween('work_date', [
+                    $payroll->period_start->format('Y-m-d'),
+                    $payroll->period_end->format('Y-m-d'),
+                ])
+                ->whereIn('employee_id', $idsOnPage)
+                ->orderBy('work_date')
+                ->orderBy('id')
+                ->get()
+                ->groupBy(fn ($s) => (string) $s->employee_id)
+                ->map(fn ($sessions) => $sessions->values()->all())
+                ->all();
+        }
+
+        $productionsByEmployee = [];
+        if ($idsOnPage !== []) {
+            $productionsByEmployee = Production::query()
+                ->withoutGlobalScopes()
+                ->with(['reference:id,code,name', 'operation:id,name'])
+                ->whereBetween('date', [
+                    $payroll->period_start->format('Y-m-d'),
+                    $payroll->period_end->format('Y-m-d'),
+                ])
+                ->whereIn('status', [Production::STATUS_CONFIRMED, Production::STATUS_PENDING])
+                ->where(function ($q) use ($payroll) {
+                    $cid = (int) $payroll->company_id;
+                    $q->where('company_id', $cid)
+                        ->orWhereHas('reference', fn ($r) => $r->where('company_id', $cid));
+                })
+                ->whereIn('employee_id', $idsOnPage)
+                ->orderBy('date')
+                ->orderBy('id')
+                ->get()
+                ->groupBy(fn ($p) => (string) $p->employee_id)
+                ->map(fn ($rows) => $rows->values()->all())
+                ->all();
         }
 
         return Inertia::render('Payrolls/Show', [
             'payroll' => $payroll,
+            'payrollEmployees' => $payrollEmployees,
+            'payrollEmployeeTotals' => [
+                'employee_count' => (int) ($totalsRow->employee_count ?? 0),
+                'total_production' => (float) ($totalsRow->total_production ?? 0),
+                'total_daily' => (float) ($totalsRow->total_daily ?? 0),
+                'total_adjustments' => (float) ($totalsRow->total_adjustments ?? 0),
+                'total_gross' => (float) ($totalsRow->total_gross ?? 0),
+                'total_advances' => (float) ($totalsRow->total_advances ?? 0),
+                'total_deductions' => $totalDeductions,
+                'show_daily_column' => $showDailyColumn,
+            ],
             'workSessionsByEmployee' => $workSessionsByEmployee,
             'productionsByEmployee' => $productionsByEmployee,
+            'payrollConcepts' => $payrollConcepts,
         ]);
     }
 
@@ -248,7 +309,7 @@ class PayrollController extends Controller
             return;
         }
 
-        $activeId = session('active_company_id');
+        $activeId = TenantContext::superAdminSelectedCompanyId();
         if ($activeId && (int) $activeId !== (int) $payroll->company_id) {
             abort(403, 'Esta nomina pertenece a otra empresa. Activa la empresa correcta en el selector.');
         }

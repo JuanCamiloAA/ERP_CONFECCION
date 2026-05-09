@@ -1,6 +1,7 @@
 import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeftIcon, ArrowPathIcon } from '@heroicons/react/24/outline';
 import { FormEvent } from 'react';
+import { MembershipLimitAlert } from '@/Components/Membership/MembershipLimitAlert';
 import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
@@ -67,6 +68,8 @@ export default function UserCreate({ roles, companies }: Props) {
                         </div>
                     }
                 />
+
+                <MembershipLimitAlert />
 
                 <Card>
                     <CardHeader title="Datos del usuario" />

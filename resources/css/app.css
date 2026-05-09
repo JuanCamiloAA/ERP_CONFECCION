@@ -56,6 +56,15 @@
     }
 }
 
+@keyframes partners-marquee {
+    from {
+        transform: translateX(0);
+    }
+    to {
+        transform: translateX(-50%);
+    }
+}
+
 @layer components {
     .scrollbar-thin {
         scrollbar-width: thin;
@@ -77,6 +86,17 @@
 
     .dark .scrollbar-thin::-webkit-scrollbar-thumb {
         background: theme('colors.slate.700');
+    }
+
+    .animate-partners-marquee {
+        animation: partners-marquee var(--partners-marquee-seconds, 35s) linear infinite;
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        .animate-partners-marquee {
+            animation: none;
+            transform: none;
+        }
     }
 }
 

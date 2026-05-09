@@ -12,12 +12,18 @@ declare global {
         /** Props compartidas; el índice cumple PageProps de @inertiajs/core para usePage<T>(). */
         interface PageProps extends import('@inertiajs/core').PageProps {
             appName: string;
+            /** URL del icono de marca (Firebase o public/images); favicon y login sin empresa. */
+            brandIconUrl: string;
             auth: {
                 user: AuthUser | null;
             };
             flash: FlashMessages;
             ziggy: ZiggyConfig & { location: string };
             activeCompany: Company | null;
+            /** null = vista consolidada (super admin). */
+            activeCompanyId?: number | null;
+            companiesForSelector?: Array<{ id: number; name: string; is_active: boolean }>;
+            isConsolidatedView?: boolean;
             /** Presente en la pagina de login cuando la URL incluye ?company= o ?empresa= (id). */
             loginCompany?: { id: number; name: string; logo_url: string | null } | null;
             permissionMatrix?: PermissionMatrix;
@@ -76,6 +82,18 @@ export interface AuthUser {
     employee_profile?: { id: number; payroll_mode: string; full_name: string } | null;
 }
 
+export interface MembershipPlan {
+    id: number;
+    name: string;
+    slug?: string;
+    max_staff_users: number | null;
+    max_employees: number | null;
+    price_monthly?: string | number | null;
+    features_json?: string[] | null;
+    is_active?: boolean;
+    sort_order?: number;
+}
+
 export interface Company {
     id: number;
     name: string;
@@ -86,6 +104,11 @@ export interface Company {
     logo: string | null;
     is_active: boolean;
     settings: Record<string, unknown> | null;
+    membership_plan_id?: number | null;
+    membership_started_at?: string | null;
+    membership_ends_at?: string | null;
+    membership_plan?: MembershipPlan | null;
+    staff_users_count?: number;
     created_at: string;
     updated_at: string;
 }
@@ -121,9 +144,43 @@ export interface Bank {
     employees_count?: number;
 }
 
+export interface ExpenseCategory {
+    id: number;
+    company_id: number;
+    company?: { id: number; name: string } | null;
+    name: string;
+    slug: string | null;
+    description: string | null;
+    is_active: boolean;
+    sort_order: number;
+    created_at: string;
+    updated_at: string;
+    expenses_count?: number;
+}
+
+export interface ExpenseListRow {
+    id: number;
+    amount: number;
+    description: string;
+    expense_date: string;
+    created_at: string | null;
+    receipt_url: string | null;
+    receipt_mime: string | null;
+    category: { id: number; name: string } | null;
+    creator: { id: number; full_name: string } | null;
+    company?: { id: number; name: string } | null;
+}
+
+export interface ExpenseDetail extends ExpenseListRow {
+    notes: string | null;
+    receipt_original_name: string | null;
+    creator: { id: number; full_name: string; email: string } | null;
+}
+
 export interface Employee {
     id: number;
     company_id: number;
+    company?: { id: number; name: string } | null;
     user_id: number | null;
     first_name: string;
     last_name: string;
@@ -243,6 +300,7 @@ export interface ReferenceOperationPivot extends Operation {
 export interface Production {
     id: number;
     company_id: number;
+    company?: { id: number; name: string } | null;
     employee_id: number;
     reference_id: number;
     operation_id: number;
@@ -262,6 +320,7 @@ export interface Production {
 export interface Payroll {
     id: number;
     company_id: number;
+    company?: { id: number; name: string } | null;
     name: string;
     period_start: string;
     period_end: string;
@@ -282,6 +341,8 @@ export interface PayrollEmployee {
     employee_id: number;
     production_total: string | number;
     daily_work_subtotal?: string | number;
+    /** Suma de conceptos manuales (>= 0); forma parte del bruto antes de deducciones. */
+    adjustments_subtotal?: string | number;
     validated_work_days?: ValidatedWorkDaySnapshot[] | null;
     deductions: Array<{ key: string; label: string; amount: number }> | null;
     additions: Array<{ key: string; label: string; amount: number }> | null;
@@ -291,6 +352,29 @@ export interface PayrollEmployee {
     paid_at: string | null;
     notes: string | null;
     employee?: Employee;
+    adjustments?: PayrollEmployeeAdjustment[];
+}
+
+export interface PayrollConcept {
+    id: number;
+    company_id?: number;
+    name: string;
+    code: string | null;
+    description?: string | null;
+    sort_order?: number;
+    is_active?: boolean;
+    company?: { id: number; name: string } | null;
+    adjustments_count?: number;
+}
+
+export interface PayrollEmployeeAdjustment {
+    id: number;
+    company_id: number;
+    payroll_employee_id: number;
+    payroll_concept_id: number;
+    amount: string | number;
+    notes: string | null;
+    payroll_concept?: Pick<PayrollConcept, 'id' | 'name' | 'code'>;
 }
 
 export interface Advance {

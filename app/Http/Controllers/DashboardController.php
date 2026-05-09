@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Services\DashboardStatsService;
+use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -15,9 +16,13 @@ class DashboardController extends Controller
     {
         $user = $request->user();
 
-        $companyId = $user->company_id ?? session('active_company_id');
+        $isSuperConsolidated = $user->isSuperAdmin() && TenantContext::isConsolidatedSuperAdmin($user);
 
-        if (! $companyId && $user->isSuperAdmin()) {
+        $companyId = $isSuperConsolidated
+            ? null
+            : TenantContext::effectiveCompanyId($user);
+
+        if (! $companyId && ! $user->isSuperAdmin()) {
             return Inertia::render('Dashboard/Index', [
                 'requireCompany' => true,
                 'stats' => null,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Advance\StoreAdvanceRequest;
 use App\Models\Advance;
 use App\Models\Employee;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -48,7 +49,7 @@ class AdvanceController extends Controller
         $data = $request->validated();
 
         Advance::create([
-            'company_id' => $user->company_id,
+            'company_id' => TenantContext::requireCompanyIdForWrite($user),
             'employee_id' => $data['employee_id'],
             'amount' => $data['amount'],
             'date' => $data['date'],

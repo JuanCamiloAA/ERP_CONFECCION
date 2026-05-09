@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatRelativeDate } from '@/lib/utils';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import type { PaginatedResponse } from '@/types';
 
 interface UserRow {
@@ -31,10 +32,11 @@ interface UserRow {
 
 interface Props {
     users: PaginatedResponse<UserRow>;
-    filters: { search: string; status: string };
+    filters: { search: string; status: string; company_id?: string | number | null };
 }
 
 export default function UsersIndex({ users, filters }: Props) {
+    const { isSuperAdmin } = usePermissions();
     const [search, setSearch] = useState(filters.search ?? '');
     const [status, setStatus] = useState(filters.status ?? 'all');
     const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
@@ -45,6 +47,9 @@ export default function UsersIndex({ users, filters }: Props) {
         const newStatus = next.status ?? status;
         if (newSearch) params.search = newSearch;
         if (newStatus !== 'all') params.status = newStatus;
+        if (filters.company_id != null && filters.company_id !== '') {
+            params.company_id = String(filters.company_id);
+        }
 
         router.get(route('users.index'), params, { preserveState: true, preserveScroll: true, replace: true });
     };
@@ -71,6 +76,27 @@ export default function UsersIndex({ users, filters }: Props) {
                         </Can>
                     }
                 />
+
+                {isSuperAdmin && filters.company_id != null && filters.company_id !== '' ? (
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-100">
+                        <span>
+                            Filtrando usuarios de la empresa ID <strong>{String(filters.company_id)}</strong>
+                        </span>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            type="button"
+                            onClick={() => {
+                                const params: Record<string, string> = {};
+                                if (search) params.search = search;
+                                if (status !== 'all') params.status = status;
+                                router.get(route('users.index'), params, { preserveState: true, replace: true });
+                            }}
+                        >
+                            Quitar filtro de empresa
+                        </Button>
+                    </div>
+                ) : null}
 
                 <div className="flex flex-col gap-3 sm:flex-row">
                     <SearchInput

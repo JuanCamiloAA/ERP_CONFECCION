@@ -8,8 +8,9 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
 import { StatCard } from '@/Components/UI/StatCard';
 import AppLayout from '@/Layouts/AppLayout';
+import { Pagination } from '@/Components/UI/Pagination';
 import { formatCurrency, formatDate } from '@/lib/utils';
-import type { Payroll } from '@/types';
+import type { PaginatedResponse, Payroll } from '@/types';
 
 interface Summary {
     total_payrolls: number;
@@ -18,10 +19,17 @@ interface Summary {
     total_pending: number;
 }
 
+interface ChartPayrollRow {
+    id: number;
+    name: string;
+    total_amount: string | number;
+}
+
 interface Props {
     filters: { year: number };
     summary: Summary;
-    payrolls: Payroll[];
+    chartPayrolls: ChartPayrollRow[];
+    payrolls: PaginatedResponse<Payroll>;
 }
 
 const statusVariant: Record<string, 'neutral' | 'info' | 'warning' | 'success'> = {
@@ -31,7 +39,7 @@ const statusVariant: Record<string, 'neutral' | 'info' | 'warning' | 'success'> 
     pagado: 'success',
 };
 
-export default function ReportPayroll({ filters, summary, payrolls }: Props) {
+export default function ReportPayroll({ filters, summary, chartPayrolls, payrolls }: Props) {
     const [year, setYear] = useState(filters.year);
     const years = Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - i);
 
@@ -39,7 +47,7 @@ export default function ReportPayroll({ filters, summary, payrolls }: Props) {
         router.get(route('reports.payroll'), { year }, { preserveState: true, replace: true });
     };
 
-    const chartData = payrolls.map((p) => ({
+    const chartData = chartPayrolls.map((p) => ({
         name: p.name,
         total: Number(p.total_amount),
     }));
@@ -95,9 +103,9 @@ export default function ReportPayroll({ filters, summary, payrolls }: Props) {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {payrolls.length === 0 ? (
+                                {payrolls.data.length === 0 ? (
                                     <tr><td colSpan={4} className="py-6 text-center text-slate-400">No hay nominas en este ano</td></tr>
-                                ) : payrolls.map((p) => (
+                                ) : payrolls.data.map((p) => (
                                     <tr key={p.id}>
                                         <td className="py-2"><Link href={route('payrolls.show', p.id)} className="text-indigo-600 hover:underline dark:text-indigo-400">{p.name}</Link></td>
                                         <td className="py-2">{formatDate(p.period_start)} - {formatDate(p.period_end)}</td>
@@ -108,6 +116,7 @@ export default function ReportPayroll({ filters, summary, payrolls }: Props) {
                             </tbody>
                         </table>
                     </div>
+                    <Pagination links={payrolls.links} from={payrolls.from} to={payrolls.to} total={payrolls.total} />
                 </Card>
             </div>
         </AppLayout>

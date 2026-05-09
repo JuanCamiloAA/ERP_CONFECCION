@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\WorkDaySession;
 use App\Services\WorkDaySessionService;
+use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -21,9 +23,13 @@ class WorkDaySessionController extends Controller
         $employee = null;
 
         if ($requestedEmployeeId && $user?->can('productions.index.workday_others')) {
+            $effectiveCompanyId = TenantContext::effectiveCompanyId($user);
             $employee = Employee::query()
                 ->withoutGlobalScopes()
-                ->where('company_id', $user->company_id)
+                ->when(
+                    $effectiveCompanyId !== null,
+                    fn ($q) => $q->where('company_id', $effectiveCompanyId)
+                )
                 ->find($requestedEmployeeId);
         } elseif ($user?->employee_id) {
             $employee = Employee::query()->find($user->employee_id);
@@ -56,8 +62,12 @@ class WorkDaySessionController extends Controller
     public function start(Request $request): RedirectResponse
     {
         $user = $request->user();
-        $companyId = (int) $user->company_id;
-        $company = $user->company ?? \App\Models\Company::find($companyId);
+        $effectiveCompanyId = TenantContext::effectiveCompanyId($user);
+        if ($effectiveCompanyId === null) {
+            return back()->with('error', 'Seleccione una empresa en la parte superior para gestionar jornadas.');
+        }
+        $companyId = (int) $effectiveCompanyId;
+        $company = Company::find($companyId);
         if (! $company) {
             return back()->with('error', 'Empresa no encontrada.');
         }

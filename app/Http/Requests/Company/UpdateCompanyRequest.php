@@ -25,6 +25,21 @@ class UpdateCompanyRequest extends FormRequest
             'logo' => ['nullable', 'image', 'max:2048'],
             'is_active' => ['nullable', 'boolean'],
             'settings' => ['nullable', 'array'],
+            'membership_plan_id' => ['nullable', 'integer', 'exists:membership_plans,id'],
+            'membership_started_at' => ['nullable', 'date'],
+            'membership_ends_at' => ['nullable', 'date', 'after_or_equal:membership_started_at'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        if ($this->input('membership_plan_id') === '' || $this->input('membership_plan_id') === null) {
+            $this->merge(['membership_plan_id' => null]);
+        }
+        foreach (['membership_started_at', 'membership_ends_at'] as $key) {
+            if ($this->input($key) === '') {
+                $this->merge([$key => null]);
+            }
+        }
     }
 }

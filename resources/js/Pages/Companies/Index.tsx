@@ -25,6 +25,8 @@ interface CompanyRow {
     is_active: boolean;
     employees_count: number;
     users_count: number;
+    staff_users_count: number;
+    membership_plan: { id: number; name: string; max_staff_users: number | null } | null;
 }
 
 interface Props {
@@ -83,6 +85,8 @@ export default function CompaniesIndex({ companies, filters }: Props) {
                             <TableHeader>Contacto</TableHeader>
                             <TableHeader align="center">Empleados</TableHeader>
                             <TableHeader align="center">Usuarios</TableHeader>
+                            <TableHeader align="center">Staff</TableHeader>
+                            <TableHeader>Plan</TableHeader>
                             <TableHeader align="center">Estado</TableHeader>
                             <TableHeader align="right">Acciones</TableHeader>
                         </TableRow>
@@ -90,7 +94,7 @@ export default function CompaniesIndex({ companies, filters }: Props) {
                     <TableBody>
                         {companies.data.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                                <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                                     No se encontraron empresas.
                                 </td>
                             </tr>
@@ -122,6 +126,15 @@ export default function CompaniesIndex({ companies, filters }: Props) {
                                     </TableCell>
                                     <TableCell align="center">{company.employees_count}</TableCell>
                                     <TableCell align="center">{company.users_count}</TableCell>
+                                    <TableCell align="center">
+                                        {company.staff_users_count}
+                                        {company.membership_plan?.max_staff_users == null
+                                            ? ' / ∞'
+                                            : ` / ${company.membership_plan.max_staff_users}`}
+                                    </TableCell>
+                                    <TableCell>
+                                        <span className="text-sm text-slate-700 dark:text-slate-200">{company.membership_plan?.name ?? '—'}</span>
+                                    </TableCell>
                                     <TableCell align="center">
                                         <Badge variant={company.is_active ? 'success' : 'danger'}>
                                             {company.is_active ? 'Activa' : 'Inactiva'}

@@ -2,17 +2,19 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\PermissionHelper;
 use App\Http\Requests\User\StoreUserRequest;
 use App\Http\Requests\User\UpdateUserRequest;
-use App\Helpers\PermissionHelper;
 use App\Models\AccessLog;
 use App\Models\Company;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\CompanyDefaultRolesService;
+use App\Services\Membership\MembershipStaffLimiter;
 use App\Services\UserPermissionOverrideService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
 use Inertia\Inertia;
@@ -39,6 +41,11 @@ class UserController extends Controller
             });
         }
 
+        $companyFilter = $request->input('company_id');
+        if ($companyFilter !== null && $companyFilter !== '' && $request->user()->isSuperAdmin()) {
+            $query->where('company_id', (int) $companyFilter);
+        }
+
         if ($status === 'active') {
             $query->where('is_active', true);
         } elseif ($status === 'inactive') {
@@ -49,7 +56,7 @@ class UserController extends Controller
 
         return Inertia::render('Users/Index', [
             'users' => $users,
-            'filters' => ['search' => $search, 'status' => $status],
+            'filters' => ['search' => $search, 'status' => $status, 'company_id' => $companyFilter],
         ]);
     }
 
@@ -67,6 +74,11 @@ class UserController extends Controller
         $authUser = $request->user();
 
         $companyId = $authUser->isSuperAdmin() ? ($data['company_id'] ?? null) : $authUser->company_id;
+        $role = Role::find($data['role_id']);
+
+        if ($companyId && $role && $role->name !== 'super_admin') {
+            app(MembershipStaffLimiter::class)->assertCanAddStaffUser((int) $companyId, $authUser);
+        }
 
         $user = User::create([
             'company_id' => $companyId,
@@ -88,15 +100,15 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('success', 'Usuario creado.');
     }
 
-    public function show(User $user): Response
+    public function show(Request $request, User $user): Response
     {
         $user->load(['roles.permissions', 'company:id,name']);
 
         $logs = AccessLog::query()
             ->where('user_id', $user->id)
             ->orderByDesc('created_at')
-            ->limit(10)
-            ->get();
+            ->paginate(15)
+            ->withQueryString();
 
         return Inertia::render('Users/Show', [
             'user' => $user,
@@ -206,7 +218,7 @@ class UserController extends Controller
         return redirect()->route('users.index')->with('success', 'Usuario eliminado.');
     }
 
-    protected function availableRoles($authUser): \Illuminate\Support\Collection
+    protected function availableRoles($authUser): Collection
     {
         $companyId = $authUser->company_id;
 

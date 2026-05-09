@@ -26,6 +26,12 @@ class ForcePasswordChange
             return $next($request);
         }
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'message' => 'Debes cambiar tu contrasena temporal antes de continuar.',
+            ], 403);
+        }
+
         return redirect()->route('profile.change-password.show')
             ->with('warning', 'Debes cambiar tu contrasena temporal antes de continuar.');
     }

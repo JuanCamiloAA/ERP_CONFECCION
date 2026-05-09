@@ -6,8 +6,10 @@ use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Company\StoreCompanyRequest;
 use App\Http\Requests\Company\UpdateCompanyRequest;
 use App\Models\Company;
+use App\Models\MembershipPlan;
 use App\Services\CompanyDefaultRolesService;
 use App\Services\Files\StoredFileDeleter;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,7 +26,11 @@ class CompanyController extends Controller
     {
         $search = trim((string) $request->input('search', ''));
 
-        $query = Company::query()->withCount(['employees', 'users']);
+        $query = Company::query()
+            ->with(['membershipPlan:id,name,max_staff_users'])
+            ->withCount([
+                'users as staff_users_count' => fn ($q) => $q->whereNull('employee_id'),
+            ]);
 
         if ($search !== '') {
             $query->where(function ($q) use ($search) {
@@ -43,7 +49,13 @@ class CompanyController extends Controller
 
     public function create(): Response
     {
-        return Inertia::render('Companies/Create');
+        return Inertia::render('Companies/Create', [
+            'membershipPlans' => MembershipPlan::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name', 'max_staff_users', 'max_employees']),
+        ]);
     }
 
     public function store(StoreCompanyRequest $request): RedirectResponse
@@ -51,6 +63,13 @@ class CompanyController extends Controller
         $data = collect($request->validated())->except(['logo'])->all();
         $data['logo'] = null;
         $data['is_active'] = $data['is_active'] ?? true;
+
+        if (empty($data['membership_plan_id'])) {
+            $data['membership_plan_id'] = MembershipPlan::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->value('id');
+        }
 
         $company = Company::create($data);
 
@@ -69,8 +88,18 @@ class CompanyController extends Controller
 
     public function edit(Company $company): Response
     {
+        $company->loadMissing(['membershipPlan:id,name,max_staff_users,max_employees']);
+        $company->loadCount([
+            'users as staff_users_count' => fn ($q) => $q->whereNull('employee_id'),
+        ]);
+
         return Inertia::render('Companies/Edit', [
             'company' => $company,
+            'membershipPlans' => MembershipPlan::query()
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name', 'max_staff_users', 'max_employees']),
         ]);
     }
 
@@ -112,7 +141,16 @@ class CompanyController extends Controller
             abort(403);
         }
 
-        session(['active_company_id' => $request->input('company_id')]);
+        $company = Company::query()
+            ->whereKey($request->input('company_id'))
+            ->where('is_active', true)
+            ->first();
+        if (! $company) {
+            return back()->with('error', 'La empresa no esta disponible.');
+        }
+
+        session([TenantContext::SESSION_KEY => $company->id]);
+        session()->forget(TenantContext::LEGACY_SESSION_KEY);
 
         return back()->with('success', 'Empresa activa cambiada.');
     }

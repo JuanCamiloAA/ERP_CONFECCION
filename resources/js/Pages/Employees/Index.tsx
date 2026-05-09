@@ -1,4 +1,4 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { NoSymbolIcon, PencilSquareIcon, PlusIcon, TrashIcon, UserIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { Avatar } from '@/Components/UI/Avatar';
@@ -20,6 +20,7 @@ interface Props {
 }
 
 export default function EmployeesIndex({ employees, filters }: Props) {
+    const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
     const [search, setSearch] = useState(filters.search ?? '');
     const [status, setStatus] = useState(filters.status ?? 'all');
     const [confirmDelete, setConfirmDelete] = useState<Employee | null>(null);
@@ -56,11 +57,13 @@ export default function EmployeesIndex({ employees, filters }: Props) {
                     title="Empleados"
                     description="Gestiona los empleados del taller y su acceso al sistema."
                     action={
-                        <Can permission="employees.index.create">
-                            <Link href={route('employees.create')}>
-                                <Button icon={<PlusIcon className="h-4 w-4" />}>Nuevo empleado</Button>
-                            </Link>
-                        </Can>
+                        !isConsolidatedView ? (
+                            <Can permission="employees.index.create">
+                                <Link href={route('employees.create')}>
+                                    <Button icon={<PlusIcon className="h-4 w-4" />}>Nuevo empleado</Button>
+                                </Link>
+                            </Can>
+                        ) : undefined
                     }
                 />
 
@@ -92,6 +95,7 @@ export default function EmployeesIndex({ employees, filters }: Props) {
                     <TableHead>
                         <TableRow>
                             <TableHeader>Empleado</TableHeader>
+                            {isConsolidatedView ? <TableHeader>Empresa</TableHeader> : null}
                             <TableHeader>Documento</TableHeader>
                             <TableHeader>Telefono</TableHeader>
                             <TableHeader>Ingreso</TableHeader>
@@ -104,7 +108,7 @@ export default function EmployeesIndex({ employees, filters }: Props) {
                     <TableBody>
                         {employees.data.length === 0 ? (
                             <tr>
-                                <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
+                                <td colSpan={isConsolidatedView ? 9 : 8} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
                                     No se encontraron empleados.
                                 </td>
                             </tr>
@@ -124,6 +128,11 @@ export default function EmployeesIndex({ employees, filters }: Props) {
                                             </div>
                                         </div>
                                     </TableCell>
+                                    {isConsolidatedView ? (
+                                        <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                                            {employee.company?.name ?? '—'}
+                                        </TableCell>
+                                    ) : null}
                                     <TableCell>
                                         <span className="text-xs text-slate-500">{employee.document_type}</span>{' '}
                                         {employee.document_number}

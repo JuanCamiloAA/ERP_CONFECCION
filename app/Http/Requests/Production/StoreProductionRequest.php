@@ -5,6 +5,7 @@ namespace App\Http\Requests\Production;
 use App\Models\Payroll;
 use App\Models\Reference;
 use App\Support\ReferenceLotCapacity;
+use App\Support\TenantContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -73,7 +74,8 @@ class StoreProductionRequest extends FormRequest
                 ReferenceLotCapacity::assertWithinLot($validator, $referenceId, $operationId, $quantity);
             }
 
-            $companyId = (int) ($user?->company_id ?? session('active_company_id', 0));
+            $user = $this->user();
+            $companyId = $user ? (int) TenantContext::effectiveCompanyId($user) : 0;
             $date = $this->input('date');
             if ($companyId && $date && Payroll::paidPeriodCoversDate($companyId, $date)) {
                 $validator->errors()->add(

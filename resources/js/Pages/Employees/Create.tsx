@@ -1,6 +1,7 @@
-import { Head, Link, router, useForm } from '@inertiajs/react';
+import { Head, Link, useForm } from '@inertiajs/react';
 import { ArrowLeftIcon, ArrowPathIcon, KeyIcon } from '@heroicons/react/24/outline';
 import { FormEvent, useState } from 'react';
+import { MembershipLimitAlert } from '@/Components/Membership/MembershipLimitAlert';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
@@ -62,16 +63,7 @@ export default function EmployeeCreate({ roles, banks }: Props) {
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        const payload: Record<string, unknown> = { ...data };
-        if (data.create_user_account) {
-            (payload as Record<string, unknown>).initial_password = generatedPassword;
-        }
-        router.post(route('employees.store'), {
-            ...payload,
-            _method: 'post',
-        } as never, {
-            forceFormData: true,
-        });
+        post(route('employees.store'), { forceFormData: true });
     };
 
     const regeneratePassword = () => setGeneratedPassword(generatePassword(10));
@@ -100,6 +92,8 @@ export default function EmployeeCreate({ roles, banks }: Props) {
                         </div>
                     }
                 />
+
+                <MembershipLimitAlert />
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <Card className="lg:col-span-2">

@@ -7,7 +7,7 @@ import { createRoot, hydrateRoot } from 'react-dom/client';
 import { Toaster } from 'sonner';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 
-const appName = (import.meta.env.VITE_APP_NAME as string) || 'Taller Confeccion';
+const appName = (import.meta.env.VITE_APP_NAME as string) || 'MiTallerPro';
 
 createInertiaApp({
     title: (title) => (title ? `${title} | ${appName}` : appName),

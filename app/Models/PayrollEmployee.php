@@ -13,6 +13,7 @@ class PayrollEmployee extends Model
         'employee_id',
         'production_total',
         'daily_work_subtotal',
+        'adjustments_subtotal',
         'validated_work_days',
         'deductions',
         'additions',
@@ -29,6 +30,7 @@ class PayrollEmployee extends Model
         'validated_work_days' => 'array',
         'production_total' => 'decimal:2',
         'daily_work_subtotal' => 'decimal:2',
+        'adjustments_subtotal' => 'decimal:2',
         'advances_discount' => 'decimal:2',
         'net_payment' => 'decimal:2',
         'is_paid' => 'boolean',
@@ -48,5 +50,10 @@ class PayrollEmployee extends Model
     public function advances(): HasMany
     {
         return $this->hasMany(Advance::class);
+    }
+
+    public function adjustments(): HasMany
+    {
+        return $this->hasMany(PayrollEmployeeAdjustment::class);
     }
 }

@@ -6,7 +6,7 @@ import ReactDOMServer from 'react-dom/server';
 import { route } from 'ziggy-js';
 import { PermissionsProvider } from './contexts/PermissionsContext';
 
-const appName = (import.meta.env.VITE_APP_NAME as string) || 'Taller Confeccion';
+const appName = (import.meta.env.VITE_APP_NAME as string) || 'MiTallerPro';
 
 createServer((page) =>
     createInertiaApp({

@@ -17,7 +17,9 @@ import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 
 interface DashboardStats {
+    is_consolidated?: boolean;
     is_personal: boolean;
+    companies_active_count?: number | null;
     employees_active: number | null;
     references_active: number | null;
     production_month: number;
@@ -36,6 +38,7 @@ interface DashboardStats {
         quantity: number;
         total_value: number;
         status?: 'pendiente' | 'confirmado';
+        company?: { id: number; name: string } | null;
         employee?: { first_name: string; last_name: string };
         reference?: { code: string; name: string };
         operation?: { name: string };
@@ -74,12 +77,13 @@ export default function Dashboard({ stats, requireCompany }: Props) {
                 <EmptyState
                     icon={<BuildingOfficeIcon className="h-12 w-12" />}
                     title="Selecciona una empresa"
-                    description="Como super administrador, debes elegir una empresa activa desde el modulo de empresas para ver estadisticas."
+                    description="Tu cuenta no esta asociada a una empresa activa. Contacta al administrador."
                 />
             </AppLayout>
         );
     }
 
+    const consolidated = Boolean(stats.is_consolidated);
     const personal = stats.is_personal;
     const secondaryChartData = personal ? stats.top_references : stats.top_employees;
 
@@ -90,12 +94,14 @@ export default function Dashboard({ stats, requireCompany }: Props) {
             <div className="space-y-6">
                 <div>
                     <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-slate-100">
-                        {personal ? 'Tu avance' : 'Bienvenido al panel'}
+                        {personal ? 'Tu avance' : consolidated ? 'Vista consolidada' : 'Bienvenido al panel'}
                     </h1>
                     <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
                         {personal
                             ? 'Resumen de tu produccion y nominas en las que participas.'
-                            : 'Resumen general de actividad de tu taller.'}
+                            : consolidated
+                              ? 'Totales y actividad de todas las empresas activas. Puedes filtrar por empresa desde el selector superior.'
+                              : 'Resumen general de actividad de tu taller.'}
                     </p>
                 </div>
 
@@ -136,7 +142,17 @@ export default function Dashboard({ stats, requireCompany }: Props) {
                         />
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    <div
+                        className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${consolidated ? 'lg:grid-cols-5' : 'lg:grid-cols-4'}`}
+                    >
+                        {consolidated && stats.companies_active_count != null ? (
+                            <StatCard
+                                title="Empresas activas"
+                                value={formatNumber(stats.companies_active_count)}
+                                icon={<BuildingOfficeIcon className="h-6 w-6" />}
+                                color="sky"
+                            />
+                        ) : null}
                         <StatCard
                             title="Empleados activos"
                             value={formatNumber(stats.employees_active ?? 0)}
@@ -183,7 +199,9 @@ export default function Dashboard({ stats, requireCompany }: Props) {
                             description={
                                 personal
                                     ? 'Valor confirmado por dia (solo tus registros aprobados)'
-                                    : 'Valor total por dia (registros confirmados y pendientes de confirmar)'
+                                    : consolidated
+                                      ? 'Valor total por dia en todas las empresas (confirmados y pendientes)'
+                                      : 'Valor total por dia (registros confirmados y pendientes de confirmar)'
                             }
                         />
                         <div className="mt-4 h-72 min-h-[18rem] w-full min-w-0">
@@ -240,6 +258,9 @@ export default function Dashboard({ stats, requireCompany }: Props) {
                                 <thead>
                                     <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:text-slate-400">
                                         <th className="py-2 text-left font-semibold">Fecha</th>
+                                        {consolidated ? (
+                                            <th className="py-2 text-left font-semibold">Empresa</th>
+                                        ) : null}
                                         {!personal && <th className="py-2 text-left font-semibold">Empleado</th>}
                                         <th className="py-2 text-left font-semibold">Referencia</th>
                                         <th className="py-2 text-right font-semibold">Cantidad</th>
@@ -250,7 +271,10 @@ export default function Dashboard({ stats, requireCompany }: Props) {
                                 <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
                                     {stats.latest_productions.length === 0 ? (
                                         <tr>
-                                            <td colSpan={personal ? 5 : 6} className="py-6 text-center text-slate-400">
+                                            <td
+                                                colSpan={personal ? 5 : consolidated ? 7 : 6}
+                                                className="py-6 text-center text-slate-400"
+                                            >
                                                 Aun no hay registros
                                             </td>
                                         </tr>
@@ -258,6 +282,11 @@ export default function Dashboard({ stats, requireCompany }: Props) {
                                         stats.latest_productions.map((p) => (
                                             <tr key={p.id} className="text-slate-700 dark:text-slate-300">
                                                 <td className="py-2">{formatDate(p.date)}</td>
+                                                {consolidated ? (
+                                                    <td className="py-2 text-sm text-slate-600 dark:text-slate-400">
+                                                        {p.company?.name ?? '—'}
+                                                    </td>
+                                                ) : null}
                                                 {!personal && (
                                                     <td className="py-2">{p.employee ? `${p.employee.first_name} ${p.employee.last_name}` : '-'}</td>
                                                 )}

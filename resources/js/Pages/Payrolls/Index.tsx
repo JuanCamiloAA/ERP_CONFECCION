@@ -1,5 +1,5 @@
-import { Head, Link, router } from '@inertiajs/react';
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { Head, Link, router, usePage } from '@inertiajs/react';
+import { EyeIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
@@ -26,6 +26,7 @@ const statusVariant: Record<string, 'neutral' | 'info' | 'warning' | 'success'> 
 };
 
 export default function PayrollsIndex({ payrolls, filters }: Props) {
+    const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
     const [confirmDelete, setConfirmDelete] = useState<Payroll | null>(null);
     const [status, setStatus] = useState(filters.status ?? 'all');
     const [year, setYear] = useState(filters.year ?? new Date().getFullYear());
@@ -46,11 +47,13 @@ export default function PayrollsIndex({ payrolls, filters }: Props) {
                     title="Nominas"
                     description="Periodos de nomina de la empresa."
                     action={
-                        <Can permission="payrolls.index.create">
-                            <Link href={route('payrolls.create')}>
-                                <Button icon={<PlusIcon className="h-4 w-4" />}>Nueva nomina</Button>
-                            </Link>
-                        </Can>
+                        !isConsolidatedView ? (
+                            <Can permission="payrolls.index.create">
+                                <Link href={route('payrolls.create')}>
+                                    <Button icon={<PlusIcon className="h-4 w-4" />}>Nueva nomina</Button>
+                                </Link>
+                            </Can>
+                        ) : undefined
                     }
                 />
 
@@ -80,6 +83,7 @@ export default function PayrollsIndex({ payrolls, filters }: Props) {
                     <TableHead>
                         <TableRow>
                             <TableHeader>Nomina</TableHeader>
+                            {isConsolidatedView ? <TableHeader>Empresa</TableHeader> : null}
                             <TableHeader>Periodo</TableHeader>
                             <TableHeader align="center">Tipo</TableHeader>
                             <TableHeader align="center">Estado</TableHeader>
@@ -89,14 +93,22 @@ export default function PayrollsIndex({ payrolls, filters }: Props) {
                     </TableHead>
                     <TableBody>
                         {payrolls.data.length === 0 ? (
-                            <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-slate-500">No hay nominas.</td></tr>
+                            <tr><td colSpan={isConsolidatedView ? 7 : 6} className="px-4 py-12 text-center text-sm text-slate-500">No hay nominas.</td></tr>
                         ) : payrolls.data.map((p) => (
                             <TableRow key={p.id}>
                                 <TableCell>
-                                    <Link href={route('payrolls.show', p.id)} className="font-medium text-slate-900 hover:text-indigo-600 dark:text-slate-100">
+                                    <Link
+                                        href={route('payrolls.show', p.id)}
+                                        className="font-medium text-indigo-600 underline-offset-2 hover:text-indigo-500 hover:underline dark:text-indigo-400 dark:hover:text-indigo-300"
+                                    >
                                         {p.name}
                                     </Link>
                                 </TableCell>
+                                {isConsolidatedView ? (
+                                    <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                                        {p.company?.name ?? '—'}
+                                    </TableCell>
+                                ) : null}
                                 <TableCell>
                                     {formatDate(p.period_start)} - {formatDate(p.period_end)}
                                 </TableCell>
@@ -106,11 +118,31 @@ export default function PayrollsIndex({ payrolls, filters }: Props) {
                                 </TableCell>
                                 <TableCell align="right" className="font-semibold">{formatCurrency(p.total_amount)}</TableCell>
                                 <TableCell align="right">
-                                    <Can permission="payrolls.index.delete">
-                                        {p.status !== 'pagado' && p.status !== 'aprobado' && (
-                                            <Button variant="ghost" size="sm" icon={<TrashIcon className="h-4 w-4 text-rose-500" />} onClick={() => setConfirmDelete(p)} />
-                                        )}
-                                    </Can>
+                                    <div className="flex justify-end gap-1">
+                                        <Can permission="payrolls.show.view">
+                                            <Link href={route('payrolls.show', p.id)}>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Ver detalle"
+                                                    aria-label={`Ver detalle de ${p.name}`}
+                                                    icon={<EyeIcon className="h-4 w-4" />}
+                                                />
+                                            </Link>
+                                        </Can>
+                                        <Can permission="payrolls.index.delete">
+                                            {p.status !== 'pagado' && p.status !== 'aprobado' ? (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    title="Eliminar"
+                                                    aria-label={`Eliminar ${p.name}`}
+                                                    icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
+                                                    onClick={() => setConfirmDelete(p)}
+                                                />
+                                            ) : null}
+                                        </Can>
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}

@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Advance;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\PayrollEmployee;
@@ -23,8 +24,6 @@ class PayrollCalculationService
             if (! empty($employeeAdjustments)) {
                 $this->applyWorkSessionAdjustments($companyId, $employeeAdjustments, $adjustmentActor);
             }
-
-            $defaultDeductions = $this->getDefaultDeductions($companyId);
 
             $employees = Employee::query()
                 ->withoutGlobalScopes()
@@ -51,8 +50,20 @@ class PayrollCalculationService
                 ->orderBy('last_name')
                 ->get();
 
-            $payroll->payrollEmployees()->delete();
-            $totalAmount = 0;
+            $computedEmployeeIds = $employees->pluck('id')->all();
+
+            $staleRows = PayrollEmployee::query()
+                ->where('payroll_id', $payroll->id)
+                ->whereNotIn('employee_id', $computedEmployeeIds)
+                ->get();
+
+            foreach ($staleRows as $stale) {
+                Advance::query()
+                    ->withoutGlobalScopes()
+                    ->where('payroll_employee_id', $stale->id)
+                    ->update(['payroll_employee_id' => null]);
+                $stale->delete();
+            }
 
             foreach ($employees as $employee) {
                 $validatedWorkDays = null;
@@ -79,9 +90,19 @@ class PayrollCalculationService
                     $validatedWorkDays = $daily['validated_work_days'];
                 }
 
-                $gross = round($productionTotal + $dailyWorkSubtotal, 2);
-                $deductions = $this->buildDeductionsArray($defaultDeductions, $gross);
-                $deductionsAmount = collect($deductions)->sum('amount');
+                $payrollEmployee = PayrollEmployee::query()->updateOrCreate(
+                    [
+                        'payroll_id' => $payroll->id,
+                        'employee_id' => $employee->id,
+                    ],
+                    [
+                        'production_total' => round($productionTotal, 2),
+                        'daily_work_subtotal' => round($dailyWorkSubtotal, 2),
+                        'validated_work_days' => $validatedWorkDays,
+                        'additions' => [],
+                        'is_paid' => false,
+                    ],
+                );
 
                 $advances = Advance::query()
                     ->withoutGlobalScopes()
@@ -90,37 +111,65 @@ class PayrollCalculationService
                     ->where('status', Advance::STATUS_PENDING)
                     ->get();
 
-                $advancesDiscount = (float) $advances->sum('amount');
-                $netPayment = max(0, $gross - $deductionsAmount - $advancesDiscount);
-
-                $payrollEmployee = PayrollEmployee::create([
-                    'payroll_id' => $payroll->id,
-                    'employee_id' => $employee->id,
-                    'production_total' => round($productionTotal, 2),
-                    'daily_work_subtotal' => round($dailyWorkSubtotal, 2),
-                    'validated_work_days' => $validatedWorkDays,
-                    'deductions' => $deductions,
-                    'additions' => [],
-                    'advances_discount' => round($advancesDiscount, 2),
-                    'net_payment' => round($netPayment, 2),
-                    'is_paid' => false,
-                ]);
-
                 foreach ($advances as $advance) {
                     $advance->payroll_employee_id = $payrollEmployee->id;
                     $advance->save();
                 }
 
-                $totalAmount += $netPayment;
+                $this->recalculatePayrollEmployeeTotals($payrollEmployee);
             }
+
+            $this->refreshPayrollTotal($payroll);
 
             $payroll->update([
                 'status' => Payroll::STATUS_CALCULATED,
-                'total_amount' => round($totalAmount, 2),
             ]);
 
             return $payroll->fresh('payrollEmployees.employee');
         });
+    }
+
+    /**
+     * Devengado bruto empleado = production_total + daily_work_subtotal + suma de ajustes manuales (>= 0).
+     * Sobre ese bruto se aplican deducciones porcentuales y descuentos por anticipos.
+     */
+    public function recalculatePayrollEmployeeTotals(PayrollEmployee $payrollEmployee): void
+    {
+        $payrollEmployee->loadMissing('payroll');
+        $companyId = (int) $payrollEmployee->payroll->company_id;
+        $defaults = $this->getDefaultDeductions($companyId);
+
+        $adjustmentsSubtotal = round((float) $payrollEmployee->adjustments()->sum('amount'), 2);
+        $productionTotal = (float) $payrollEmployee->production_total;
+        $dailyWorkSubtotal = (float) $payrollEmployee->daily_work_subtotal;
+        $gross = round($productionTotal + $dailyWorkSubtotal + $adjustmentsSubtotal, 2);
+
+        $deductions = $this->buildDeductionsArray($defaults, $gross);
+        $deductionsAmount = round((float) collect($deductions)->sum('amount'), 2);
+
+        $advancesDiscount = round((float) Advance::query()
+            ->withoutGlobalScopes()
+            ->where('payroll_employee_id', $payrollEmployee->id)
+            ->where('status', Advance::STATUS_PENDING)
+            ->sum('amount'), 2);
+
+        $netPayment = max(0, round($gross - $deductionsAmount - $advancesDiscount, 2));
+
+        $payrollEmployee->update([
+            'adjustments_subtotal' => $adjustmentsSubtotal,
+            'deductions' => $deductions,
+            'advances_discount' => $advancesDiscount,
+            'net_payment' => $netPayment,
+        ]);
+    }
+
+    public function refreshPayrollTotal(Payroll $payroll): void
+    {
+        $total = (float) PayrollEmployee::query()
+            ->where('payroll_id', $payroll->id)
+            ->sum('net_payment');
+
+        $payroll->update(['total_amount' => round($total, 2)]);
     }
 
     /**
@@ -290,7 +339,7 @@ class PayrollCalculationService
             }
         }
 
-        $company = \App\Models\Company::find($companyId);
+        $company = Company::find($companyId);
         $settings = $company?->settings ?? [];
         if (isset($settings['default_deductions']) && is_array($settings['default_deductions'])) {
             return $settings['default_deductions'];

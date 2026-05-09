@@ -6,8 +6,11 @@ use App\Contracts\ObjectStorageInterface;
 use App\Models\Company;
 use App\Models\DataImportBatch;
 use App\Models\Employee;
+use App\Models\Expense;
+use App\Models\ExpenseCategory;
 use App\Models\Operation;
 use App\Models\Payroll;
+use App\Models\PayrollConcept;
 use App\Models\PayrollPeriodicity;
 use App\Models\Production;
 use App\Models\Reference;
@@ -17,9 +20,11 @@ use App\Observers\EmployeeObserver;
 use App\Observers\ProductionObserver;
 use App\Observers\UserObserver;
 use App\Policies\CompanyPolicy;
-use App\Policies\DataImportBatchPolicy;
 use App\Policies\EmployeePolicy;
+use App\Policies\ExpenseCategoryPolicy;
+use App\Policies\ExpensePolicy;
 use App\Policies\OperationPolicy;
+use App\Policies\PayrollConceptPolicy;
 use App\Policies\PayrollPeriodicityPolicy;
 use App\Policies\PayrollPolicy;
 use App\Policies\ProductionPolicy;
@@ -76,6 +81,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Operation::class, OperationPolicy::class);
         Gate::policy(Production::class, ProductionPolicy::class);
         Gate::policy(Payroll::class, PayrollPolicy::class);
+        Gate::policy(PayrollConcept::class, PayrollConceptPolicy::class);
         Gate::policy(PayrollPeriodicity::class, PayrollPeriodicityPolicy::class);
         Gate::policy(User::class, UserPolicy::class);
         Gate::policy(Role::class, RolePolicy::class);
@@ -85,6 +91,8 @@ class AppServiceProvider extends ServiceProvider
         }
 
         Gate::policy(DataImportBatch::class, DataImportBatchPolicy::class);
+        Gate::policy(Expense::class, ExpensePolicy::class);
+        Gate::policy(ExpenseCategory::class, ExpenseCategoryPolicy::class);
 
         RateLimiter::for('data-import-upload', function (Request $request) {
             return Limit::perMinute(10)->by((string) $request->user()?->id ?: $request->ip());

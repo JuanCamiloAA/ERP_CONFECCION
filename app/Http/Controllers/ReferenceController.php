@@ -10,6 +10,7 @@ use App\Models\Production;
 use App\Models\Reference;
 use App\Services\Files\StoredFileDeleter;
 use App\Support\ReferenceLotCompletion;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -84,7 +85,7 @@ class ReferenceController extends Controller
             $lotQty = (int) $data['lot_total_quantity'];
 
             $reference = Reference::create([
-                'company_id' => $user->company_id,
+                'company_id' => TenantContext::requireCompanyIdForWrite($user),
                 'code' => $data['code'],
                 'name' => $data['name'],
                 'payment_per_unit' => $data['payment_per_unit'],

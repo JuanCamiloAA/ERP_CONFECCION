@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Advance;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Payroll;
 use App\Models\Production;
@@ -15,37 +16,42 @@ class DashboardStatsService
     public function __construct(protected ProductionReportService $reports) {}
 
     /**
+     * @param  int|null  $companyId  null = todas las empresas (solo super admin consolidado).
      * @param  int|null  $scopedEmployeeId  Si viene informado (empleado no administrador), todas las metricas son solo de ese empleado.
      */
-    public function stats(int $companyId, ?int $scopedEmployeeId = null): array
+    public function stats(?int $companyId, ?int $scopedEmployeeId = null): array
     {
         $monthStart = Carbon::now()->startOfMonth()->toDateString();
         $monthEnd = Carbon::now()->endOfMonth()->toDateString();
         $weekStart = Carbon::now()->subDays(6)->toDateString();
         $today = Carbon::now()->toDateString();
 
+        $isConsolidated = $companyId === null;
         $isPersonal = $scopedEmployeeId !== null;
 
         $employeesActive = null;
         $referencesActive = null;
         if (! $isPersonal) {
-            $employeesActive = Employee::query()
+            $employeesQ = Employee::query()
                 ->withoutGlobalScope(CompanyScope::class)
-                ->where('company_id', $companyId)
-                ->where('is_active', true)
-                ->count();
-
-            $referencesActive = Reference::query()
+                ->where('is_active', true);
+            $referencesQ = Reference::query()
                 ->withoutGlobalScope(CompanyScope::class)
-                ->where('company_id', $companyId)
-                ->where('is_active', true)
-                ->count();
+                ->where('is_active', true);
+            if ($companyId !== null) {
+                $employeesQ->where('company_id', $companyId);
+                $referencesQ->where('company_id', $companyId);
+            }
+            $employeesActive = $employeesQ->count();
+            $referencesActive = $referencesQ->count();
         }
 
         $productionMonthQuery = Production::query()
             ->withoutGlobalScope(CompanyScope::class)
-            ->where('company_id', $companyId)
             ->whereBetween('date', [$monthStart, $monthEnd]);
+        if ($companyId !== null) {
+            $productionMonthQuery->where('company_id', $companyId);
+        }
 
         if ($scopedEmployeeId) {
             $productionMonthQuery->where('employee_id', $scopedEmployeeId);
@@ -64,7 +70,7 @@ class DashboardStatsService
         if ($scopedEmployeeId) {
             $pendingRow = Production::query()
                 ->withoutGlobalScope(CompanyScope::class)
-                ->where('company_id', $companyId)
+                ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
                 ->where('employee_id', $scopedEmployeeId)
                 ->where('status', Production::STATUS_PENDING)
                 ->selectRaw('COALESCE(SUM(total_value), 0) as total_value, COALESCE(SUM(quantity), 0) as total_qty')
@@ -75,7 +81,7 @@ class DashboardStatsService
 
         $payrollsPendingBase = Payroll::query()
             ->withoutGlobalScope(CompanyScope::class)
-            ->where('company_id', $companyId);
+            ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId));
 
         if ($isPersonal) {
             $payrollsPending = (clone $payrollsPendingBase)
@@ -90,8 +96,8 @@ class DashboardStatsService
 
         $advancesPendingQuery = Advance::query()
             ->withoutGlobalScope(CompanyScope::class)
-            ->where('company_id', $companyId)
-            ->where('status', Advance::STATUS_PENDING);
+            ->where('status', Advance::STATUS_PENDING)
+            ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId));
 
         if ($scopedEmployeeId) {
             $advancesPendingQuery->where('employee_id', $scopedEmployeeId);
@@ -130,8 +136,8 @@ class DashboardStatsService
 
         $latestProductionsQuery = Production::query()
             ->withoutGlobalScope(CompanyScope::class)
-            ->where('company_id', $companyId)
-            ->with(['employee:id,first_name,last_name', 'reference:id,code,name', 'operation:id,name']);
+            ->with(['employee:id,first_name,last_name', 'reference:id,code,name', 'operation:id,name', 'company:id,name'])
+            ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId));
 
         if ($scopedEmployeeId) {
             $latestProductionsQuery->where('employee_id', $scopedEmployeeId);
@@ -145,7 +151,7 @@ class DashboardStatsService
 
         $pendingPayrollsQuery = Payroll::query()
             ->withoutGlobalScope(CompanyScope::class)
-            ->where('company_id', $companyId)
+            ->when($companyId !== null, fn ($q) => $q->where('company_id', $companyId))
             ->whereIn('status', [Payroll::STATUS_CALCULATED, Payroll::STATUS_APPROVED])
             ->orderByDesc('period_end')
             ->limit(5);
@@ -156,8 +162,15 @@ class DashboardStatsService
 
         $pendingPayrolls = $pendingPayrollsQuery->get();
 
+        $companiesActiveCount = null;
+        if ($isConsolidated && ! $isPersonal) {
+            $companiesActiveCount = Company::query()->where('is_active', true)->count();
+        }
+
         return [
+            'is_consolidated' => $isConsolidated,
             'is_personal' => $isPersonal,
+            'companies_active_count' => $companiesActiveCount,
             'employees_active' => $employeesActive,
             'references_active' => $referencesActive,
             'production_pending_value' => $productionPendingValue,

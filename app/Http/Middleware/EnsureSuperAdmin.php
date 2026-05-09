@@ -13,6 +13,10 @@ class EnsureSuperAdmin
         $user = $request->user();
 
         if (! $user || ! $user->isSuperAdmin()) {
+            if ($request->expectsJson()) {
+                return response()->json(['message' => 'No autorizado.'], 403);
+            }
+
             abort(403, 'No autorizado.');
         }
 

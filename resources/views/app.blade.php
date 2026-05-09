@@ -6,9 +6,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title inertia>{{ config('app.name', 'Taller Confeccion') }}</title>
+    <title inertia>{{ config('app.name', 'MiTallerPro') }}</title>
 
-    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'%3E%3Cpath d='M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7 3.5v8.64l-7 3.5-7-3.5V7.68l7-3.5z'/%3E%3C/svg%3E">
+    @php($brandFavicon = \App\Support\BrandIcon::url())
+    @if($brandFavicon !== '')
+        <link rel="icon" type="image/png" href="{{ $brandFavicon }}">
+        <link rel="apple-touch-icon" href="{{ $brandFavicon }}">
+    @else
+        <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%234f46e5'%3E%3Cpath d='M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7 3.5v8.64l-7 3.5-7-3.5V7.68l7-3.5z'/%3E%3C/svg%3E">
+    @endif
 
     {{-- Shim sincrono: los chunks de Vite pueden ejecutarse antes que el script module de @viteReactRefresh (race → "can't detect preamble"). --}}
     <script>

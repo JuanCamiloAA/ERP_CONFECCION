@@ -7,6 +7,7 @@ use App\Http\Requests\Role\StoreRoleRequest;
 use App\Http\Requests\Role\UpdateRoleRequest;
 use App\Models\Company;
 use App\Models\Role;
+use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,9 +27,11 @@ class RoleController extends Controller
             $query->where('company_id', $user->company_id);
         }
 
-        $roles = $query->orderBy('is_system', 'desc')->orderBy('display_name')->get();
+        $roles = $query->orderBy('is_system', 'desc')->orderBy('display_name')
+            ->paginate(15)
+            ->withQueryString();
 
-        $roles = $roles->map(function ($role) {
+        $roles->getCollection()->transform(function (Role $role) {
             return [
                 'id' => $role->id,
                 'name' => $role->name,
@@ -65,7 +68,7 @@ class RoleController extends Controller
 
         return DB::transaction(function () use ($data, $user) {
             $companyId = $user->isSuperAdmin()
-                ? (int) ($data['company_id'] ?? 0)
+                ? (int) ($data['company_id'] ?? TenantContext::effectiveCompanyId($user) ?? 0)
                 : (int) $user->company_id;
 
             if ($user->isSuperAdmin() && ! $companyId) {

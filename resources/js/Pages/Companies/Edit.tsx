@@ -5,17 +5,19 @@ import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
 import { mediaUrl } from '@/lib/mediaUrl';
-import type { Company } from '@/types';
+import type { Company, MembershipPlan } from '@/types';
 
 interface Props {
     company: Company;
+    membershipPlans: Pick<MembershipPlan, 'id' | 'name' | 'max_staff_users' | 'max_employees'>[];
 }
 
-export default function CompanyEdit({ company }: Props) {
+export default function CompanyEdit({ company, membershipPlans }: Props) {
     const [preview, setPreview] = useState<string | null>(company.logo ? (mediaUrl(company.logo) ?? null) : null);
 
     const { data, setData, processing, errors } = useForm({
@@ -26,6 +28,9 @@ export default function CompanyEdit({ company }: Props) {
         email: company.email ?? '',
         logo: null as File | null,
         is_active: company.is_active,
+        membership_plan_id: company.membership_plan_id != null ? String(company.membership_plan_id) : '',
+        membership_started_at: company.membership_started_at?.slice(0, 10) ?? '',
+        membership_ends_at: company.membership_ends_at?.slice(0, 10) ?? '',
     });
 
     const submit = (e: FormEvent) => {
@@ -66,6 +71,23 @@ export default function CompanyEdit({ company }: Props) {
                             <Input label="Telefono" value={data.phone} onChange={(e) => setData('phone', e.target.value)} error={errors.phone} />
                             <Textarea label="Direccion" value={data.address} onChange={(e) => setData('address', e.target.value)} error={errors.address} className="sm:col-span-2" rows={2} />
                         </div>
+                        <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50/80 p-4 dark:border-slate-700 dark:bg-slate-900/40">
+                            <p className="text-sm text-slate-700 dark:text-slate-300">
+                                Usuarios de escritorio (staff, <code className="text-xs">employee_id</code> nulo):{' '}
+                                <span className="font-semibold text-slate-900 dark:text-white">
+                                    {company.staff_users_count ?? 0}
+                                    {company.membership_plan?.max_staff_users == null
+                                        ? ' / ilimitado'
+                                        : ` / ${company.membership_plan.max_staff_users}`}
+                                </span>
+                            </p>
+                            <Link
+                                href={route('users.index', { company_id: company.id })}
+                                className="mt-2 inline-block text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                            >
+                                Ver listado de usuarios
+                            </Link>
+                        </div>
                     </Card>
 
                     <div className="space-y-6">
@@ -91,6 +113,41 @@ export default function CompanyEdit({ company }: Props) {
                                     </span>
                                 </label>
                                 {errors.logo && <p className="text-xs text-rose-500">{errors.logo}</p>}
+                            </div>
+                        </Card>
+
+                        <Card>
+                            <CardHeader title="Membresia" />
+                            <div className="mt-4 space-y-4">
+                                <Select
+                                    label="Plan"
+                                    options={membershipPlans.map((p) => ({
+                                        value: String(p.id),
+                                        label: p.name,
+                                        description:
+                                            p.max_staff_users == null
+                                                ? 'Usuarios staff ilimitados'
+                                                : `Hasta ${p.max_staff_users} usuarios staff`,
+                                    }))}
+                                    placeholder="Sin plan"
+                                    value={data.membership_plan_id}
+                                    onChange={(e) => setData('membership_plan_id', e.target.value)}
+                                    error={errors.membership_plan_id}
+                                />
+                                <Input
+                                    type="date"
+                                    label="Inicio membresia"
+                                    value={data.membership_started_at}
+                                    onChange={(e) => setData('membership_started_at', e.target.value)}
+                                    error={errors.membership_started_at}
+                                />
+                                <Input
+                                    type="date"
+                                    label="Fin membresia"
+                                    value={data.membership_ends_at}
+                                    onChange={(e) => setData('membership_ends_at', e.target.value)}
+                                    error={errors.membership_ends_at}
+                                />
                             </div>
                         </Card>
 

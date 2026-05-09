@@ -12,6 +12,8 @@ use App\Models\Production;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\Files\StoredFileDeleter;
+use App\Services\Membership\MembershipEmployeeLimiter;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -37,6 +39,7 @@ class EmployeeController extends Controller
         $query = Employee::query()->with([
             'user:id,email,is_active',
             'bank:id,name,is_active',
+            'company:id,name',
         ]);
 
         if ($search !== '') {
@@ -83,10 +86,12 @@ class EmployeeController extends Controller
 
             unset($data['photo'], $data['create_user_account'], $data['user_email'], $data['user_role_id']);
 
-            $data['company_id'] = $user->company_id;
+            $data['company_id'] = TenantContext::requireCompanyIdForWrite($user);
             $data['is_active'] = $data['is_active'] ?? true;
 
             $payrollMode = $data['payroll_mode'] ?? Employee::PAYROLL_MODE_OPERATIONS;
+
+            app(MembershipEmployeeLimiter::class)->assertCanAddEmployee((int) $data['company_id'], $user);
 
             $employee = Employee::create([
                 'company_id' => $data['company_id'],
@@ -355,7 +360,7 @@ class EmployeeController extends Controller
         $companyId = $forCompanyId ?? $auth?->company_id;
 
         if ($auth?->isSuperAdmin() && $forCompanyId === null) {
-            $companyId = session('active_company_id');
+            $companyId = TenantContext::superAdminSelectedCompanyId();
         }
 
         $query = Role::query()->where('name', '!=', 'super_admin');
@@ -381,7 +386,7 @@ class EmployeeController extends Controller
      */
     protected function banksOptionsForEmployee(?Employee $employee = null): array
     {
-        $companyId = auth()->user()?->company_id;
+        $companyId = TenantContext::effectiveCompanyId(auth()->user());
         if (! $companyId) {
             return [];
         }

@@ -12,8 +12,10 @@ use App\Models\Reference;
 use App\Models\User;
 use App\Services\ProductionReportService;
 use App\Services\WorkDaySessionService;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -30,12 +32,14 @@ class ProductionController extends Controller
             'date_start' => $request->input('date_start'),
             'date_end' => $request->input('date_end'),
             'shift' => $request->input('shift'),
+            'status' => $request->input('status'),
         ];
 
         $query = Production::query()->with([
             'employee:id,first_name,last_name',
             'reference:id,code,name',
             'operation:id,name',
+            'company:id,name',
         ]);
 
         $this->applyEmployeeRestriction($query, $user);
@@ -57,6 +61,9 @@ class ProductionController extends Controller
         }
         if ($filters['shift']) {
             $query->where('shift', $filters['shift']);
+        }
+        if ($filters['status'] && in_array((string) $filters['status'], [Production::STATUS_PENDING, Production::STATUS_CONFIRMED], true)) {
+            $query->where('status', $filters['status']);
         }
 
         /** Mismo filtro que el listado, sin eager/limit/order: evita fromSub + scope (rompe el SQL) y evita clonar tras paginate(). */
@@ -152,8 +159,10 @@ class ProductionController extends Controller
 
         $unitPrice = $this->resolveUnitPriceForSave($user, $data);
 
+        $companyId = TenantContext::requireCompanyIdForWrite($user);
+
         Production::create([
-            'company_id' => $user->company_id,
+            'company_id' => $companyId,
             'employee_id' => $data['employee_id'],
             'reference_id' => $data['reference_id'],
             'operation_id' => $data['operation_id'],
@@ -212,7 +221,7 @@ class ProductionController extends Controller
     public function report(Request $request, ProductionReportService $service): Response
     {
         $user = $request->user();
-        $companyId = $user->company_id ?? session('active_company_id');
+        $companyId = TenantContext::effectiveCompanyId($user);
 
         $start = $request->input('start', now()->startOfMonth()->toDateString());
         $end = $request->input('end', now()->endOfMonth()->toDateString());
@@ -276,7 +285,7 @@ class ProductionController extends Controller
     }
 
     /**
-     * @param  \Illuminate\Support\Collection<int, Reference>  $references
+     * @param  Collection<int, Reference>  $references
      */
     protected function hydrateProductionQuantitiesByOperation($references): void
     {

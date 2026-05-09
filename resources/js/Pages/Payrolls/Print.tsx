@@ -16,6 +16,11 @@ export default function PayrollPrint({ payroll }: Props) {
     const showDaily = rows.some((r) => Number(r.daily_work_subtotal ?? 0) > 0);
     const totalProduction = rows.reduce((s, r) => s + Number(r.production_total), 0);
     const totalDaily = rows.reduce((s, r) => s + Number(r.daily_work_subtotal ?? 0), 0);
+    const totalAdjustments = rows.reduce((s, r) => s + Number(r.adjustments_subtotal ?? 0), 0);
+    const totalGross = rows.reduce(
+        (s, r) => s + Number(r.production_total) + Number(r.daily_work_subtotal ?? 0) + Number(r.adjustments_subtotal ?? 0),
+        0,
+    );
     const totalAdvances = rows.reduce((s, r) => s + Number(r.advances_discount), 0);
     const totalDeductions = rows.reduce((s, r) => {
         const arr = (r.deductions as Array<{ amount: number }>) ?? [];
@@ -55,6 +60,8 @@ export default function PayrollPrint({ payroll }: Props) {
                             <th className="px-2 py-2">Documento</th>
                             <th className="px-2 py-2 text-right">Producido</th>
                             {showDaily ? <th className="px-2 py-2 text-right">Jornada</th> : null}
+                            <th className="px-2 py-2 text-right">Ajustes</th>
+                            <th className="px-2 py-2 text-right">Bruto</th>
                             <th className="px-2 py-2 text-right">Deducciones</th>
                             <th className="px-2 py-2 text-right">Anticipos</th>
                             <th className="px-2 py-2 text-right">Neto</th>
@@ -63,6 +70,10 @@ export default function PayrollPrint({ payroll }: Props) {
                     <tbody>
                         {rows.map((row) => {
                             const dedTotal = ((row.deductions as Array<{ amount: number }>) ?? []).reduce((s, d) => s + Number(d.amount ?? 0), 0);
+                            const gross =
+                                Number(row.production_total) +
+                                Number(row.daily_work_subtotal ?? 0) +
+                                Number(row.adjustments_subtotal ?? 0);
                             return (
                                 <tr key={row.id} className="border-b border-slate-200">
                                     <td className="px-2 py-2">{row.employee?.first_name} {row.employee?.last_name}</td>
@@ -71,6 +82,8 @@ export default function PayrollPrint({ payroll }: Props) {
                                     {showDaily ? (
                                         <td className="px-2 py-2 text-right">{formatCurrency(row.daily_work_subtotal ?? 0)}</td>
                                     ) : null}
+                                    <td className="px-2 py-2 text-right">{formatCurrency(row.adjustments_subtotal ?? 0)}</td>
+                                    <td className="px-2 py-2 text-right font-medium">{formatCurrency(gross)}</td>
                                     <td className="px-2 py-2 text-right">{formatCurrency(dedTotal)}</td>
                                     <td className="px-2 py-2 text-right">{formatCurrency(row.advances_discount)}</td>
                                     <td className="px-2 py-2 text-right font-bold">{formatCurrency(row.net_payment)}</td>
@@ -83,6 +96,8 @@ export default function PayrollPrint({ payroll }: Props) {
                             <td colSpan={2} className="px-2 py-2 text-right text-xs uppercase">Totales</td>
                             <td className="px-2 py-2 text-right">{formatCurrency(totalProduction)}</td>
                             {showDaily ? <td className="px-2 py-2 text-right">{formatCurrency(totalDaily)}</td> : null}
+                            <td className="px-2 py-2 text-right">{formatCurrency(totalAdjustments)}</td>
+                            <td className="px-2 py-2 text-right font-medium">{formatCurrency(totalGross)}</td>
                             <td className="px-2 py-2 text-right">{formatCurrency(totalDeductions)}</td>
                             <td className="px-2 py-2 text-right">{formatCurrency(totalAdvances)}</td>
                             <td className="px-2 py-2 text-right font-bold">{formatCurrency(payroll.total_amount)}</td>

@@ -2,6 +2,8 @@
 
 namespace App\Services\Files;
 
+use DateTimeImmutable;
+use DateTimeZone;
 use Google\Cloud\Core\Exception\NotFoundException;
 use Google\Cloud\Storage\StorageClient;
 use Illuminate\Http\UploadedFile;
@@ -136,37 +138,26 @@ class FirebaseStorageService
     }
 
     /**
-     * URL usable en el navegador (publica o firmada segun config).
+     * URL que el navegador puede usar en <img src> (bucket no publico).
+     * Usa firma V4 (max. 7 dias en GCS).
      */
     public function readableUrl(string $objectPath): string
     {
         $objectPath = trim($objectPath, '/');
-
-        if ($objectPath === '') {
-            return '';
-        }
-
-        if (! config('firebase.use_signed_urls', true)) {
-            return $this->publicUrl($objectPath);
-        }
-
         $bucketName = config('firebase.storage_bucket');
-        if (! is_string($bucketName) || $bucketName === '') {
+
+        if (! is_string($bucketName) || $bucketName === '' || $objectPath === '') {
             return '';
         }
-
-        $ttl = (int) config('firebase.signed_url_ttl_seconds', 604800);
-        $ttl = max(300, min($ttl, 604800));
 
         try {
             $object = $this->client()->bucket($bucketName)->object($objectPath);
-            $expires = new \DateTimeImmutable('+'.$ttl.' seconds');
+            $days = (int) config('firebase.signed_url_ttl_days', 7);
+            $expires = new DateTimeImmutable("+{$days} days", new DateTimeZone('UTC'));
 
-            return $object->signedUrl($expires, [
-                'version' => 'v4',
-            ]);
+            return $object->signedUrl($expires, ['version' => 'v4']);
         } catch (Throwable $e) {
-            Log::warning('Firebase Storage URL firmada fallida; se usa URL publica', [
+            Log::warning('Firebase readableUrl (firmada) fallida', [
                 'object' => $objectPath,
                 'message' => $e->getMessage(),
             ]);

@@ -6,9 +6,11 @@ import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { Pagination } from '@/Components/UI/Pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import AppLayout from '@/Layouts/AppLayout';
+import type { PaginatedResponse } from '@/types';
 
 interface Role {
     id: number;
@@ -22,7 +24,7 @@ interface Role {
 }
 
 interface Props {
-    roles: Role[];
+    roles: PaginatedResponse<Role>;
 }
 
 export default function RolesIndex({ roles }: Props) {
@@ -55,7 +57,14 @@ export default function RolesIndex({ roles }: Props) {
                         </TableRow>
                     </TableHead>
                     <TableBody>
-                        {roles.map((role) => (
+                        {roles.data.length === 0 ? (
+                            <TableRow>
+                                <TableCell colSpan={5} className="py-10 text-center text-sm text-slate-500">
+                                    No hay roles en esta empresa.
+                                </TableCell>
+                            </TableRow>
+                        ) : (
+                            roles.data.map((role) => (
                             <TableRow key={role.id}>
                                 <TableCell>
                                     <RoleBadge role={role} />
@@ -90,9 +99,11 @@ export default function RolesIndex({ roles }: Props) {
                                     </div>
                                 </TableCell>
                             </TableRow>
-                        ))}
+                            )))}
                     </TableBody>
                 </Table>
+
+                <Pagination links={roles.links} from={roles.from} to={roles.to} total={roles.total} />
             </div>
 
             <ConfirmDialog

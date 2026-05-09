@@ -6,10 +6,12 @@ import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { Pagination } from '@/Components/UI/Pagination';
 import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatDateTime } from '@/lib/utils';
+import type { PaginatedResponse } from '@/types';
 
 interface AccessLog {
     id: number;
@@ -42,7 +44,7 @@ interface UserData {
 
 interface Props {
     user: UserData;
-    accessLogs: AccessLog[];
+    accessLogs: PaginatedResponse<AccessLog>;
 }
 
 export default function UserShow({ user, accessLogs }: Props) {
@@ -137,14 +139,14 @@ export default function UserShow({ user, accessLogs }: Props) {
                                 </TableRow>
                             </TableHead>
                             <TableBody>
-                                {accessLogs.length === 0 ? (
+                                {accessLogs.data.length === 0 ? (
                                     <tr>
                                         <td colSpan={4} className="px-4 py-8 text-center text-sm text-slate-500 dark:text-slate-400">
                                             Sin accesos registrados.
                                         </td>
                                     </tr>
                                 ) : (
-                                    accessLogs.map((log) => (
+                                    accessLogs.data.map((log) => (
                                         <TableRow key={log.id}>
                                             <TableCell><Badge variant="primary" size="sm">{log.action}</Badge></TableCell>
                                             <TableCell>{log.description ?? '-'}</TableCell>
@@ -155,6 +157,12 @@ export default function UserShow({ user, accessLogs }: Props) {
                                 )}
                             </TableBody>
                         </Table>
+                        <Pagination
+                            links={accessLogs.links}
+                            from={accessLogs.from}
+                            to={accessLogs.to}
+                            total={accessLogs.total}
+                        />
                     </div>
                 </Card>
             </div>

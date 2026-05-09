@@ -40,19 +40,18 @@ return [
 
     'credentials_json' => env('FIREBASE_CREDENTIALS_JSON', ''),
 
+    'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'],
+
     /*
     |--------------------------------------------------------------------------
-    | URLs de lectura (objetos no publicos)
+    | URLs firmadas (lectura en navegador)
     |--------------------------------------------------------------------------
     |
-    | Si las reglas de Storage no permiten lectura publica, hay que usar URLs
-    | firmadas para <img src>. TTL maximo recomendable para V4: 7 dias.
+    | Los objetos subidos con el Admin SDK no incluyen token de descarga de
+    | Firebase; la URL ?alt=media sin firmar suele devolver 403. Las URLs
+    | firmadas (V4) permiten mostrar imagenes hasta max. 7 dias (limite de GCS).
     |
     */
-    'use_signed_urls' => filter_var(env('FIREBASE_STORAGE_USE_SIGNED_URLS', '1'), FILTER_VALIDATE_BOOLEAN),
-
-    'signed_url_ttl_seconds' => (int) env('FIREBASE_STORAGE_SIGNED_URL_TTL', 604800),
-
-    'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'],
+    'signed_url_ttl_days' => min(7, max(1, (int) env('FIREBASE_SIGNED_URL_TTL_DAYS', 7))),
 
 ];

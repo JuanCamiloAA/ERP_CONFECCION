@@ -2,6 +2,8 @@
 
 namespace App\Models\Scopes;
 
+use App\Models\User;
+use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Scope;
@@ -14,14 +16,21 @@ class CompanyScope implements Scope
             return;
         }
 
-        /** @var \App\Models\User $user */
+        /** @var User $user */
         $user = auth()->user();
 
         if ($user->isSuperAdmin()) {
+            TenantContext::migrateLegacySession();
+            $selected = TenantContext::superAdminSelectedCompanyId();
+            if ($selected === null) {
+                return;
+            }
+            $builder->where($model->getTable().'.company_id', $selected);
+
             return;
         }
 
-        $companyId = $user->company_id ?? session('active_company_id');
+        $companyId = $user->company_id;
 
         if ($companyId) {
             $builder->where($model->getTable().'.company_id', $companyId);

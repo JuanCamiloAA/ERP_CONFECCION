@@ -1,4 +1,5 @@
 {
+    "name": "mitallerpro",
     "private": true,
     "type": "module",
     "scripts": {

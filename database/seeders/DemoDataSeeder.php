@@ -14,6 +14,7 @@ use App\Models\User;
 use App\Models\WorkDaySession;
 use Carbon\CarbonPeriod;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Hash;
 
 class DemoDataSeeder extends Seeder
@@ -36,10 +37,11 @@ class DemoDataSeeder extends Seeder
         $this->seedProductions($company, $employees, $references, $operations);
         $this->seedWorkDaySessions($company);
         $this->seedAdvances($company, $employees);
+        $this->call(PayrollConceptSeeder::class);
     }
 
-    /** @return \Illuminate\Support\Collection<int, Reference> */
-    protected function seedReferences(Company $company): \Illuminate\Support\Collection
+    /** @return Collection<int, Reference> */
+    protected function seedReferences(Company $company): Collection
     {
         $list = [
             ['code' => 'CAM-001', 'name' => 'Camisa Manga Larga', 'description' => 'Camisa formal manga larga, varios colores', 'lot_total_quantity' => 500_000, 'payment_per_unit' => 28_000],
@@ -67,8 +69,8 @@ class DemoDataSeeder extends Seeder
         return $created;
     }
 
-    /** @return \Illuminate\Support\Collection<int, Operation> */
-    protected function seedOperations(Company $company): \Illuminate\Support\Collection
+    /** @return Collection<int, Operation> */
+    protected function seedOperations(Company $company): Collection
     {
         $list = [
             ['name' => 'Cortado', 'base_price' => 800],
@@ -107,8 +109,8 @@ class DemoDataSeeder extends Seeder
         }
     }
 
-    /** @param  \Illuminate\Support\Collection<int, Reference>  $references */
-    protected function syncReferenceOperationalFixedCosts(\Illuminate\Support\Collection $references): void
+    /** @param  Collection<int, Reference>  $references */
+    protected function syncReferenceOperationalFixedCosts(Collection $references): void
     {
         foreach ($references as $reference) {
             $sum = (float) ReferenceOperation::where('reference_id', $reference->id)->sum('price');
@@ -119,8 +121,8 @@ class DemoDataSeeder extends Seeder
         }
     }
 
-    /** @return \Illuminate\Support\Collection<int, Employee> */
-    protected function seedEmployees(Company $company): \Illuminate\Support\Collection
+    /** @return Collection<int, Employee> */
+    protected function seedEmployees(Company $company): Collection
     {
         $employees = [
             ['first_name' => 'Leidy', 'last_name' => 'Vasquez', 'doc' => '1020304050'],

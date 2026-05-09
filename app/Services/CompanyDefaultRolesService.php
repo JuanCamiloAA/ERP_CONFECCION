@@ -89,6 +89,10 @@ class CompanyDefaultRolesService
             'payrolls.show.calculate',
             'payrolls.show.export',
             'payrolls.show.edit_time',
+            'payrolls.show.manage_adjustments',
+            'payroll_concepts.index.view',
+            'payroll_concepts.index.create',
+            'payroll_concepts.index.edit',
             'banks.index.view',
             'banks.index.create',
             'banks.index.edit',
@@ -97,6 +101,14 @@ class CompanyDefaultRolesService
             'advances.index.create',
             'reports.payroll.view',
             'reports.payroll.export',
+            'expenses.index.view',
+            'expenses.index.create',
+            'expenses.index.edit',
+            'expenses.index.delete',
+            'expenses.categories.view',
+            'expenses.categories.create',
+            'expenses.categories.edit',
+            'expenses.categories.delete',
         ]);
 
         $viewer = Role::updateOrCreate(

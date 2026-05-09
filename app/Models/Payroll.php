@@ -10,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Carbon;
 
 #[ScopedBy([CompanyScope::class])]
 class Payroll extends Model
@@ -68,9 +69,21 @@ class Payroll extends Model
         return $this->belongsTo(User::class, 'created_by');
     }
 
+    /**
+     * Puede eliminarse la nomina (borrador o calculada, no aprobada/pagada).
+     */
     public function isEditable(): bool
     {
-        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_CALCULATED]);
+        return in_array($this->status, [self::STATUS_DRAFT, self::STATUS_CALCULATED], true);
+    }
+
+    /**
+     * Permite editar detalle de liquidacion: jornadas antes de recalcular, conceptos manuales, etc.
+     * Solo en estado calculado (no en borrador vacio ni tras aprobar).
+     */
+    public function allowsCalculatedPayrollEdits(): bool
+    {
+        return $this->status === self::STATUS_CALCULATED;
     }
 
     public function canBeCalculated(): bool
@@ -102,7 +115,7 @@ class Payroll extends Model
             return false;
         }
 
-        $d = \Illuminate\Support\Carbon::parse($date)->toDateString();
+        $d = Carbon::parse($date)->toDateString();
 
         return static::query()
             ->withoutGlobalScopes()

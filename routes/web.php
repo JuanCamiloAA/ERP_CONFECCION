@@ -5,8 +5,14 @@ use App\Http\Controllers\BankController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\ExpenseCategoryController;
+use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\LandingController;
+use App\Http\Controllers\LandingPlanInquiryController;
 use App\Http\Controllers\OperationController;
+use App\Http\Controllers\PayrollConceptController;
 use App\Http\Controllers\PayrollController;
+use App\Http\Controllers\PayrollEmployeeAdjustmentController;
 use App\Http\Controllers\PayrollPeriodicityController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\ProfileController;
@@ -14,18 +20,19 @@ use App\Http\Controllers\ReferenceController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingController;
-use App\Http\Controllers\UserController;
+use App\Http\Controllers\SuperAdmin\ActiveCompanyController;
 use App\Http\Controllers\SuperAdmin\DataImportController;
+use App\Http\Controllers\SuperAdmin\LandingCmsController;
+use App\Http\Controllers\SuperAdmin\MembershipPlanController;
+use App\Http\Controllers\UserController;
 use App\Http\Controllers\WorkDaySessionController;
+use App\Models\DataImportBatch;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/', function () {
-    if (auth()->check()) {
-        return redirect()->route('dashboard');
-    }
-
-    return redirect()->route('login');
-});
+Route::get('/', [LandingController::class, 'show'])->name('landing');
+Route::post('/landing/plan-inquiry', LandingPlanInquiryController::class)
+    ->name('landing.plan-inquiry')
+    ->middleware('throttle:10,1');
 
 Route::middleware(['auth', 'force.password'])->group(function () {
     Route::get('/profile/change-password', [ProfileController::class, 'showChangePassword'])->name('profile.change-password.show');
@@ -98,9 +105,31 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::get('/payrolls/{payroll}/export', [PayrollController::class, 'export'])->name('payrolls.export');
     });
 
+    Route::middleware('permission:payrolls.show.manage_adjustments')->group(function () {
+        Route::post('/payrolls/{payroll}/payroll-employees/{payrollEmployee}/adjustments', [PayrollEmployeeAdjustmentController::class, 'store'])
+            ->name('payrolls.payroll-employees.adjustments.store');
+        Route::put('/payrolls/{payroll}/payroll-employees/{payrollEmployee}/adjustments/{adjustment}', [PayrollEmployeeAdjustmentController::class, 'update'])
+            ->name('payrolls.payroll-employees.adjustments.update');
+        Route::delete('/payrolls/{payroll}/payroll-employees/{payrollEmployee}/adjustments/{adjustment}', [PayrollEmployeeAdjustmentController::class, 'destroy'])
+            ->name('payrolls.payroll-employees.adjustments.destroy');
+    });
+
+    Route::middleware('permission:payroll_concepts.index.view')->group(function () {
+        Route::resource('payroll-concepts', PayrollConceptController::class)->except(['show']);
+    });
+
     // Anticipos
     Route::middleware('permission:advances.index.view')->group(function () {
         Route::resource('advances', AdvanceController::class)->except(['show', 'edit', 'update']);
+    });
+
+    // Gastos (solo usuarios de empresa; policies bloquean super_admin)
+    Route::middleware('permission:expenses.categories.view')->group(function () {
+        Route::resource('expense-categories', ExpenseCategoryController::class)->except(['show']);
+    });
+
+    Route::middleware('permission:expenses.index.view')->group(function () {
+        Route::resource('expenses', ExpenseController::class);
     });
 
     // Reportes
@@ -131,14 +160,30 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Importacion masiva CSV (solo super_admin)
     Route::middleware('super.admin')->prefix('super-admin')->name('super-admin.')->group(function () {
+        Route::post('active-company', [ActiveCompanyController::class, 'store'])
+            ->middleware('throttle:60,1')
+            ->name('active-company');
         Route::get('data-imports', [DataImportController::class, 'index'])->name('data-imports.index');
         Route::get('data-imports/templates/zip', [DataImportController::class, 'downloadTemplatesZip'])->name('data-imports.templates.zip');
-        Route::get('data-imports/templates/{type}', [DataImportController::class, 'downloadTemplate'])->whereIn('type', \App\Models\DataImportBatch::types())->name('data-imports.templates');
+        Route::get('data-imports/templates/{type}', [DataImportController::class, 'downloadTemplate'])->whereIn('type', DataImportBatch::types())->name('data-imports.templates');
         Route::get('data-imports/{batch}/errors', [DataImportController::class, 'downloadErrors'])->name('data-imports.errors');
         Route::get('data-imports/{batch}', [DataImportController::class, 'show'])->name('data-imports.show');
         Route::post('data-imports', [DataImportController::class, 'store'])
             ->middleware('throttle:data-import-upload')
             ->name('data-imports.store');
+
+        Route::get('landing', [LandingCmsController::class, 'index'])->name('landing.index');
+        Route::put('landing/sections/{landingSection}', [LandingCmsController::class, 'updateSection'])->name('landing.sections.update');
+        Route::post('landing/sections/{landingSection}/publish', [LandingCmsController::class, 'publishSection'])->name('landing.sections.publish');
+        Route::post('landing/sections/{landingSection}/discard', [LandingCmsController::class, 'discardDraft'])->name('landing.sections.discard');
+        Route::post('landing/sections/{landingSection}/reset', [LandingCmsController::class, 'resetSection'])->name('landing.sections.reset');
+        Route::post('landing/sections', [LandingCmsController::class, 'storeCustomSection'])->name('landing.sections.store');
+        Route::delete('landing/sections/{landingSection}', [LandingCmsController::class, 'destroySection'])->name('landing.sections.destroy');
+        Route::post('landing/publish-all', [LandingCmsController::class, 'publishAll'])->name('landing.publish-all');
+        Route::post('landing/media', [LandingCmsController::class, 'storeMedia'])->name('landing.media');
+        Route::put('landing/globals', [LandingCmsController::class, 'updateGlobals'])->name('landing.globals');
+
+        Route::resource('membership-plans', MembershipPlanController::class)->except(['show']);
     });
 });
 

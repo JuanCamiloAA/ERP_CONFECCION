@@ -1,4 +1,4 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { ChartBarIcon, PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { Button } from '@/Components/UI/Button';
@@ -27,6 +27,7 @@ interface Props {
         date_start: string | null;
         date_end: string | null;
         shift: string | null;
+        status: string | null;
     };
     totals: { total_quantity: number; total_value: number };
     employees: Employee[];
@@ -52,6 +53,7 @@ export default function ProductionsIndex({
     workDayBanner = null,
     workDaySelectableEmployees = [],
 }: Props) {
+    const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
     const [localFilters, setLocalFilters] = useState({
         employee_id: filters.employee_id ?? '',
         reference_id: filters.reference_id ?? '',
@@ -59,6 +61,7 @@ export default function ProductionsIndex({
         date_start: filters.date_start ?? '',
         date_end: filters.date_end ?? '',
         shift: filters.shift ?? '',
+        status: filters.status ?? '',
     });
     const [confirmDelete, setConfirmDelete] = useState<Production | null>(null);
 
@@ -71,7 +74,7 @@ export default function ProductionsIndex({
     };
 
     const reset = () => {
-        setLocalFilters({ employee_id: '', reference_id: '', operation_id: '', date_start: '', date_end: '', shift: '' });
+        setLocalFilters({ employee_id: '', reference_id: '', operation_id: '', date_start: '', date_end: '', shift: '', status: '' });
         router.get(route('productions.index'), {}, { preserveState: true, replace: true });
     };
 
@@ -97,9 +100,11 @@ export default function ProductionsIndex({
                             </Can>
                             {!workerMode && (
                                 <Can permission="productions.index.create">
-                                    <Link href={route('productions.create')}>
-                                        <Button icon={<PlusIcon className="h-4 w-4" />}>Registrar</Button>
-                                    </Link>
+                                    {!isConsolidatedView ? (
+                                        <Link href={route('productions.create')}>
+                                            <Button icon={<PlusIcon className="h-4 w-4" />}>Registrar</Button>
+                                        </Link>
+                                    ) : null}
                                 </Can>
                             )}
                         </div>
@@ -170,17 +175,30 @@ export default function ProductionsIndex({
                         />
                         <Input label="Desde" type="date" value={localFilters.date_start} onChange={(e) => setLocalFilters({ ...localFilters, date_start: e.target.value })} />
                         <Input label="Hasta" type="date" value={localFilters.date_end} onChange={(e) => setLocalFilters({ ...localFilters, date_end: e.target.value })} />
-                        <Select
-                            label="Turno"
-                            value={localFilters.shift}
-                            onChange={(e) => setLocalFilters({ ...localFilters, shift: e.target.value })}
-                            options={[
-                                { value: 'manana', label: 'Manana' },
-                                { value: 'tarde', label: 'Tarde' },
-                                { value: 'noche', label: 'Noche' },
-                            ]}
-                            placeholder="Todos"
-                        />
+                        {workerMode ? (
+                            <Select
+                                label="Estado"
+                                value={localFilters.status}
+                                onChange={(e) => setLocalFilters({ ...localFilters, status: e.target.value })}
+                                options={[
+                                    { value: 'pendiente', label: 'Pendiente' },
+                                    { value: 'confirmado', label: 'Confirmado' },
+                                ]}
+                                placeholder="Todos"
+                            />
+                        ) : (
+                            <Select
+                                label="Turno"
+                                value={localFilters.shift}
+                                onChange={(e) => setLocalFilters({ ...localFilters, shift: e.target.value })}
+                                options={[
+                                    { value: 'manana', label: 'Manana' },
+                                    { value: 'tarde', label: 'Tarde' },
+                                    { value: 'noche', label: 'Noche' },
+                                ]}
+                                placeholder="Todos"
+                            />
+                        )}
                     </div>
                     <div className="mt-3 flex justify-end gap-2">
                         <Button variant="ghost" onClick={reset}>Limpiar</Button>
@@ -196,6 +214,7 @@ export default function ProductionsIndex({
                     <TableHead>
                         <TableRow>
                             <TableHeader>Fecha</TableHeader>
+                            {isConsolidatedView ? <TableHeader>Empresa</TableHeader> : null}
                             <TableHeader>Empleado</TableHeader>
                             <TableHeader>Referencia</TableHeader>
                             <TableHeader>Operacion</TableHeader>
@@ -209,11 +228,16 @@ export default function ProductionsIndex({
                     </TableHead>
                     <TableBody>
                         {productions.data.length === 0 ? (
-                            <tr><td colSpan={10} className="px-4 py-12 text-center text-sm text-slate-500">No hay registros.</td></tr>
+                            <tr><td colSpan={isConsolidatedView ? 11 : 10} className="px-4 py-12 text-center text-sm text-slate-500">No hay registros.</td></tr>
                         ) : (
                             productions.data.map((p) => (
                                 <TableRow key={p.id}>
                                     <TableCell>{formatDate(p.date)}</TableCell>
+                                    {isConsolidatedView ? (
+                                        <TableCell className="text-sm text-slate-600 dark:text-slate-400">
+                                            {p.company?.name ?? '—'}
+                                        </TableCell>
+                                    ) : null}
                                     <TableCell>{p.employee?.first_name} {p.employee?.last_name}</TableCell>
                                     <TableCell>{p.reference?.code} <span className="text-xs text-slate-500">{p.reference?.name}</span></TableCell>
                                     <TableCell>{p.operation?.name}</TableCell>
@@ -243,7 +267,7 @@ export default function ProductionsIndex({
                     {productions.data.length > 0 && (
                         <TableFoot>
                             <tr>
-                                <td colSpan={4} className="px-4 py-3 text-right text-xs uppercase text-slate-500">Totales</td>
+                                <td colSpan={isConsolidatedView ? 5 : 4} className="px-4 py-3 text-right text-xs uppercase text-slate-500">Totales</td>
                                 <td className="px-4 py-3 text-right font-bold text-slate-900 dark:text-slate-100">{formatNumber(totals.total_quantity)}</td>
                                 <td />
                                 <td className="px-4 py-3 text-right font-bold text-indigo-600 dark:text-indigo-400">{formatCurrency(totals.total_value)}</td>

@@ -20,6 +20,7 @@ class RolesPermissionsSeeder extends Seeder
         $this->seedSystemRoles();
         $this->seedDemoCompanyRoles();
         $this->grantUserOverridePermissionToCompanyAdmins();
+        $this->grantPayrollConceptsModuleToCompanyRoles();
     }
 
     /**
@@ -84,6 +85,87 @@ class RolesPermissionsSeeder extends Seeder
         Company::query()->orderBy('id')->each(function (Company $company) use ($service): void {
             $service->ensureDefaultRolesForCompany($company, false);
         });
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    /**
+     * Permisos del catalogo de conceptos y ajustes en nomina: sin esto los roles existentes no los reciben hasta re-sincronizar desde la matriz.
+     */
+    protected function grantPayrollConceptsModuleToCompanyRoles(): void
+    {
+        $adminPermissions = [
+            'payroll_concepts.index.view',
+            'payroll_concepts.index.create',
+            'payroll_concepts.index.edit',
+            'payroll_concepts.index.delete',
+            'payrolls.show.manage_adjustments',
+        ];
+
+        $accountantPermissions = [
+            'payroll_concepts.index.view',
+            'payroll_concepts.index.create',
+            'payroll_concepts.index.edit',
+            'payrolls.show.manage_adjustments',
+        ];
+
+        foreach ($adminPermissions as $name) {
+            if (! PermissionHelper::permissionExists($name)) {
+                continue;
+            }
+            $permission = Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+            Role::query()
+                ->where('name', 'admin')
+                ->where('guard_name', 'web')
+                ->whereNotNull('company_id')
+                ->each(function (Role $role) use ($permission): void {
+                    if (! $role->hasPermissionTo($permission)) {
+                        $role->givePermissionTo($permission);
+                    }
+                });
+        }
+
+        foreach ($accountantPermissions as $name) {
+            if (! PermissionHelper::permissionExists($name)) {
+                continue;
+            }
+            $permission = Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+            Role::query()
+                ->where('name', 'auxiliar_contable')
+                ->where('guard_name', 'web')
+                ->whereNotNull('company_id')
+                ->each(function (Role $role) use ($permission): void {
+                    if (! $role->hasPermissionTo($permission)) {
+                        $role->givePermissionTo($permission);
+                    }
+                });
+        }
+
+        foreach ($accountantPermissions as $name) {
+            if (! PermissionHelper::permissionExists($name)) {
+                continue;
+            }
+            $permission = Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+            Role::query()
+                ->where('name', 'supervisor_produccion')
+                ->where('guard_name', 'web')
+                ->whereNotNull('company_id')
+                ->each(function (Role $role) use ($permission): void {
+                    if (! $role->hasPermissionTo($permission)) {
+                        $role->givePermissionTo($permission);
+                    }
+                });
+        }
+
+        $superAdmin = Role::query()
+            ->where('name', 'super_admin')
+            ->where('guard_name', 'web')
+            ->whereNull('company_id')
+            ->first();
+
+        if ($superAdmin) {
+            $superAdmin->syncPermissions(Permission::all());
+        }
 
         app(PermissionRegistrar::class)->forgetCachedPermissions();
     }

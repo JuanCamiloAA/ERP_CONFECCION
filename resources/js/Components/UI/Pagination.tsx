@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import type { PaginationLink } from '@/types';
 
 interface PaginationProps {
-    links: PaginationLink[];
+    links?: PaginationLink[] | null;
     from: number | null;
     to: number | null;
     total: number;
@@ -13,7 +13,13 @@ interface PaginationProps {
 }
 
 export function Pagination({ links, from, to, total, only, preserveScroll = true }: PaginationProps) {
-    if (links.length <= 3) return null;
+    const linkList = links ?? [];
+    /** Laravel suele devolver solo 3 enlaces (prev + una pagina + next) cuando hay una sola pagina. */
+    const showPageNav = linkList.length > 3;
+
+    if (total === 0 && !showPageNav) {
+        return null;
+    }
 
     const handleClick = (url: string | null) => {
         if (!url) return;
@@ -22,13 +28,18 @@ export function Pagination({ links, from, to, total, only, preserveScroll = true
 
     return (
         <div className="flex flex-col items-center justify-between gap-4 px-1 py-3 sm:flex-row">
-            <p className="text-sm text-slate-600 dark:text-slate-400">
-                Mostrando <span className="font-semibold text-slate-900 dark:text-slate-100">{from ?? 0}</span> a{' '}
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{to ?? 0}</span> de{' '}
-                <span className="font-semibold text-slate-900 dark:text-slate-100">{total}</span> resultados
-            </p>
-            <nav className="inline-flex items-center gap-1">
-                {links.map((link, index) => {
+            {total > 0 ? (
+                <p className="text-sm text-slate-600 dark:text-slate-400">
+                    Mostrando <span className="font-semibold text-slate-900 dark:text-slate-100">{from ?? 0}</span> a{' '}
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">{to ?? 0}</span> de{' '}
+                    <span className="font-semibold text-slate-900 dark:text-slate-100">{total}</span> resultados
+                </p>
+            ) : (
+                <p className="text-sm text-slate-600 dark:text-slate-400">Sin resultados</p>
+            )}
+            {showPageNav ? (
+                <nav className="inline-flex items-center gap-1">
+                    {linkList.map((link, index) => {
                     const label = link.label
                         .replace('&laquo;', '')
                         .replace('&raquo;', '')
@@ -38,7 +49,7 @@ export function Pagination({ links, from, to, total, only, preserveScroll = true
                         .replace('Siguiente', '')
                         .trim();
                     const isPrev = index === 0;
-                    const isNext = index === links.length - 1;
+                    const isNext = index === linkList.length - 1;
 
                     if (isPrev || isNext) {
                         return (
@@ -76,8 +87,9 @@ export function Pagination({ links, from, to, total, only, preserveScroll = true
                             {label || '...'}
                         </button>
                     );
-                })}
-            </nav>
+                    })}
+                </nav>
+            ) : null}
         </div>
     );
 }

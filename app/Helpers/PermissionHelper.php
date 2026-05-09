@@ -107,7 +107,19 @@ class PermissionHelper
                     'show' => [
                         'display' => 'Detalle de Nomina',
                         'route' => 'payrolls.show',
-                        'actions' => ['view', 'calculate', 'approve', 'pay', 'export', 'edit_time'],
+                        'actions' => ['view', 'calculate', 'approve', 'pay', 'export', 'edit_time', 'manage_adjustments'],
+                    ],
+                ],
+            ],
+            'payroll_concepts' => [
+                'display' => 'Conceptos de nomina',
+                'icon' => 'DocumentTextIcon',
+                'order' => 7.5,
+                'pages' => [
+                    'index' => [
+                        'display' => 'Conceptos de nomina',
+                        'route' => 'payroll-concepts.index',
+                        'actions' => ['view', 'create', 'edit', 'delete'],
                     ],
                 ],
             ],
@@ -123,10 +135,27 @@ class PermissionHelper
                     ],
                 ],
             ],
+            'expenses' => [
+                'display' => 'Gastos',
+                'icon' => 'ReceiptPercentIcon',
+                'order' => 9,
+                'pages' => [
+                    'index' => [
+                        'display' => 'Gastos',
+                        'route' => 'expenses.index',
+                        'actions' => ['view', 'create', 'edit', 'delete'],
+                    ],
+                    'categories' => [
+                        'display' => 'Categorias de gastos',
+                        'route' => 'expense-categories.index',
+                        'actions' => ['view', 'create', 'edit', 'delete'],
+                    ],
+                ],
+            ],
             'reports' => [
                 'display' => 'Reportes',
                 'icon' => 'ChartBarIcon',
-                'order' => 9,
+                'order' => 10,
                 'pages' => [
                     'production' => [
                         'display' => 'Reporte de Produccion',

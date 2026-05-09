@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\ResolvesMediaUrlsInArray;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -26,12 +27,22 @@ class Company extends Model
         'logo',
         'is_active',
         'settings',
+        'membership_plan_id',
+        'membership_started_at',
+        'membership_ends_at',
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'settings' => 'array',
+        'membership_started_at' => 'datetime',
+        'membership_ends_at' => 'datetime',
     ];
+
+    public function membershipPlan(): BelongsTo
+    {
+        return $this->belongsTo(MembershipPlan::class, 'membership_plan_id');
+    }
 
     public function users(): HasMany
     {
@@ -66,6 +77,21 @@ class Company extends Model
     public function advances(): HasMany
     {
         return $this->hasMany(Advance::class);
+    }
+
+    public function payrollConcepts(): HasMany
+    {
+        return $this->hasMany(PayrollConcept::class);
+    }
+
+    public function expenseCategories(): HasMany
+    {
+        return $this->hasMany(ExpenseCategory::class);
+    }
+
+    public function expenses(): HasMany
+    {
+        return $this->hasMany(Expense::class);
     }
 
     public function settings(): HasMany

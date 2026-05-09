@@ -8,11 +8,15 @@ import {
     BuildingOfficeIcon,
     ChartBarIcon,
     ClipboardDocumentListIcon,
+    CreditCardIcon,
     CalendarDaysIcon,
     Cog6ToothIcon,
     CurrencyDollarIcon,
+    DocumentTextIcon,
     HomeIcon,
     MoonIcon,
+    PaintBrushIcon,
+    ReceiptPercentIcon,
     ShieldCheckIcon,
     SunIcon,
     TagIcon,
@@ -26,6 +30,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { Avatar } from '@/Components/UI/Avatar';
+import { SuperAdminCompanySwitcher } from '@/Components/SuperAdminCompanySwitcher';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { mediaUrl } from '@/lib/mediaUrl';
@@ -39,7 +44,9 @@ const moduleIcons: Record<string, typeof HomeIcon> = {
     operations: WrenchScrewdriverIcon,
     productions: ClipboardDocumentListIcon,
     payrolls: BanknotesIcon,
+    payroll_concepts: DocumentTextIcon,
     advances: CurrencyDollarIcon,
+    expenses: ReceiptPercentIcon,
     reports: ChartBarIcon,
     companies: BuildingOfficeIcon,
     payroll_periodicities: CalendarDaysIcon,
@@ -69,7 +76,9 @@ const moduleSections: Record<string, NavItem['section']> = {
     operations: 'production',
     productions: 'production',
     payrolls: 'payroll',
+    payroll_concepts: 'payroll',
     advances: 'payroll',
+    expenses: 'payroll',
     reports: 'main',
     companies: 'admin',
     payroll_periodicities: 'admin',
@@ -86,7 +95,9 @@ const moduleLabels: Record<string, string> = {
     operations: 'Operaciones',
     productions: 'Produccion',
     payrolls: 'Nomina',
+    payroll_concepts: 'Conceptos de nomina',
     advances: 'Anticipos',
+    expenses: 'Gastos',
     reports: 'Reportes',
     companies: 'Empresas',
     payroll_periodicities: 'Periodicidad de pagos',
@@ -103,6 +114,7 @@ const moduleRoutes: Record<string, string> = {
     operations: 'operations.index',
     productions: 'productions.index',
     payrolls: 'payrolls.index',
+    payroll_concepts: 'payroll-concepts.index',
     advances: 'advances.index',
     'reports.production': 'reports.production',
     'reports.payroll': 'reports.payroll',
@@ -138,6 +150,28 @@ function buildNavigation(accessiblePages: string[], isSuperAdmin: boolean): NavI
                     href: page.endsWith('production') ? '/reports/production' : '/reports/payroll',
                     icon: ChartBarIcon,
                     section: 'main',
+                });
+            }
+            return;
+        }
+
+        if (module === 'expenses') {
+            if (page === 'expenses.index') {
+                items.push({
+                    key: 'expenses-index',
+                    label: 'Listado de gastos',
+                    href: getRouteUrl('expenses.index'),
+                    icon: ReceiptPercentIcon,
+                    section: 'payroll',
+                });
+            }
+            if (page === 'expenses.categories') {
+                items.push({
+                    key: 'expenses-categories',
+                    label: 'Categorias de gastos',
+                    href: getRouteUrl('expense-categories.index'),
+                    icon: TagIcon,
+                    section: 'payroll',
                 });
             }
             return;
@@ -180,6 +214,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     const flash = props.flash;
     const appName = props.appName;
     const activeCompany = props.activeCompany;
+    const brandIconUrl = props.brandIconUrl;
 
     const { user, accessiblePages, isSuperAdmin } = usePermissions();
     const { isDark, toggle: toggleTheme } = useDarkMode();
@@ -212,6 +247,20 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         return [
             ...base,
             {
+                key: 'landing-editor',
+                label: 'Landing publica',
+                href: getRouteUrl('super-admin.landing.index'),
+                icon: PaintBrushIcon,
+                section: 'admin' as const,
+            },
+            {
+                key: 'membership-plans',
+                label: 'Planes de membresia',
+                href: getRouteUrl('super-admin.membership-plans.index'),
+                icon: CreditCardIcon,
+                section: 'admin' as const,
+            },
+            {
                 key: 'data-imports',
                 label: 'Carga masiva (CSV)',
                 href: getRouteUrl('super-admin.data-imports.index'),
@@ -221,7 +270,9 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         ];
     }, [accessiblePages, isSuperAdmin]);
 
-    const brandLogoUrl = sidebarBrand?.logo ? (mediaUrl(sidebarBrand.logo) ?? null) : null;
+    /** Logo de empresa si hay contexto tenant; si no, mismo icono de marca que favicon / login (super admin consolidado). */
+    const companyLogoUrl = sidebarBrand?.logo ? (mediaUrl(sidebarBrand.logo) ?? null) : null;
+    const sidebarLogoUrl = companyLogoUrl || brandIconUrl || null;
 
     const groupedNav = sectionOrder.reduce<Record<string, NavItem[]>>((acc, section) => {
         const items = navigation.filter((item) => item.section === section);
@@ -259,11 +310,11 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 {/* Sidebar header: logo y nombre de la empresa (o app por defecto) */}
                 <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-700">
                     <Link href={getRouteUrl('dashboard')} className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden" title={brandTitle}>
-                        {brandLogoUrl ? (
+                        {sidebarLogoUrl ? (
                             <img
-                                src={brandLogoUrl}
+                                src={sidebarLogoUrl}
                                 alt=""
-                                className="h-9 w-9 shrink-0 rounded-lg object-cover shadow-sm ring-1 ring-slate-200/80 dark:ring-slate-600/80"
+                                className="h-9 w-9 shrink-0 rounded-lg border border-slate-200/80 bg-white object-contain p-0.5 shadow-sm dark:border-slate-600/80 dark:bg-slate-900/40"
                             />
                         ) : (
                             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow">
@@ -357,7 +408,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-2">
+                    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                        <SuperAdminCompanySwitcher />
                         <button
                             type="button"
                             onClick={toggleTheme}

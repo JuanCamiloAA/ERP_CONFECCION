@@ -7,7 +7,9 @@ import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { StatCard } from '@/Components/UI/StatCard';
 import AppLayout from '@/Layouts/AppLayout';
+import { Pagination } from '@/Components/UI/Pagination';
 import { formatCurrency, formatNumber } from '@/lib/utils';
+import type { PaginatedResponse } from '@/types';
 
 interface Summary {
     total_quantity: number;
@@ -38,9 +40,9 @@ interface DailyRow {
 interface Props {
     filters: { start: string; end: string };
     summary: Summary;
-    byEmployee: AggregateRow[];
-    byReference: AggregateRow[];
-    byOperation: AggregateRow[];
+    byEmployee: PaginatedResponse<AggregateRow>;
+    byReference: PaginatedResponse<AggregateRow>;
+    byOperation: PaginatedResponse<AggregateRow>;
     dailySeries: DailyRow[];
 }
 
@@ -102,17 +104,22 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {byEmployee.length === 0 ? (
+                                {byEmployee.total === 0 ? (
                                     <tr><td colSpan={3} className="py-6 text-center text-slate-400">Sin datos</td></tr>
-                                ) : byEmployee.map((row) => (
-                                    <tr key={`emp-${row.employee_id}`}>
-                                        <td className="py-2">{row.employee?.first_name} {row.employee?.last_name}</td>
-                                        <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
-                                        <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
-                                    </tr>
-                                ))}
+                                ) : (
+                                    byEmployee.data.map((row) => (
+                                        <tr key={`emp-${row.employee_id}`}>
+                                            <td className="py-2">
+                                                {row.employee?.first_name} {row.employee?.last_name}
+                                            </td>
+                                            <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
+                                            <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
+                        <Pagination links={byEmployee.links} from={byEmployee.from} to={byEmployee.to} total={byEmployee.total} />
                     </Card>
 
                     <Card>
@@ -126,17 +133,27 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {byReference.length === 0 ? (
+                                {byReference.total === 0 ? (
                                     <tr><td colSpan={3} className="py-6 text-center text-slate-400">Sin datos</td></tr>
-                                ) : byReference.map((row) => (
-                                    <tr key={`ref-${row.reference_id}`}>
-                                        <td className="py-2">{row.reference?.code} - {row.reference?.name}</td>
-                                        <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
-                                        <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
-                                    </tr>
-                                ))}
+                                ) : (
+                                    byReference.data.map((row) => (
+                                        <tr key={`ref-${row.reference_id}`}>
+                                            <td className="py-2">
+                                                {row.reference?.code} - {row.reference?.name}
+                                            </td>
+                                            <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
+                                            <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
+                        <Pagination
+                            links={byReference.links}
+                            from={byReference.from}
+                            to={byReference.to}
+                            total={byReference.total}
+                        />
                     </Card>
 
                     <Card className="lg:col-span-2">
@@ -150,17 +167,25 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                {byOperation.length === 0 ? (
+                                {byOperation.total === 0 ? (
                                     <tr><td colSpan={3} className="py-6 text-center text-slate-400">Sin datos</td></tr>
-                                ) : byOperation.map((row) => (
-                                    <tr key={`op-${row.operation_id}`}>
-                                        <td className="py-2">{row.operation?.name}</td>
-                                        <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
-                                        <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
-                                    </tr>
-                                ))}
+                                ) : (
+                                    byOperation.data.map((row) => (
+                                        <tr key={`op-${row.operation_id}`}>
+                                            <td className="py-2">{row.operation?.name}</td>
+                                            <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
+                                            <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
+                                        </tr>
+                                    ))
+                                )}
                             </tbody>
                         </table>
+                        <Pagination
+                            links={byOperation.links}
+                            from={byOperation.from}
+                            to={byOperation.to}
+                            total={byOperation.total}
+                        />
                     </Card>
                 </div>
             </div>

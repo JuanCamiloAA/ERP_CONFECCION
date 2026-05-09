@@ -7,6 +7,8 @@ use App\Models\Company;
 use App\Models\Employee;
 use App\Models\PayrollPeriodicity;
 use App\Services\Files\MediaUrlResolver;
+use App\Support\BrandIcon;
+use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
@@ -23,9 +25,11 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $this->refreshSuperAdminCompanySession($user);
 
         return array_merge(parent::share($request), [
             'appName' => config('app.name'),
+            'brandIconUrl' => fn () => BrandIcon::url(),
             'auth' => [
                 'user' => $user ? $this->buildUserPayload($user) : null,
             ],
@@ -46,7 +50,67 @@ class HandleInertiaRequests extends Middleware
             'payrollPeriodicities' => fn () => $user
                 ? PayrollPeriodicity::query()->active()->ordered()->get(['id', 'code', 'name', 'sort_order'])->all()
                 : [],
+            'activeCompanyId' => fn () => $this->sharedActiveCompanyId($user),
+            'companiesForSelector' => fn () => $this->companiesForSuperAdminSelector($user),
+            'isConsolidatedView' => fn () => (bool) ($user && $user->isSuperAdmin() && TenantContext::isConsolidatedSuperAdmin($user)),
         ]);
+    }
+
+    protected function refreshSuperAdminCompanySession($user): void
+    {
+        if (! $user?->isSuperAdmin()) {
+            return;
+        }
+
+        TenantContext::migrateLegacySession();
+
+        $id = TenantContext::superAdminSelectedCompanyId();
+        if ($id === null) {
+            return;
+        }
+
+        $ok = Company::query()->whereKey($id)->where('is_active', true)->exists();
+        if (! $ok) {
+            session()->forget(TenantContext::SESSION_KEY);
+            session()->flash('warning', 'La empresa seleccionada ya no esta disponible. Se muestra la vista consolidada.');
+        }
+    }
+
+    /**
+     * @return int|null null = todas (solo super admin) o sin empresa.
+     */
+    protected function sharedActiveCompanyId($user): ?int
+    {
+        if (! $user) {
+            return null;
+        }
+
+        if ($user->isSuperAdmin()) {
+            return TenantContext::superAdminSelectedCompanyId();
+        }
+
+        return $user->company_id ? (int) $user->company_id : null;
+    }
+
+    /**
+     * @return list<array{id: int, name: string, is_active: bool}>
+     */
+    protected function companiesForSuperAdminSelector($user): array
+    {
+        if (! $user?->isSuperAdmin()) {
+            return [];
+        }
+
+        return Company::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id', 'name', 'is_active'])
+            ->map(fn (Company $c) => [
+                'id' => $c->id,
+                'name' => $c->name,
+                'is_active' => (bool) $c->is_active,
+            ])
+            ->all();
     }
 
     protected function buildUserPayload($user): array
@@ -109,7 +173,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         if ($user->isSuperAdmin()) {
-            $companyId = session('active_company_id');
+            $companyId = TenantContext::superAdminSelectedCompanyId();
             if ($companyId) {
                 return Company::find($companyId);
             }

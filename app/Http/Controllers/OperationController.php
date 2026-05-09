@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Operation\StoreOperationRequest;
 use App\Http\Requests\Operation\UpdateOperationRequest;
 use App\Models\Operation;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -38,7 +39,7 @@ class OperationController extends Controller
     public function store(StoreOperationRequest $request): RedirectResponse
     {
         $data = $request->validated();
-        $data['company_id'] = $request->user()->company_id;
+        $data['company_id'] = TenantContext::requireCompanyIdForWrite($request->user());
         $data['is_active'] = $data['is_active'] ?? true;
 
         Operation::create($data);

@@ -76,6 +76,11 @@ export default function Login({ loginCompany = null }: LoginProps) {
                 <Button type="submit" loading={processing} fullWidth size="lg">
                     Iniciar sesion
                 </Button>
+                <p className="text-center text-sm text-slate-500 dark:text-slate-400">
+                    <Link href={route('landing')} className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
+                        Volver al sitio publico
+                    </Link>
+                </p>
             </form>
         </AuthLayout>
     );

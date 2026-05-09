@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Bank\StoreBankRequest;
 use App\Http\Requests\Bank\UpdateBankRequest;
 use App\Models\Bank;
+use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -48,7 +49,7 @@ class BankController extends Controller
     public function store(StoreBankRequest $request): RedirectResponse
     {
         $data = $request->validated();
-        $data['company_id'] = $request->user()->company_id;
+        $data['company_id'] = TenantContext::requireCompanyIdForWrite($request->user());
         $data['is_active'] = $data['is_active'] ?? true;
 
         Bank::create($data);
