@@ -3,8 +3,10 @@
 namespace App\Http\Middleware;
 
 use App\Helpers\PermissionHelper;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\PayrollPeriodicity;
+use App\Services\Files\MediaUrlResolver;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 use Tighten\Ziggy\Ziggy;
@@ -51,6 +53,8 @@ class HandleInertiaRequests extends Middleware
     {
         $user->loadMissing(['company', 'employee', 'roles.permissions']);
 
+        $resolver = app(MediaUrlResolver::class);
+
         $primaryRole = $user->roles->first();
         $rolePermissionNames = $user->roles
             ->flatMap(fn ($r) => $r->permissions->pluck('name'))
@@ -64,7 +68,7 @@ class HandleInertiaRequests extends Middleware
             'last_name' => $user->last_name,
             'full_name' => trim(($user->name ?? '').' '.($user->last_name ?? '')),
             'email' => $user->email,
-            'avatar' => $user->avatar,
+            'avatar' => $resolver->url($user->getAttributes()['avatar'] ?? null),
             'phone' => $user->phone,
             'is_active' => (bool) $user->is_active,
             'is_employee' => $user->isEmployee(),
@@ -75,7 +79,7 @@ class HandleInertiaRequests extends Middleware
             'company' => $user->company ? [
                 'id' => $user->company->id,
                 'name' => $user->company->name,
-                'logo' => $user->company->logo,
+                'logo' => $resolver->url($user->company->getAttributes()['logo'] ?? null),
             ] : null,
             'role' => $primaryRole ? [
                 'id' => $primaryRole->id,
@@ -107,7 +111,7 @@ class HandleInertiaRequests extends Middleware
         if ($user->isSuperAdmin()) {
             $companyId = session('active_company_id');
             if ($companyId) {
-                return \App\Models\Company::find($companyId);
+                return Company::find($companyId);
             }
 
             return null;

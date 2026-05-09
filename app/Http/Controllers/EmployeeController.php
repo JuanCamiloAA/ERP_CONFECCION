@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Employee\StoreEmployeeAccessRequest;
 use App\Http\Requests\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Employee\UpdateEmployeeRequest;
@@ -10,8 +11,10 @@ use App\Models\Employee;
 use App\Models\Production;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\Files\StoredFileDeleter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -20,6 +23,11 @@ use Inertia\Response;
 
 class EmployeeController extends Controller
 {
+    public function __construct(
+        protected ObjectStorageInterface $objectStorage,
+        protected StoredFileDeleter $storedFileDeleter,
+    ) {}
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -73,9 +81,7 @@ class EmployeeController extends Controller
             $data = $request->validated();
             $createUser = (bool) ($data['create_user_account'] ?? false);
 
-            if ($request->hasFile('photo')) {
-                $data['photo'] = $request->file('photo')->store('employees', 'public');
-            }
+            unset($data['photo'], $data['create_user_account'], $data['user_email'], $data['user_role_id']);
 
             $data['company_id'] = $user->company_id;
             $data['is_active'] = $data['is_active'] ?? true;
@@ -92,7 +98,7 @@ class EmployeeController extends Controller
                 'email' => $data['email'] ?? null,
                 'address' => $data['address'] ?? null,
                 'hire_date' => $data['hire_date'],
-                'photo' => $data['photo'] ?? null,
+                'photo' => null,
                 'base_salary' => $data['base_salary'] ?? 0,
                 'payroll_mode' => $payrollMode,
                 'daily_salary' => $payrollMode === Employee::PAYROLL_MODE_FIXED_DAILY ? ($data['daily_salary'] ?? 0) : null,
@@ -104,6 +110,14 @@ class EmployeeController extends Controller
                 'notes' => $data['notes'] ?? null,
             ]);
 
+            if ($request->hasFile('photo')) {
+                $uploaded = $this->objectStorage->upload(
+                    $request->file('photo'),
+                    "companies/{$employee->company_id}/employees/{$employee->id}"
+                );
+                $employee->update(['photo' => $uploaded['path']]);
+            }
+
             $temporaryPassword = null;
 
             if ($createUser) {
@@ -113,14 +127,14 @@ class EmployeeController extends Controller
                     'employee_id' => $employee->id,
                     'name' => $employee->first_name,
                     'last_name' => $employee->last_name,
-                    'email' => $data['user_email'],
+                    'email' => $request->validated('user_email'),
                     'password' => Hash::make($temporaryPassword),
                     'phone' => $employee->phone,
                     'is_active' => true,
                     'password_change_required' => true,
                 ]);
 
-                $role = Role::find($data['user_role_id']);
+                $role = Role::find($request->validated('user_role_id'));
                 if ($role) {
                     $newUser->assignRole($role);
                 }
@@ -187,13 +201,19 @@ class EmployeeController extends Controller
     public function update(UpdateEmployeeRequest $request, Employee $employee): RedirectResponse
     {
         $data = $request->validated();
+        unset($data['photo']);
         $payrollMode = $data['payroll_mode'] ?? Employee::PAYROLL_MODE_OPERATIONS;
         $data['payroll_mode'] = $payrollMode;
         $data['daily_salary'] = $payrollMode === Employee::PAYROLL_MODE_FIXED_DAILY ? ($data['daily_salary'] ?? 0) : null;
         $data['minutes_per_full_workday'] = (int) ($data['minutes_per_full_workday'] ?? 480);
 
         if ($request->hasFile('photo')) {
-            $data['photo'] = $request->file('photo')->store('employees', 'public');
+            $this->storedFileDeleter->deleteIfPresent($employee->getAttributes()['photo'] ?? null);
+            $uploaded = $this->objectStorage->upload(
+                $request->file('photo'),
+                "companies/{$employee->company_id}/employees/{$employee->id}"
+            );
+            $data['photo'] = $uploaded['path'];
         }
 
         $employee->update($data);
@@ -329,7 +349,7 @@ class EmployeeController extends Controller
         ]);
     }
 
-    protected function companyRoles(?int $forCompanyId = null): \Illuminate\Support\Collection
+    protected function companyRoles(?int $forCompanyId = null): Collection
     {
         $auth = auth()->user();
         $companyId = $forCompanyId ?? $auth?->company_id;

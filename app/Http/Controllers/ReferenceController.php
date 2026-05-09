@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Reference\StoreReferenceRequest;
 use App\Http\Requests\Reference\UpdateReferenceRequest;
 use App\Models\Operation;
 use App\Models\Production;
 use App\Models\Reference;
+use App\Services\Files\StoredFileDeleter;
 use App\Support\ReferenceLotCompletion;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -16,6 +18,11 @@ use Inertia\Response;
 
 class ReferenceController extends Controller
 {
+    public function __construct(
+        protected ObjectStorageInterface $objectStorage,
+        protected StoredFileDeleter $storedFileDeleter,
+    ) {}
+
     public function index(Request $request): Response
     {
         $search = trim((string) $request->input('search', ''));
@@ -73,10 +80,6 @@ class ReferenceController extends Controller
         $user = $request->user();
 
         return DB::transaction(function () use ($request, $data, $user) {
-            if ($request->hasFile('image')) {
-                $data['image'] = $request->file('image')->store('references', 'public');
-            }
-
             $sumUnit = round(collect($data['operations'] ?? [])->sum(fn ($row) => (float) ($row['price'] ?? 0)), 2);
             $lotQty = (int) $data['lot_total_quantity'];
 
@@ -88,10 +91,18 @@ class ReferenceController extends Controller
                 'operational_cost_per_unit_fixed' => $sumUnit,
                 'operational_lot_qty_at_cost_fix' => $lotQty,
                 'description' => $data['description'] ?? null,
-                'image' => $data['image'] ?? null,
+                'image' => null,
                 'is_active' => $data['is_active'] ?? true,
                 'lot_total_quantity' => $lotQty,
             ]);
+
+            if ($request->hasFile('image')) {
+                $uploaded = $this->objectStorage->upload(
+                    $request->file('image'),
+                    "companies/{$reference->company_id}/references/{$reference->id}"
+                );
+                $reference->update(['image' => $uploaded['path']]);
+            }
 
             if (! empty($data['operations'])) {
                 $sync = collect($data['operations'])->mapWithKeys(fn ($row) => [
@@ -129,9 +140,15 @@ class ReferenceController extends Controller
     public function update(UpdateReferenceRequest $request, Reference $reference): RedirectResponse
     {
         $data = $request->validated();
+        unset($data['image']);
 
         if ($request->hasFile('image')) {
-            $data['image'] = $request->file('image')->store('references', 'public');
+            $this->storedFileDeleter->deleteIfPresent($reference->getAttributes()['image'] ?? null);
+            $uploaded = $this->objectStorage->upload(
+                $request->file('image'),
+                "companies/{$reference->company_id}/references/{$reference->id}"
+            );
+            $data['image'] = $uploaded['path'];
         }
 
         $reference->update($data);

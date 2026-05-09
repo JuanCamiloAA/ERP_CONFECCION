@@ -17,6 +17,17 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Upload driver (public files: avatars, logos, reference images)
+    |--------------------------------------------------------------------------
+    |
+    | Valores: local (storage/app/public + symlink) | firebase
+    |
+    */
+
+    'default_upload' => env('FILESYSTEM_DEFAULT_UPLOAD_DRIVER', 'local'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |

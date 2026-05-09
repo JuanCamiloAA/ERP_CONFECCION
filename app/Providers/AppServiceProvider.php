@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\ObjectStorageInterface;
 use App\Models\Company;
 use App\Models\DataImportBatch;
 use App\Models\Employee;
@@ -25,6 +26,11 @@ use App\Policies\ProductionPolicy;
 use App\Policies\ReferencePolicy;
 use App\Policies\RolePolicy;
 use App\Policies\UserPolicy;
+use App\Services\Files\FirebaseObjectStorage;
+use App\Services\Files\FirebaseStorageService;
+use App\Services\Files\LocalPublicObjectStorage;
+use App\Services\Files\MediaUrlResolver;
+use App\Services\Files\StoredFileDeleter;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -37,7 +43,24 @@ class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
-        //
+        $this->app->singleton(FirebaseStorageService::class);
+
+        $this->app->singleton(MediaUrlResolver::class, function ($app) {
+            return new MediaUrlResolver($app->make(FirebaseStorageService::class));
+        });
+
+        $this->app->singleton(StoredFileDeleter::class, function ($app) {
+            return new StoredFileDeleter($app->make(FirebaseStorageService::class));
+        });
+
+        $this->app->bind(ObjectStorageInterface::class, function ($app) {
+            $driver = (string) config('filesystems.default_upload', 'local');
+
+            return match ($driver) {
+                'firebase' => $app->make(FirebaseObjectStorage::class),
+                default => $app->make(LocalPublicObjectStorage::class),
+            };
+        });
     }
 
     public function boot(): void

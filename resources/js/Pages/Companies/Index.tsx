@@ -11,6 +11,7 @@ import { Pagination } from '@/Components/UI/Pagination';
 import { SearchInput } from '@/Components/UI/SearchInput';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import AppLayout from '@/Layouts/AppLayout';
+import { mediaUrl } from '@/lib/mediaUrl';
 import type { PaginatedResponse } from '@/types';
 
 interface CompanyRow {
@@ -99,7 +100,7 @@ export default function CompaniesIndex({ companies, filters }: Props) {
                                     <TableCell>
                                         <div className="flex items-center gap-3">
                                             {company.logo ? (
-                                                <Avatar src={`/storage/${company.logo}`} name={company.name} size="sm" />
+                                                <Avatar src={mediaUrl(company.logo)} name={company.name} size="sm" />
                                             ) : (
                                                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400">
                                                     <BuildingOffice2Icon className="h-5 w-5" />

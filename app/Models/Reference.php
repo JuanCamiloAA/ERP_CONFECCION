@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ResolvesMediaUrlsInArray;
 use App\Models\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Attributes\ScopedBy;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,7 +16,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 #[ScopedBy([CompanyScope::class])]
 class Reference extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, ResolvesMediaUrlsInArray, SoftDeletes;
+
+    /**
+     * @var list<string>
+     */
+    protected array $mediaUrlAttributes = ['image'];
 
     protected $fillable = [
         'company_id',

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ResolvesMediaUrlsInArray;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -9,7 +10,12 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Company extends Model
 {
-    use HasFactory, SoftDeletes;
+    use HasFactory, ResolvesMediaUrlsInArray, SoftDeletes;
+
+    /**
+     * @var list<string>
+     */
+    protected array $mediaUrlAttributes = ['logo'];
 
     protected $fillable = [
         'name',
@@ -69,6 +75,6 @@ class Company extends Model
 
     public function roles(): HasMany
     {
-        return $this->hasMany(\App\Models\Role::class);
+        return $this->hasMany(Role::class);
     }
 }

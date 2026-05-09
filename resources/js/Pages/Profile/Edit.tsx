@@ -8,6 +8,7 @@ import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import AppLayout from '@/Layouts/AppLayout';
+import { mediaUrl } from '@/lib/mediaUrl';
 import type { AuthUser } from '@/types';
 
 interface Props {
@@ -16,7 +17,7 @@ interface Props {
 
 export default function ProfileEdit({ user }: Props) {
     const page = usePage<App.PageProps>();
-    const [preview, setPreview] = useState<string | null>(user.avatar ? `/storage/${user.avatar}` : null);
+    const [preview, setPreview] = useState<string | null>(user.avatar ? (mediaUrl(user.avatar) ?? null) : null);
 
     const { data, setData, processing, errors } = useForm({
         name: user.name,
@@ -34,7 +35,7 @@ export default function ProfileEdit({ user }: Props) {
     const onAvatarChange = (file: File | null) => {
         setData('avatar', file);
         if (preview && preview.startsWith('blob:')) URL.revokeObjectURL(preview);
-        setPreview(file ? URL.createObjectURL(file) : null);
+        setPreview(file ? URL.createObjectURL(file) : (mediaUrl(user.avatar) ?? null));
     };
 
     const role = user.roles?.[0];

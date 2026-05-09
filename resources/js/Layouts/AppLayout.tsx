@@ -28,6 +28,7 @@ import { toast } from 'sonner';
 import { Avatar } from '@/Components/UI/Avatar';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { useDarkMode } from '@/hooks/useDarkMode';
+import { mediaUrl } from '@/lib/mediaUrl';
 import { cn } from '@/lib/utils';
 
 const moduleIcons: Record<string, typeof HomeIcon> = {
@@ -220,7 +221,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         ];
     }, [accessiblePages, isSuperAdmin]);
 
-    const brandLogoUrl = sidebarBrand?.logo ? `/storage/${sidebarBrand.logo}` : null;
+    const brandLogoUrl = sidebarBrand?.logo ? (mediaUrl(sidebarBrand.logo) ?? null) : null;
 
     const groupedNav = sectionOrder.reduce<Record<string, NavItem[]>>((acc, section) => {
         const items = navigation.filter((item) => item.section === section);

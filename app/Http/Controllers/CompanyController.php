@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Company\StoreCompanyRequest;
 use App\Http\Requests\Company\UpdateCompanyRequest;
 use App\Models\Company;
 use App\Services\CompanyDefaultRolesService;
+use App\Services\Files\StoredFileDeleter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,6 +15,11 @@ use Inertia\Response;
 
 class CompanyController extends Controller
 {
+    public function __construct(
+        protected ObjectStorageInterface $objectStorage,
+        protected StoredFileDeleter $storedFileDeleter,
+    ) {}
+
     public function index(Request $request): Response
     {
         $search = trim((string) $request->input('search', ''));
@@ -41,15 +48,19 @@ class CompanyController extends Controller
 
     public function store(StoreCompanyRequest $request): RedirectResponse
     {
-        $data = $request->validated();
-
-        if ($request->hasFile('logo')) {
-            $data['logo'] = $request->file('logo')->store('companies', 'public');
-        }
-
+        $data = collect($request->validated())->except(['logo'])->all();
+        $data['logo'] = null;
         $data['is_active'] = $data['is_active'] ?? true;
 
         $company = Company::create($data);
+
+        if ($request->hasFile('logo')) {
+            $uploaded = $this->objectStorage->upload(
+                $request->file('logo'),
+                "companies/{$company->id}/logo"
+            );
+            $company->update(['logo' => $uploaded['path']]);
+        }
 
         app(CompanyDefaultRolesService::class)->ensureDefaultRolesForCompany($company);
 
@@ -66,9 +77,15 @@ class CompanyController extends Controller
     public function update(UpdateCompanyRequest $request, Company $company): RedirectResponse
     {
         $data = $request->validated();
+        unset($data['logo']);
 
         if ($request->hasFile('logo')) {
-            $data['logo'] = $request->file('logo')->store('companies', 'public');
+            $this->storedFileDeleter->deleteIfPresent($company->getAttributes()['logo'] ?? null);
+            $uploaded = $this->objectStorage->upload(
+                $request->file('logo'),
+                "companies/{$company->id}/logo"
+            );
+            $data['logo'] = $uploaded['path'];
         }
 
         $company->update($data);

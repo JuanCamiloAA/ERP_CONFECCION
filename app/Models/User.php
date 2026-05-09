@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ResolvesMediaUrlsInArray;
+use App\Services\EffectivePermissionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -12,11 +14,15 @@ use Illuminate\Notifications\Notifiable;
 use Spatie\Permission\Contracts\Permission as PermissionContract;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Traits\HasRoles;
-use App\Services\EffectivePermissionService;
 
 class User extends Authenticatable
 {
-    use HasFactory, HasRoles, Notifiable, SoftDeletes;
+    use HasFactory, HasRoles, Notifiable, ResolvesMediaUrlsInArray, SoftDeletes;
+
+    /**
+     * @var list<string>
+     */
+    protected array $mediaUrlAttributes = ['avatar'];
 
     protected $fillable = [
         'company_id',

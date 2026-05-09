@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Contracts\ObjectStorageInterface;
 use App\Models\PayrollPeriodicity;
+use App\Services\Files\StoredFileDeleter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -11,6 +13,11 @@ use Inertia\Response;
 
 class SettingController extends Controller
 {
+    public function __construct(
+        protected ObjectStorageInterface $objectStorage,
+        protected StoredFileDeleter $storedFileDeleter,
+    ) {}
+
     public function index(Request $request): Response
     {
         $company = $request->user()->company;
@@ -88,7 +95,12 @@ class SettingController extends Controller
         ];
 
         if ($request->hasFile('logo')) {
-            $update['logo'] = $request->file('logo')->store('companies', 'public');
+            $this->storedFileDeleter->deleteIfPresent($company->getAttributes()['logo'] ?? null);
+            $uploaded = $this->objectStorage->upload(
+                $request->file('logo'),
+                "companies/{$company->id}/logo"
+            );
+            $update['logo'] = $uploaded['path'];
         }
 
         if (isset($data['settings'])) {

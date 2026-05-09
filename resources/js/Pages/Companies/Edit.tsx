@@ -8,6 +8,7 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Switch } from '@/Components/UI/Switch';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
+import { mediaUrl } from '@/lib/mediaUrl';
 import type { Company } from '@/types';
 
 interface Props {
@@ -15,7 +16,7 @@ interface Props {
 }
 
 export default function CompanyEdit({ company }: Props) {
-    const [preview, setPreview] = useState<string | null>(company.logo ? `/storage/${company.logo}` : null);
+    const [preview, setPreview] = useState<string | null>(company.logo ? (mediaUrl(company.logo) ?? null) : null);
 
     const { data, setData, processing, errors } = useForm({
         name: company.name,
@@ -35,7 +36,7 @@ export default function CompanyEdit({ company }: Props) {
     const onLogoChange = (file: File | null) => {
         setData('logo', file);
         if (preview && preview.startsWith('blob:')) URL.revokeObjectURL(preview);
-        setPreview(file ? URL.createObjectURL(file) : null);
+        setPreview(file ? URL.createObjectURL(file) : (mediaUrl(company.logo) ?? null));
     };
 
     return (

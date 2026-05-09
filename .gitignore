@@ -16,6 +16,8 @@ Homestead.yaml
 npm-debug.log
 yarn-error.log
 /auth.json
+# Cuenta de servicio Firebase / Google (copiar en deploy; no versionar)
+/storage/app/private/firebase/*.json
 /.fleet
 /.idea
 /.nova

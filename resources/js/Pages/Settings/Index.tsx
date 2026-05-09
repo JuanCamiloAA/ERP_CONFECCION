@@ -8,6 +8,7 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
+import { mediaUrl } from '@/lib/mediaUrl';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import type { Company } from '@/types';
 
@@ -47,7 +48,7 @@ export default function SettingsIndex({ company, settings }: Props) {
         () => payrollPeriodicities.map((p) => ({ value: p.code, label: p.name })),
         [payrollPeriodicities],
     );
-    const [preview, setPreview] = useState<string | null>(company?.logo ? `/storage/${company.logo}` : null);
+    const [preview, setPreview] = useState<string | null>(company?.logo ? (mediaUrl(company.logo) ?? null) : null);
 
     const { data, setData, processing, errors } = useForm<SettingsFormData>({
         name: company?.name ?? '',
@@ -97,7 +98,7 @@ export default function SettingsIndex({ company, settings }: Props) {
     const onLogoChange = (file: File | null) => {
         setData('logo', file);
         if (preview && preview.startsWith('blob:')) URL.revokeObjectURL(preview);
-        setPreview(file ? URL.createObjectURL(file) : company?.logo ? `/storage/${company.logo}` : null);
+        setPreview(file ? URL.createObjectURL(file) : company?.logo ? (mediaUrl(company.logo) ?? null) : null);
     };
 
     return (

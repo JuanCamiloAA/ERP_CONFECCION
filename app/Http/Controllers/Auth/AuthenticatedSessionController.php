@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
 use App\Models\AccessLog;
 use App\Models\Company;
+use App\Services\Files\MediaUrlResolver;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -49,7 +50,7 @@ class AuthenticatedSessionController extends Controller
         return [
             'id' => $company->id,
             'name' => $company->name,
-            'logo_url' => $company->logo ? asset('storage/'.$company->logo) : null,
+            'logo_url' => app(MediaUrlResolver::class)->url($company->getAttributes()['logo'] ?? null),
         ];
     }
 
