@@ -92,7 +92,7 @@ export function PlanInquiryModal({ open, onClose, plan, mailtoTarget }: Props) {
         if (!mailtoTarget) {
             return;
         }
-        const subject = plan ? `Solicitud de plan: ${plan.name}` : 'Solicitud de información — MiTallerPro';
+        const subject = plan ? `Solicitud de plan: ${plan.name}` : 'Solicitud de información — MiTallerCol';
         const body = buildMailtoDraft(plan, form.data);
         const addr = mailtoTarget.replace(/^mailto:/i, '').trim();
         window.location.href = `mailto:${addr}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;

@@ -9,7 +9,7 @@
 ---
 
 # PROMPT COMPLETO — Landing pública (ruta principal) + CMS Super Admin + Membresías por empresa
-## Para Claude Opus — Proyecto MiTallerPro / Taller de confección
+## Para Claude Opus — Proyecto MiTallerCol / Taller de confección
 
 ---
 
@@ -22,7 +22,7 @@ Referencia de **layout y flujo** (mockup tipo “Admin Portal / Landing Page Edi
 - **Columna izquierda:** tarjetas **Hero**, **Features Grid**, **Partners & Clients**, **About**; badges **LIVE** (verde) / **DRAFT** (ámbar); sección seleccionada con borde; **+ Add New Custom Section** (borde discontinuo).
 - **Columna derecha:** formulario por sección, “Last saved…”, **Save Changes**, textos, CTAs, **upload imagen/fondo** (drag-drop, Replace Media, tip de diseño), **Reset to Default**, **Discard Draft**, **Apply to Live**.
 
-**Obligatorio:** Misma **estructura UX**, pero **estilos actuales del proyecto** (`tailwind.config`, colores primary, componentes `Button`, `Card`, `Input`, modo oscuro si el admin lo usa). Marca: **MiTallerPro** (`config('app.name')`), no copiar nombres de terceros del mockup.
+**Obligatorio:** Misma **estructura UX**, pero **estilos actuales del proyecto** (`tailwind.config`, colores primary, componentes `Button`, `Card`, `Input`, modo oscuro si el admin lo usa). Marca: **MiTallerCol** (`config('app.name')`), no copiar nombres de terceros del mockup.
 
 ---
 
@@ -70,7 +70,7 @@ El **super admin** edita estos valores en una subsección del editor (“Ajustes
 
 ### 2.4 `LandingSeeder` — copy y bullets de producto (obligatorio en seed)
 
-Rellenar **live_payload** y **draft_payload** igual al inicio, con textos en **español** para **MiTallerPro**.
+Rellenar **live_payload** y **draft_payload** igual al inicio, con textos en **español** para **MiTallerCol**.
 
 **Hero (ejemplo de intención; Opus puede pulir redacción):**
 

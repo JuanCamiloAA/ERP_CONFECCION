@@ -17,8 +17,8 @@ class LandingSeeder extends Seeder
 
         $global = LandingGlobal::instance();
         $global->update([
-            'site_name' => 'MiTallerPro',
-            'meta_title' => 'MiTallerPro — Software para talleres de confección',
+            'site_name' => 'MiTallerCol',
+            'meta_title' => 'MiTallerCol — Software para talleres de confección',
             'meta_description' => 'Producción, nómina, personal y control operativo multiempresa para talleres de confección.',
             'header_logo_path' => null,
             'favicon_path' => null,
@@ -28,7 +28,7 @@ class LandingSeeder extends Seeder
             'footer_contact_url' => '#',
             'navbar_cta_text' => 'Acceso clientes',
             'navbar_cta_url' => '/login',
-            'footer_legal_text' => '© '.date('Y').' MiTallerPro. Todos los derechos reservados.',
+            'footer_legal_text' => '© '.date('Y').' MiTallerCol. Todos los derechos reservados.',
         ]);
 
         $payloads = LandingDefaultPayloads::payloadBySlug();

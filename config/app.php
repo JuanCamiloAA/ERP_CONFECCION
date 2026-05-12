@@ -13,7 +13,7 @@ return [
     |
     */
 
-    'name' => env('APP_NAME', 'MiTallerPro'),
+    'name' => env('APP_NAME', 'MiTallerCol'),
 
     /*
     |--------------------------------------------------------------------------

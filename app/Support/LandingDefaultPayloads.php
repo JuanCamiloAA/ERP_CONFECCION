@@ -14,7 +14,7 @@ final class LandingDefaultPayloads
     {
         return [
             'hero' => [
-                'headline' => 'MiTallerPro: tu taller ordenado, de la producción a la nómina',
+                'headline' => 'MiTallerCol: tu taller ordenado, de la producción a la nómina',
                 'subtext' => 'Software multiempresa para talleres de confección. Producción por empleado y operación, nómina por piezas o jornada, anticipos, roles por empresa y datos bancarios — todo centralizado y seguro.',
                 'primary_cta_text' => 'Solicitar información',
                 'primary_cta_url' => '/login',
@@ -55,7 +55,7 @@ final class LandingDefaultPayloads
                 'banner_image_path' => null,
                 'banner_overlay_opacity' => 0,
                 'title' => 'Hecho para talleres que viven de la producción',
-                'body' => "MiTallerPro nace para talleres de confección y manufactura ligera que necesitan orden operativo y nómina alineada a la realidad del piso.\n\nReunimos producción, personas y pagos en un solo flujo: menos hojas sueltas, menos discusiones sobre cifras y más claridad para administradores y operarios.",
+                'body' => "MiTallerCol nace para talleres de confección y manufactura ligera que necesitan orden operativo y nómina alineada a la realidad del piso.\n\nReunimos producción, personas y pagos en un solo flujo: menos hojas sueltas, menos discusiones sobre cifras y más claridad para administradores y operarios.",
                 'image_path' => 'images/landing/about.svg',
             ],
             'membership_plans' => [
