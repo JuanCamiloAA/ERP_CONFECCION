@@ -16,6 +16,7 @@ use App\Support\CompanyContext;
 use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -148,7 +149,7 @@ class PayrollController extends Controller
 
         $showDailyColumn = (clone $peBase)->where('daily_work_subtotal', '>', 0)->exists();
 
-        $payrollEmployees = (clone $peBase)
+        $payrollEmployeeRows = (clone $peBase)
             ->with([
                 'employee:id,first_name,last_name,document_number,payroll_mode,daily_salary,minutes_per_full_workday',
                 'advances',
@@ -158,13 +159,28 @@ class PayrollController extends Controller
             ->orderBy('employees.first_name')
             ->orderBy('employees.last_name')
             ->select('payroll_employees.*')
-            ->paginate(15)
-            ->withQueryString();
+            ->get();
 
-        $idsOnPage = $payrollEmployees->getCollection()->pluck('employee_id')->filter()->values()->all();
+        $totalRows = $payrollEmployeeRows->count();
+        $perPage = max($totalRows, 1);
+
+        $payrollEmployees = new LengthAwarePaginator(
+            $payrollEmployeeRows,
+            $totalRows,
+            $perPage,
+            1,
+            [
+                'path' => $request->url(),
+                'pageName' => 'page',
+            ]
+        );
+
+        $payrollEmployees->withQueryString();
+
+        $idsForDetail = $payrollEmployeeRows->pluck('employee_id')->filter()->values()->all();
 
         $workSessionsByEmployee = [];
-        if ($idsOnPage !== []) {
+        if ($idsForDetail !== []) {
             $workSessionsByEmployee = WorkDaySession::query()
                 ->withoutGlobalScopes()
                 ->where('company_id', $payroll->company_id)
@@ -172,7 +188,7 @@ class PayrollController extends Controller
                     $payroll->period_start->format('Y-m-d'),
                     $payroll->period_end->format('Y-m-d'),
                 ])
-                ->whereIn('employee_id', $idsOnPage)
+                ->whereIn('employee_id', $idsForDetail)
                 ->orderBy('work_date')
                 ->orderBy('id')
                 ->get()
@@ -182,7 +198,7 @@ class PayrollController extends Controller
         }
 
         $productionsByEmployee = [];
-        if ($idsOnPage !== []) {
+        if ($idsForDetail !== []) {
             $productionsByEmployee = Production::query()
                 ->withoutGlobalScopes()
                 ->with(['reference:id,code,name', 'operation:id,name'])
@@ -196,7 +212,7 @@ class PayrollController extends Controller
                     $q->where('company_id', $cid)
                         ->orWhereHas('reference', fn ($r) => $r->where('company_id', $cid));
                 })
-                ->whereIn('employee_id', $idsOnPage)
+                ->whereIn('employee_id', $idsForDetail)
                 ->orderBy('date')
                 ->orderBy('id')
                 ->get()

@@ -21,7 +21,6 @@ import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { Input } from '@/Components/UI/Input';
 import { Modal } from '@/Components/UI/Modal';
 import { PageHeader } from '@/Components/UI/PageHeader';
-import { Pagination } from '@/Components/UI/Pagination';
 import { Select } from '@/Components/UI/Select';
 import { StatCard } from '@/Components/UI/StatCard';
 import { Table, TableBody, TableCell, TableFoot, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
@@ -670,6 +669,47 @@ export default function PayrollShow({
                                                                     </div>
                                                                 </div>
                                                             ) : null}
+                                                            {empProductions.length > 0 ? (
+                                                                <div>
+                                                                    <p className="text-xs font-semibold uppercase text-slate-500">
+                                                                        Operaciones registradas en el periodo
+                                                                    </p>
+                                                                    <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                                                                        Empleado con nomina por jornada: el devengo sigue la liquidacion por dias arriba. Las operaciones
+                                                                        listadas aqui son referencia del periodo (no se suman al total de la columna Producido).
+                                                                    </p>
+                                                                    <div className="mt-2 overflow-x-auto">
+                                                                        <table className="w-full min-w-[720px] text-left text-sm">
+                                                                            <thead>
+                                                                                <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-700">
+                                                                                    <th className="py-2 pr-2">Fecha</th>
+                                                                                    <th className="py-2 pr-2">Referencia</th>
+                                                                                    <th className="py-2 pr-2">Operacion</th>
+                                                                                    <th className="py-2 pr-2 text-right">Cantidad</th>
+                                                                                    <th className="py-2 pr-2 text-right">Valor</th>
+                                                                                    <th className="py-2 pr-2">Estado</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {empProductions.map((p) => (
+                                                                                    <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800">
+                                                                                        <td className="py-2 pr-2">{formatDate(p.date)}</td>
+                                                                                        <td className="py-2 pr-2">
+                                                                                            {p.reference ? `${p.reference.code} · ${p.reference.name}` : '—'}
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2">{p.operation?.name ?? '—'}</td>
+                                                                                        <td className="py-2 pr-2 text-right tabular-nums">{p.quantity}</td>
+                                                                                        <td className="py-2 pr-2 text-right tabular-nums">
+                                                                                            {formatCurrency(p.total_value)}
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2 capitalize">{p.status}</td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            ) : null}
                                                             {adjustmentsPanel(row)}
                                                         </div>
                                                     </TableCell>
@@ -754,12 +794,6 @@ export default function PayrollShow({
                             </TableFoot>
                         )}
                     </Table>
-                    <Pagination
-                        links={payrollEmployees.links}
-                        from={payrollEmployees.from}
-                        to={payrollEmployees.to}
-                        total={payrollEmployees.total}
-                    />
                 </Card>
             </div>
 

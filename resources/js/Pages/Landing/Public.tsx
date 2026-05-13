@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useRef, useState, type MouseEvent, type RefObject } from 'react';
 import { Head, Link, usePage } from '@inertiajs/react';
 import * as HeroIcons from '@heroicons/react/24/outline';
 import { toast } from 'sonner';
@@ -43,6 +43,122 @@ function clampBannerOverlayPct(raw: unknown, whenMissing: number): number {
 
 function useLightTextOnBanner(overlayPct: number, hasBannerImage: boolean): boolean {
     return overlayPct >= 36 || (hasBannerImage && overlayPct >= 12);
+}
+
+const LANDING_CHROME_VAR = '--landing-chrome-height';
+
+function syncLandingChromeFromEl(el: HTMLElement | null): void {
+    const root = document.documentElement;
+    if (!el) {
+        root.style.setProperty(LANDING_CHROME_VAR, '78px');
+        return;
+    }
+    root.style.setProperty(LANDING_CHROME_VAR, `${Math.max(52, Math.round(el.offsetHeight))}px`);
+}
+
+function useSyncLandingChromeHeight(containerRef: RefObject<HTMLElement | null>): void {
+    useEffect(() => {
+        syncLandingChromeFromEl(containerRef.current);
+        const el = containerRef.current;
+        if (!el) {
+            return () => document.documentElement.style.removeProperty(LANDING_CHROME_VAR);
+        }
+
+        let ro: ResizeObserver | undefined;
+        if (typeof ResizeObserver !== 'undefined') {
+            ro = new ResizeObserver(() => syncLandingChromeFromEl(el));
+            ro.observe(el);
+        }
+        const onWin = () => syncLandingChromeFromEl(el);
+        window.addEventListener('resize', onWin);
+        return () => {
+            ro?.disconnect();
+            window.removeEventListener('resize', onWin);
+            document.documentElement.style.removeProperty(LANDING_CHROME_VAR);
+        };
+    }, [containerRef]);
+}
+
+function RevealFloatIn({ children, className }: { children: React.ReactNode; className?: string }) {
+    const shellRef = useRef<HTMLDivElement>(null);
+    const [visible, setVisible] = useState(false);
+
+    useEffect(() => {
+        const el = shellRef.current;
+        if (!el) {
+            return;
+        }
+        if (typeof window.matchMedia !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            setVisible(true);
+            return;
+        }
+        const io = new IntersectionObserver(
+            ([e]) => {
+                if (!e?.isIntersecting) {
+                    return;
+                }
+                setVisible(true);
+                io.disconnect();
+            },
+            { threshold: [0.04, 0.12], rootMargin: '0px 0px -12% 0px' },
+        );
+        io.observe(el);
+        return () => io.disconnect();
+    }, []);
+
+    return (
+        <div
+            ref={shellRef}
+            className={cn(
+                'relative isolate',
+                'motion-safe:transition-[transform,opacity,filter] motion-safe:duration-[900ms] motion-safe:ease-[cubic-bezier(0.22,1,0.36,1)]',
+                visible ? 'translate-y-0 opacity-100' : 'motion-safe:translate-y-[2.75rem] motion-safe:opacity-0',
+                visible ? '[will-change:auto]' : 'motion-safe:will-change-transform',
+                className,
+            )}
+        >
+            {children}
+        </div>
+    );
+}
+
+function HeroParallaxBackdrop({ children }: { children: React.ReactNode }) {
+    const [parallax, setParallax] = useState(0);
+
+    useEffect(() => {
+        if (typeof window.matchMedia !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            return;
+        }
+
+        let raf = 0;
+        const onScroll = () => {
+            cancelAnimationFrame(raf);
+            raf = requestAnimationFrame(() => {
+                const y = Math.min(window.scrollY, 560);
+                setParallax(y * 0.28);
+            });
+        };
+
+        window.addEventListener('scroll', onScroll, { passive: true });
+        onScroll();
+
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('scroll', onScroll);
+        };
+    }, []);
+
+    return (
+        <div
+            className={cn('absolute inset-0 overflow-hidden', parallax !== 0 && 'will-change-transform')}
+            style={{
+                transform: parallax !== 0 ? `translate3d(0, ${parallax}px, 0)` : undefined,
+            }}
+            aria-hidden
+        >
+            {children}
+        </div>
+    );
 }
 
 function SectionBannerLayers({ imageUrl, overlayPct }: { imageUrl?: string | null; overlayPct: number }) {
@@ -135,6 +251,9 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
     const flash = page.props.flash;
     const displayName = globals.site_name || appName;
 
+    const landingChromeRef = useRef<HTMLDivElement>(null);
+    useSyncLandingChromeHeight(landingChromeRef);
+
     const [planInquiryOpen, setPlanInquiryOpen] = useState(false);
     const [planInquiryPlan, setPlanInquiryPlan] = useState<PlanInquirySelection | null>(null);
 
@@ -173,22 +292,28 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
                 {globals.favicon_url ? <link rel="icon" href={globals.favicon_url} /> : null}
             </Head>
 
-            {authUser?.is_super_admin ? (
-                <div className="border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-center text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-100">
-                    <span className="font-medium">Modo super administrador</span>
-                    {' · '}
-                    <Link href={route('dashboard')} className="font-semibold underline underline-offset-2">
-                        Ir al panel
-                    </Link>
-                    {' · '}
-                    <Link href={route('super-admin.landing.index')} className="font-semibold underline underline-offset-2">
-                        Editor landing
-                    </Link>
-                </div>
-            ) : null}
+            <div className="shrink-0" style={{ height: 'var(--landing-chrome-height, 78px)' }} aria-hidden />
 
-            <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/90 backdrop-blur dark:border-slate-700 dark:bg-slate-900/90">
-                <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
+            <div
+                ref={landingChromeRef}
+                className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/80 bg-slate-50/95 backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/95"
+            >
+                {authUser?.is_super_admin ? (
+                    <div className="border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-center text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-100">
+                        <span className="font-medium">Modo super administrador</span>
+                        {' · '}
+                        <Link href={route('dashboard')} className="font-semibold underline underline-offset-2">
+                            Ir al panel
+                        </Link>
+                        {' · '}
+                        <Link href={route('super-admin.landing.index')} className="font-semibold underline underline-offset-2">
+                            Editor landing
+                        </Link>
+                    </div>
+                ) : null}
+
+                <header className="border-b border-transparent bg-transparent">
+                    <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
                     <Link href={route('landing')} className="flex items-center gap-2">
                         {globals.header_logo_url ? (
                             <img src={globals.header_logo_url} alt="" className="h-10 w-auto max-w-[180px] object-contain" />
@@ -211,8 +336,9 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
                     <div className="md:hidden">
                         <ContactCtaButton onClick={() => openPlanInquiry()}>Solicitar acceso</ContactCtaButton>
                     </div>
-                </div>
-            </header>
+                    </div>
+                </header>
+            </div>
 
             <main>
                 {sections.map((s) => (
@@ -397,27 +523,53 @@ function SectionBlock({
         const hasBgImage = Boolean(p.background_image_url);
         const overlayPct = clampBannerOverlayPct(p.banner_overlay_opacity, hasBgImage ? 72 : 0);
 
+        const scrollHint = (
+            <div className="pointer-events-none absolute bottom-4 left-0 right-0 z-20 flex justify-center px-4 sm:bottom-6">
+                <a
+                    href="#features"
+                    onClick={(e) => {
+                        e.preventDefault();
+                        const feat = document.getElementById('features');
+                        if (feat) {
+                            feat.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            window.history.replaceState(null, '', '#features');
+                        }
+                    }}
+                    className="pointer-events-auto flex flex-col items-center gap-0.5 rounded-full border border-white/25 bg-slate-950/25 px-4 py-2 text-center text-[10px] font-semibold uppercase tracking-[0.22em] text-white/85 shadow-lg shadow-slate-950/30 backdrop-blur-md transition hover:border-white/50 hover:bg-slate-950/40 hover:text-white"
+                    aria-label="Ir a capacidades"
+                >
+                    Explorar
+                    <HeroIcons.ChevronDownIcon className="-mt-1 h-6 w-6 motion-safe:animate-bounce" aria-hidden />
+                </a>
+            </div>
+        );
+
         return (
-            <section className="relative overflow-hidden">
-                {hasBgImage ? (
-                    <>
-                        <div
-                            className="absolute inset-0 bg-cover bg-center"
-                            style={{ backgroundImage: `url(${p.background_image_url})` }}
-                        />
-                        <div
-                            className="absolute inset-0 bg-slate-950"
-                            style={{ opacity: overlayPct / 100 }}
-                            aria-hidden
-                        />
-                    </>
-                ) : (
-                    <div className="absolute inset-0 bg-gradient-to-b from-slate-900/75 via-slate-900/50 to-slate-900/80" aria-hidden />
-                )}
-                <div className="relative z-10 mx-auto flex max-w-6xl flex-col gap-6 px-4 py-24 md:py-32">
-                    <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-white md:text-5xl">{p.headline}</h1>
-                    <p className="max-w-2xl text-lg text-slate-100/95">{p.subtext}</p>
-                    <div className="flex flex-wrap gap-3">
+            <section
+                id="hero"
+                className="relative isolate flex min-h-[calc(min(100svh,100dvh)-var(--landing-chrome-height,78px))] flex-col justify-center overflow-hidden"
+            >
+                <HeroParallaxBackdrop>
+                    {hasBgImage ? (
+                        <>
+                            <div
+                                className="absolute inset-0 bg-cover bg-center bg-no-repeat"
+                                style={{ backgroundImage: `url(${p.background_image_url})` }}
+                            />
+                            <div
+                                className="absolute inset-0 bg-slate-950"
+                                style={{ opacity: overlayPct / 100 }}
+                                aria-hidden
+                            />
+                        </>
+                    ) : (
+                        <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-indigo-950/90 to-slate-950" aria-hidden />
+                    )}
+                </HeroParallaxBackdrop>
+                <div className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 flex-col justify-center px-4 py-14 md:py-16">
+                    <h1 className="max-w-3xl text-4xl font-bold tracking-tight text-white md:text-5xl lg:text-6xl">{p.headline}</h1>
+                    <p className="mt-5 max-w-2xl text-lg text-slate-100/95 md:text-xl">{p.subtext}</p>
+                    <div className="mt-8 flex flex-wrap gap-3">
                         {p.primary_cta_text ? (
                             <ContactCtaButton onClick={() => onOpenPlanInquiry()}>{p.primary_cta_text}</ContactCtaButton>
                         ) : null}
@@ -428,6 +580,7 @@ function SectionBlock({
                         ) : null}
                     </div>
                 </div>
+                {scrollHint}
             </section>
         );
     }
@@ -445,8 +598,9 @@ function SectionBlock({
 
         return (
             <section id="features" className="relative scroll-mt-24 overflow-hidden py-16 md:py-24">
-                <SectionBannerLayers imageUrl={bannerImageUrl} overlayPct={overlayPct} />
-                <div className="relative z-10 mx-auto max-w-6xl px-4">
+                <RevealFloatIn>
+                    <SectionBannerLayers imageUrl={bannerImageUrl} overlayPct={overlayPct} />
+                    <div className="relative z-10 mx-auto max-w-6xl px-4">
                     <h2
                         className={
                             useLightHeading
@@ -471,6 +625,7 @@ function SectionBlock({
                         ))}
                     </div>
                 </div>
+                </RevealFloatIn>
             </section>
         );
     }
@@ -503,6 +658,7 @@ function SectionBlock({
                 id="membership-plans"
                 className={`scroll-mt-24 py-16 md:py-20 ${hasBannerLayers ? 'relative overflow-hidden' : 'bg-slate-100 dark:bg-slate-950'}`}
             >
+                <RevealFloatIn>
                 <SectionBannerLayers imageUrl={bannerImageUrl} overlayPct={overlayPct} />
                 <div className="relative z-10 mx-auto max-w-6xl px-4">
                     <h2
@@ -582,6 +738,7 @@ function SectionBlock({
                         </p>
                     ) : null}
                 </div>
+                </RevealFloatIn>
             </section>
         );
     }
@@ -604,6 +761,7 @@ function SectionBlock({
                 id="partners"
                 className={`scroll-mt-24 py-16 ${hasBannerLayers ? 'relative overflow-hidden' : 'bg-white dark:bg-slate-900'}`}
             >
+                <RevealFloatIn>
                 <SectionBannerLayers imageUrl={bannerImageUrl} overlayPct={overlayPct} />
                 <div className="relative z-10 mx-auto max-w-6xl px-4">
                     <h2
@@ -617,6 +775,7 @@ function SectionBlock({
                     </h2>
                     {items.length > 0 ? <PartnersStrip items={items} /> : null}
                 </div>
+                </RevealFloatIn>
             </section>
         );
     }
@@ -639,6 +798,7 @@ function SectionBlock({
                 id="about"
                 className={`scroll-mt-24 py-16 md:py-24 ${hasBannerLayers ? 'relative overflow-hidden' : ''}`}
             >
+                <RevealFloatIn>
                 <SectionBannerLayers imageUrl={bannerImageUrl} overlayPct={overlayPct} />
                 <div className="relative z-10 mx-auto grid max-w-6xl items-center gap-10 px-4 md:grid-cols-2">
                     <div>
@@ -665,6 +825,7 @@ function SectionBlock({
                         <img src={p.image_url} alt="" className="w-full rounded-2xl shadow-lg ring  ring-slate-200/60 dark:ring-slate-700" />
                     ) : null}
                 </div>
+                </RevealFloatIn>
             </section>
         );
     }
@@ -699,6 +860,7 @@ function SectionBlock({
                     : 'border-t border-slate-200 bg-slate-100 py-14 dark:border-slate-800 dark:bg-slate-950'
             }
         >
+            <RevealFloatIn>
             <SectionBannerLayers imageUrl={bannerImageUrl} overlayPct={overlayPct} />
             <div
                 className={cn(
@@ -767,6 +929,7 @@ function SectionBlock({
                     ) : null}
                 </div>
             </div>
+            </RevealFloatIn>
         </section>
     );
 }
