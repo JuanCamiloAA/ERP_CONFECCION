@@ -34,7 +34,7 @@ Route::post('/landing/plan-inquiry', LandingPlanInquiryController::class)
     ->name('landing.plan-inquiry')
     ->middleware('throttle:10,1');
 
-Route::middleware(['auth', 'force.password'])->group(function () {
+Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     Route::get('/profile/change-password', [ProfileController::class, 'showChangePassword'])->name('profile.change-password.show');
     Route::post('/profile/change-password', [ProfileController::class, 'changePassword'])->name('profile.change-password');
 });

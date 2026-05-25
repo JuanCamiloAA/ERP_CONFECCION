@@ -38,12 +38,9 @@ class AuthenticatedSessionController extends Controller
             return null;
         }
 
-        $company = Company::query()
-            ->where('id', (int) $raw)
-            ->where('is_active', true)
-            ->first();
+        $company = Company::query()->where('id', (int) $raw)->first();
 
-        if (! $company) {
+        if (! $company || $company->corporateAuthenticationBlockReason() !== null) {
             return null;
         }
 

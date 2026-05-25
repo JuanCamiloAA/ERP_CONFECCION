@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Auth;
 
+use App\Models\Company;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
@@ -47,11 +48,39 @@ class LoginRequest extends FormRequest
         }
 
         $user = Auth::user();
+
         if ($user && ! $user->is_active) {
             Auth::logout();
             throw ValidationException::withMessages([
                 'email' => 'Tu cuenta esta desactivada. Contacta al administrador.',
             ]);
+        }
+
+        if ($user && ! $user->isSuperAdmin()) {
+            if (! $user->company_id) {
+                Auth::logout();
+                throw ValidationException::withMessages([
+                    'email' => 'Tu cuenta no esta asociada a ninguna empresa.',
+                ]);
+            }
+
+            $company = Company::query()->find($user->company_id);
+
+            if (! $company) {
+                Auth::logout();
+                throw ValidationException::withMessages([
+                    'email' => 'Tu empresa ya no existe o fue eliminada. Contacta al soporte.',
+                ]);
+            }
+
+            $blockMessage = $company->corporateAuthenticationBlockReason();
+
+            if ($blockMessage !== null) {
+                Auth::logout();
+                throw ValidationException::withMessages([
+                    'email' => $blockMessage,
+                ]);
+            }
         }
 
         if ($user) {
