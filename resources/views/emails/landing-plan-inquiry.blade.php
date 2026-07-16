@@ -6,7 +6,7 @@
     <title>Solicitud de plan</title>
 </head>
 <body style="font-family: system-ui, sans-serif; line-height: 1.5; color: #0f172a;">
-    <h1 style="font-size: 1.25rem;">Nueva solicitud desde la landing</h1>
+    <h1 style="font-size: 1.25rem;">Nueva solicitud desde la landing.</h1>
 
     @if($plan)
         <p><strong>Plan de interés:</strong> {{ $plan->name }} (ID {{ $plan->id }})</p>
