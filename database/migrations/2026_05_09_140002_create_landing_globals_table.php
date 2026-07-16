@@ -21,6 +21,7 @@ return new class extends Migration
             $table->string('footer_contact_url')->nullable();
             $table->string('navbar_cta_text')->nullable();
             $table->string('navbar_cta_url')->nullable();
+            $table->string('plan_inquiry_notify_email')->nullable();
             $table->text('footer_legal_text')->nullable();
             $table->timestamps();
         });
