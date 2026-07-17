@@ -58,6 +58,14 @@ return [
             'report' => false,
         ],
 
+        /** Importaciones CSV (super admin): siempre en disco local, no Firebase/public. */
+        'imports' => [
+            'driver' => 'local',
+            'root' => storage_path('app/imports'),
+            'throw' => false,
+            'report' => false,
+        ],
+
         's3' => [
             'driver' => 's3',
             'key' => env('AWS_ACCESS_KEY_ID'),

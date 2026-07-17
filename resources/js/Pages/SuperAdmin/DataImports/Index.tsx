@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
 import { FormEventHandler, useState } from 'react';
+import { toast } from 'sonner';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { PageHeader } from '@/Components/UI/PageHeader';
@@ -33,21 +34,50 @@ function statusVariant(status: string): 'success' | 'warning' | 'danger' | 'neut
     return 'neutral';
 }
 
+function canProcessBatch(status: string): boolean {
+    return status === 'pending' || status === 'failed';
+}
+
 export default function DataImportsIndex({ batches, types }: Props) {
     const [openHelp, setOpenHelp] = useState(true);
+    const [uploadingType, setUploadingType] = useState<string | null>(null);
+    const [processingBatchId, setProcessingBatchId] = useState<number | null>(null);
 
     const submitImport: (type: string) => FormEventHandler<HTMLFormElement> =
         (type) => (e) => {
             e.preventDefault();
+            if (uploadingType) {
+                return;
+            }
             const form = e.currentTarget;
             const fd = new FormData(form);
             fd.set('type', type);
+            setUploadingType(type);
             router.post(route('super-admin.data-imports.store'), fd, {
                 forceFormData: true,
                 preserveScroll: true,
                 onSuccess: () => form.reset(),
+                onError: (errors) => {
+                    const message =
+                        (typeof errors.file === 'string' && errors.file) ||
+                        (typeof errors.type === 'string' && errors.type) ||
+                        'No se pudo subir el archivo. Revisa el CSV e intenta de nuevo.';
+                    toast.error(message);
+                },
+                onFinish: () => setUploadingType(null),
             });
         };
+
+    const runProcess = (batchId: number) => {
+        if (processingBatchId !== null) {
+            return;
+        }
+        setProcessingBatchId(batchId);
+        router.post(route('super-admin.data-imports.process', batchId), {}, {
+            preserveScroll: true,
+            onFinish: () => setProcessingBatchId(null),
+        });
+    };
 
     return (
         <AppLayout title="Importacion CSV">
@@ -55,7 +85,7 @@ export default function DataImportsIndex({ batches, types }: Props) {
             <div className="space-y-8">
                 <PageHeader
                     title="Importacion masiva (CSV)"
-                    description="Solo super administrador. Descarga plantillas, sube archivos y revisa el historial. Ejecuta queue:work para procesar en segundo plano."
+                    description="Sube el CSV y pulsa «Procesar» en el historial para ejecutar la importacion al instante (sin colas)."
                 />
 
                 <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
@@ -80,6 +110,9 @@ export default function DataImportsIndex({ batches, types }: Props) {
                                 <li>Referencias</li>
                                 <li>Empleados y usuarios</li>
                             </ol>
+                            <p className="text-slate-500 dark:text-slate-400">
+                                Tras cargar el archivo quedara en estado <strong>Pendiente</strong>. Use el boton <strong>Procesar</strong> en el historial para importar los datos.
+                            </p>
                             <p className="text-slate-500 dark:text-slate-400">
                                 Modo empresas: si el NIT existe, puede <strong>omitir</strong> la fila o <strong>actualizar</strong> datos. Empleados: marque actualizar
                                 existentes para sobrescribir por numero de documento.
@@ -147,8 +180,8 @@ export default function DataImportsIndex({ batches, types }: Props) {
                                     required
                                     className="block w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium dark:text-slate-300 dark:file:bg-slate-700"
                                 />
-                                <Button type="submit" size="sm">
-                                    Importar
+                                <Button type="submit" size="sm" loading={uploadingType === key} disabled={uploadingType !== null}>
+                                    {uploadingType === key ? 'Subiendo…' : 'Cargar CSV'}
                                 </Button>
                             </form>
                         ))}
@@ -166,7 +199,7 @@ export default function DataImportsIndex({ batches, types }: Props) {
                                 <TableHeader>Archivo</TableHeader>
                                 <TableHeader align="center">Estado</TableHeader>
                                 <TableHeader align="center">OK / Error</TableHeader>
-                                <TableHeader align="right">Detalle</TableHeader>
+                                <TableHeader align="right">Acciones</TableHeader>
                             </TableRow>
                         </TableHead>
                         <TableBody>
@@ -194,12 +227,26 @@ export default function DataImportsIndex({ batches, types }: Props) {
                                             {b.rows_success} / {b.rows_failed}
                                         </TableCell>
                                         <TableCell align="right">
-                                            <Link
-                                                href={route('super-admin.data-imports.show', b.id)}
-                                                className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
-                                            >
-                                                Ver detalle
-                                            </Link>
+                                            <div className="flex flex-wrap items-center justify-end gap-2">
+                                                {canProcessBatch(b.status) ? (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="success"
+                                                        loading={processingBatchId === b.id}
+                                                        disabled={processingBatchId !== null}
+                                                        onClick={() => runProcess(b.id)}
+                                                    >
+                                                        {processingBatchId === b.id ? 'Procesando…' : 'Procesar'}
+                                                    </Button>
+                                                ) : null}
+                                                <Link
+                                                    href={route('super-admin.data-imports.show', b.id)}
+                                                    className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                                                >
+                                                    Ver detalle
+                                                </Link>
+                                            </div>
                                         </TableCell>
                                     </TableRow>
                                 ))

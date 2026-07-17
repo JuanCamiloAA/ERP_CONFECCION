@@ -36,11 +36,8 @@ use App\Services\Files\FirebaseStorageService;
 use App\Services\Files\LocalPublicObjectStorage;
 use App\Services\Files\MediaUrlResolver;
 use App\Services\Files\StoredFileDeleter;
-use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
-use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
 
@@ -93,10 +90,6 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(DataImportBatch::class, DataImportBatchPolicy::class);
         Gate::policy(Expense::class, ExpensePolicy::class);
         Gate::policy(ExpenseCategory::class, ExpenseCategoryPolicy::class);
-
-        RateLimiter::for('data-import-upload', function (Request $request) {
-            return Limit::perMinute(10)->by((string) $request->user()?->id ?: $request->ip());
-        });
 
         if (config('app.env') === 'production') {
             URL::forceScheme('https');

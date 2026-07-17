@@ -4,13 +4,16 @@ namespace App\Http\Controllers\SuperAdmin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\StoreDataImportRequest;
-use App\Jobs\ProcessDataImportJob;
 use App\Models\DataImportBatch;
+use App\Services\DataImport\DataImportProcessor;
 use App\Services\DataImport\TemplateGeneratorService;
+use App\Support\DataImportStorage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -20,6 +23,7 @@ class DataImportController extends Controller
 {
     public function __construct(
         protected TemplateGeneratorService $templates,
+        protected DataImportProcessor $processor,
     ) {}
 
     public function index(Request $request): Response
@@ -117,10 +121,12 @@ class DataImportController extends Controller
 
     public function store(StoreDataImportRequest $request): RedirectResponse
     {
+        $this->ensureImportRateLimitNotExceeded($request);
+
         $file = $request->file('file');
         $uuid = Str::uuid()->toString();
-        $relativePath = 'imports/'.$uuid.'.csv';
-        $file->storeAs('imports', $uuid.'.csv');
+        $filename = $uuid.'.csv';
+        DataImportStorage::storeUploadedCsv($file, $filename);
 
         $meta = [
             'company_import_mode' => $request->input('company_import_mode', 'skip'),
@@ -130,15 +136,67 @@ class DataImportController extends Controller
         $batch = DataImportBatch::create([
             'user_id' => $request->user()->id,
             'original_filename' => $file->getClientOriginalName(),
-            'stored_path' => $relativePath,
+            'stored_path' => $filename,
             'type' => $request->validated('type'),
             'status' => DataImportBatch::STATUS_PENDING,
             'meta' => $meta,
             'ip_address' => $request->ip(),
         ]);
 
-        ProcessDataImportJob::dispatch($batch->id);
+        return back()->with('success', 'Archivo cargado. Pulsa «Procesar» en el historial para ejecutar la importacion.');
+    }
 
-        return back()->with('success', 'Archivo recibido. La importacion se procesara en segundo plano.');
+    public function process(Request $request, DataImportBatch $batch): RedirectResponse
+    {
+        if ($batch->status === DataImportBatch::STATUS_PROCESSING) {
+            return back()->with('warning', 'Esta importacion ya se esta procesando.');
+        }
+
+        if (! in_array($batch->status, [DataImportBatch::STATUS_PENDING, DataImportBatch::STATUS_FAILED], true)) {
+            return back()->with('warning', 'Solo se pueden procesar importaciones pendientes o fallidas.');
+        }
+
+        try {
+            $this->processor->process($batch->fresh());
+        } catch (\Throwable $e) {
+            report($e);
+
+            return back()->with('error', 'No se pudo procesar la importacion: '.$e->getMessage());
+        }
+
+        $batch->refresh();
+
+        if ($batch->status === DataImportBatch::STATUS_FAILED) {
+            $fatal = is_array($batch->meta) ? ($batch->meta['fatal_error'] ?? null) : null;
+
+            return back()->with('error', $fatal ?: 'La importacion fallo. Revisa el detalle.');
+        }
+
+        $message = "Importacion completada: {$batch->rows_success} filas OK";
+        if ($batch->rows_failed > 0) {
+            $message .= ", {$batch->rows_failed} con error";
+        }
+
+        return back()->with('success', $message.'.');
+    }
+
+    /**
+     * Throttle tras validar el CSV: intentos fallidos (tipo/MIME) no consumen cupo.
+     */
+    protected function ensureImportRateLimitNotExceeded(StoreDataImportRequest $request): void
+    {
+        $perMinute = max(1, (int) config('data_import.rate_limit_per_minute', 30));
+        $userId = $request->user()?->id;
+        $key = $userId ? 'data-import:user:'.$userId : 'data-import:ip:'.$request->ip();
+
+        if (RateLimiter::tooManyAttempts($key, $perMinute)) {
+            $seconds = RateLimiter::availableIn($key);
+
+            throw ValidationException::withMessages([
+                'file' => "Demasiados intentos de importacion. Espera {$seconds} segundos e intenta de nuevo.",
+            ]);
+        }
+
+        RateLimiter::hit($key, 60);
     }
 }

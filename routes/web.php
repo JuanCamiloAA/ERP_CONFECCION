@@ -167,9 +167,9 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::get('data-imports/templates/zip', [DataImportController::class, 'downloadTemplatesZip'])->name('data-imports.templates.zip');
         Route::get('data-imports/templates/{type}', [DataImportController::class, 'downloadTemplate'])->whereIn('type', DataImportBatch::types())->name('data-imports.templates');
         Route::get('data-imports/{batch}/errors', [DataImportController::class, 'downloadErrors'])->name('data-imports.errors');
+        Route::post('data-imports/{batch}/process', [DataImportController::class, 'process'])->name('data-imports.process');
         Route::get('data-imports/{batch}', [DataImportController::class, 'show'])->name('data-imports.show');
         Route::post('data-imports', [DataImportController::class, 'store'])
-            ->middleware('throttle:data-import-upload')
             ->name('data-imports.store');
 
         Route::get('landing', [LandingCmsController::class, 'index'])->name('landing.index');

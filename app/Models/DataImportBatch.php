@@ -65,4 +65,9 @@ class DataImportBatch extends Model
             self::TYPE_EMPLOYEES_USERS,
         ];
     }
+
+    public function canBeProcessed(): bool
+    {
+        return in_array($this->status, [self::STATUS_PENDING, self::STATUS_FAILED], true);
+    }
 }
