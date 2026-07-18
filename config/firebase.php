@@ -40,7 +40,7 @@ return [
 
     'credentials_json' => env('FIREBASE_CREDENTIALS_JSON', ''),
 
-    'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf'],
+    'allowed_extensions' => ['jpg', 'jpeg', 'png', 'webp', 'gif', 'pdf', 'csv'],
 
     /*
     |--------------------------------------------------------------------------

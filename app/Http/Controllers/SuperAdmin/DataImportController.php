@@ -52,8 +52,8 @@ class DataImportController extends Controller
         $maxShow = 200;
         $decoded = null;
 
-        if ($batch->error_report_path && Storage::exists($batch->error_report_path)) {
-            $raw = Storage::get($batch->error_report_path);
+        if ($batch->error_report_path && Storage::disk(DataImportStorage::diskName())->exists($batch->error_report_path)) {
+            $raw = Storage::disk(DataImportStorage::diskName())->get($batch->error_report_path);
             $decoded = json_decode((string) $raw, true);
             if (is_array($decoded)) {
                 $errors = array_slice($decoded, 0, $maxShow);
@@ -112,11 +112,11 @@ class DataImportController extends Controller
 
     public function downloadErrors(DataImportBatch $batch): BinaryFileResponse|RedirectResponse
     {
-        if (! $batch->error_report_path || ! Storage::exists($batch->error_report_path)) {
+        if (! $batch->error_report_path || ! Storage::disk(DataImportStorage::diskName())->exists($batch->error_report_path)) {
             return back()->with('warning', 'No hay reporte de errores para esta importacion.');
         }
 
-        return Storage::download($batch->error_report_path, 'errores_import_'.$batch->id.'.json');
+        return Storage::disk(DataImportStorage::diskName())->download($batch->error_report_path, 'errores_import_'.$batch->id.'.json');
     }
 
     public function store(StoreDataImportRequest $request): RedirectResponse

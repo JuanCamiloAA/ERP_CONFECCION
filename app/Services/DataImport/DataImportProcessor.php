@@ -26,8 +26,8 @@ class DataImportProcessor
             throw new \RuntimeException('Esta importacion ya fue procesada o esta en curso.');
         }
 
-        $path = DataImportStorage::absolutePath($batch);
-        if ($path === null || ! is_readable($path)) {
+        $contents = DataImportStorage::readCsvContents($batch);
+        if ($contents === null || $contents === '') {
             $this->failBatch($batch, 'Archivo no encontrado o ilegible. Vuelva a cargar el CSV.');
 
             return;
@@ -63,7 +63,7 @@ class DataImportProcessor
         $lineNumber = 1;
 
         try {
-            $reader = $this->openCsvReader($path);
+            $reader = $this->openCsvReaderFromContents($contents);
 
             foreach ($reader->getRecords() as $record) {
                 $lineNumber++;
@@ -106,7 +106,7 @@ class DataImportProcessor
         $errorPath = null;
         if ($errors !== []) {
             $errorPath = 'import-errors/batch-'.$batch->id.'-'.uniqid().'.json';
-            Storage::put($errorPath, json_encode($errors, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
+            Storage::disk(DataImportStorage::diskName())->put($errorPath, json_encode($errors, JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT));
         }
 
         $batch->update([
@@ -177,13 +177,8 @@ class DataImportProcessor
         };
     }
 
-    protected function openCsvReader(string $path): Reader
+    protected function openCsvReaderFromContents(string $contents): Reader
     {
-        $contents = file_get_contents($path);
-        if ($contents === false) {
-            throw new \RuntimeException('No se pudo leer el contenido del CSV.');
-        }
-
         $contents = preg_replace('/^\xEF\xBB\xBF/u', '', $contents) ?? $contents;
 
         $reader = Reader::createFromString($contents);

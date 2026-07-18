@@ -94,6 +94,9 @@ class FirebaseStorageService
         try {
             $bucket->upload($handle, [
                 'name' => $remotePath,
+                'metadata' => [
+                    'contentType' => $this->guessContentType($remotePath),
+                ],
             ]);
         } catch (Throwable $e) {
             Log::error('Firebase Storage uploadFromPath fallido', [
@@ -137,10 +140,30 @@ class FirebaseStorageService
         return false;
     }
 
-    /**
-     * URL que el navegador puede usar en <img src> (bucket no publico).
-     * Usa firma V4 (max. 7 dias en GCS).
-     */
+    public function downloadContents(string $objectPath): string
+    {
+        $objectPath = trim($objectPath, '/');
+        $bucketName = config('firebase.storage_bucket');
+
+        if (! is_string($bucketName) || $bucketName === '' || $objectPath === '') {
+            throw new RuntimeException('Ruta de objeto Firebase invalida.');
+        }
+
+        try {
+            $object = $this->client()->bucket($bucketName)->object($objectPath);
+
+            return $object->downloadAsString();
+        } catch (Throwable $e) {
+            Log::error('Firebase Storage download fallido', [
+                'object' => $objectPath,
+                'bucket' => $bucketName,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw new RuntimeException('No se pudo leer el archivo desde Firebase Storage.', 0, $e);
+        }
+    }
+
     public function readableUrl(string $objectPath): string
     {
         $objectPath = trim($objectPath, '/');
@@ -254,7 +277,23 @@ class FirebaseStorageService
             'image/webp' => 'webp',
             'image/gif' => 'gif',
             'application/pdf' => 'pdf',
+            'text/csv', 'text/plain', 'application/csv', 'application/vnd.ms-excel' => 'csv',
             default => 'bin',
+        };
+    }
+
+    protected function guessContentType(string $remotePath): string
+    {
+        $ext = strtolower(pathinfo($remotePath, PATHINFO_EXTENSION));
+
+        return match ($ext) {
+            'csv' => 'text/csv; charset=UTF-8',
+            'pdf' => 'application/pdf',
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            'gif' => 'image/gif',
+            default => 'application/octet-stream',
         };
     }
 }

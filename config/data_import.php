@@ -1,7 +1,7 @@
 <?php
 
 return [
-    /** Disco fijo para CSV de importación (independiente de FILESYSTEM_DISK). */
+    /** Disco local para reportes de error JSON (CSV va a Firebase si FILESYSTEM_DEFAULT_UPLOAD_DRIVER=firebase). */
     'disk' => 'imports',
 
     'max_upload_kb' => (int) env('DATA_IMPORT_MAX_KB', 5120),
