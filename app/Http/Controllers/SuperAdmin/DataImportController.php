@@ -45,7 +45,58 @@ class DataImportController extends Controller
                 DataImportBatch::TYPE_REFERENCES => 'Referencias',
                 DataImportBatch::TYPE_EMPLOYEES_USERS => 'Empleados y usuarios',
             ],
+            ...$this->csvPreviewProps($request),
         ]);
+    }
+
+    /**
+     * @return array{csvPreview: ?array, csvPreviewError: ?string}
+     */
+    protected function csvPreviewProps(Request $request): array
+    {
+        if (! $request->filled('preview')) {
+            return ['csvPreview' => null, 'csvPreviewError' => null];
+        }
+
+        $batch = DataImportBatch::query()->find($request->integer('preview'));
+        if (! $batch) {
+            return ['csvPreview' => null, 'csvPreviewError' => 'Importacion no encontrada.'];
+        }
+
+        $built = $this->buildCsvPreviewPayload($batch);
+        if (isset($built['error'])) {
+            return ['csvPreview' => null, 'csvPreviewError' => $built['error']];
+        }
+
+        return ['csvPreview' => $built['preview'], 'csvPreviewError' => null];
+    }
+
+    /**
+     * @return array{preview: array<string, mixed>}|array{error: string}
+     */
+    protected function buildCsvPreviewPayload(DataImportBatch $batch): array
+    {
+        $contents = DataImportStorage::readCsvContents($batch);
+        if ($contents === null || $contents === '') {
+            return ['error' => 'Archivo no encontrado o ilegible. Vuelva a cargar el CSV.'];
+        }
+
+        try {
+            $parsed = DataImportCsvPreview::fromContents($contents, 50);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return ['error' => 'No se pudo leer el CSV. Use UTF-8 y los mismos encabezados que la plantilla.'];
+        }
+
+        return [
+            'preview' => [
+                ...$parsed,
+                'batch_id' => $batch->id,
+                'filename' => $batch->original_filename,
+                'type' => $batch->type,
+            ],
+        ];
     }
 
     public function show(DataImportBatch $batch): Response
@@ -128,7 +179,7 @@ class DataImportController extends Controller
         $file = $request->file('file');
         $uuid = Str::uuid()->toString();
         $filename = $uuid.'.csv';
-        DataImportStorage::storeUploadedCsv($file, $filename);
+        $storedPath = DataImportStorage::storeUploadedCsv($file, $filename);
 
         $meta = [
             'company_import_mode' => $request->input('company_import_mode', 'skip'),
@@ -138,7 +189,7 @@ class DataImportController extends Controller
         $batch = DataImportBatch::create([
             'user_id' => $request->user()->id,
             'original_filename' => $file->getClientOriginalName(),
-            'stored_path' => $filename,
+            'stored_path' => $storedPath,
             'type' => $request->validated('type'),
             'status' => DataImportBatch::STATUS_PENDING,
             'meta' => $meta,
@@ -184,26 +235,16 @@ class DataImportController extends Controller
 
     public function preview(DataImportBatch $batch): JsonResponse
     {
-        $this->authorize('view', $batch);
-
-        $contents = DataImportStorage::readCsvContents($batch);
-        if ($contents === null || $contents === '') {
-            return response()->json(['message' => 'Archivo no encontrado o ilegible.'], 404);
+        $built = $this->buildCsvPreviewPayload($batch);
+        if (isset($built['error'])) {
+            return response()->json(['message' => $built['error']], 404);
         }
 
-        $preview = DataImportCsvPreview::fromContents($contents, 50);
-
-        return response()->json([
-            'filename' => $batch->original_filename,
-            'type' => $batch->type,
-            ...$preview,
-        ]);
+        return response()->json($built['preview']);
     }
 
     public function downloadFile(DataImportBatch $batch): RedirectResponse|\Symfony\Component\HttpFoundation\Response
     {
-        $this->authorize('view', $batch);
-
         $contents = DataImportStorage::readCsvContents($batch);
         if ($contents === null || $contents === '') {
             return back()->with('warning', 'No se pudo descargar el archivo CSV.');
@@ -220,8 +261,6 @@ class DataImportController extends Controller
 
     public function destroy(DataImportBatch $batch): RedirectResponse
     {
-        $this->authorize('delete', $batch);
-
         if ($batch->status === DataImportBatch::STATUS_PROCESSING) {
             return back()->with('warning', 'No se puede eliminar una importacion en curso.');
         }

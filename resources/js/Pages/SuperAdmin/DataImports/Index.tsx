@@ -1,7 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon, EyeIcon, TrashIcon } from '@heroicons/react/24/outline';
-import axios from 'axios';
-import { FormEventHandler, useState } from 'react';
+import { FormEventHandler, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
@@ -18,9 +17,12 @@ const TYPE_KEYS = ['companies', 'banks', 'operations', 'references', 'employees_
 interface Props {
     batches: PaginatedResponse<DataImportBatch>;
     types: Record<string, string>;
+    csvPreview?: CsvPreviewPayload | null;
+    csvPreviewError?: string | null;
 }
 
 interface CsvPreviewPayload {
+    batch_id: number;
     filename: string;
     type: string;
     headers: string[];
@@ -54,14 +56,14 @@ function canDeleteBatch(status: string): boolean {
     return status !== 'processing';
 }
 
-export default function DataImportsIndex({ batches, types }: Props) {
+export default function DataImportsIndex({ batches, types, csvPreview = null, csvPreviewError = null }: Props) {
     const [openHelp, setOpenHelp] = useState(true);
     const [uploadingType, setUploadingType] = useState<string | null>(null);
     const [processingBatchId, setProcessingBatchId] = useState<number | null>(null);
     const [previewOpen, setPreviewOpen] = useState(false);
     const [previewLoading, setPreviewLoading] = useState(false);
     const [previewData, setPreviewData] = useState<CsvPreviewPayload | null>(null);
-    const [previewBatch, setPreviewBatch] = useState<DataImportBatch | null>(null);
+    const [previewBatchId, setPreviewBatchId] = useState<number | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<DataImportBatch | null>(null);
     const [deletingBatchId, setDeletingBatchId] = useState<number | null>(null);
 
@@ -104,26 +106,55 @@ export default function DataImportsIndex({ batches, types }: Props) {
     const closePreview = () => {
         setPreviewOpen(false);
         setPreviewData(null);
-        setPreviewBatch(null);
+        setPreviewBatchId(null);
+        const page = batches.meta?.current_page ?? 1;
+        router.get(
+            route('super-admin.data-imports.index'),
+            { page },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                replace: true,
+                only: ['csvPreview', 'csvPreviewError'],
+            },
+        );
     };
 
-    const openPreview = async (batch: DataImportBatch) => {
+    useEffect(() => {
+        if (csvPreviewError) {
+            toast.error(csvPreviewError);
+            setPreviewLoading(false);
+            setPreviewOpen(false);
+            setPreviewData(null);
+            setPreviewBatchId(null);
+            return;
+        }
+        if (csvPreview) {
+            setPreviewData(csvPreview);
+            setPreviewBatchId(csvPreview.batch_id);
+            setPreviewOpen(true);
+            setPreviewLoading(false);
+        }
+    }, [csvPreview, csvPreviewError]);
+
+    const openPreview = (batch: DataImportBatch) => {
         if (previewLoading) {
             return;
         }
-        setPreviewBatch(batch);
+        setPreviewBatchId(batch.id);
         setPreviewOpen(true);
         setPreviewData(null);
         setPreviewLoading(true);
-        try {
-            const { data } = await axios.get<CsvPreviewPayload>(route('super-admin.data-imports.preview', batch.id));
-            setPreviewData(data);
-        } catch {
-            toast.error('No se pudo cargar la vista previa del CSV.');
-            closePreview();
-        } finally {
-            setPreviewLoading(false);
-        }
+        router.get(
+            route('super-admin.data-imports.index'),
+            { preview: batch.id, page: batches.meta?.current_page ?? 1 },
+            {
+                preserveState: true,
+                preserveScroll: true,
+                only: ['csvPreview', 'csvPreviewError'],
+                onFinish: () => setPreviewLoading(false),
+            },
+        );
     };
 
     const handleDelete = () => {
@@ -292,7 +323,7 @@ export default function DataImportsIndex({ batches, types }: Props) {
                                                     type="button"
                                                     size="sm"
                                                     variant="secondary"
-                                                    loading={previewLoading && previewBatch?.id === b.id}
+                                                    loading={previewLoading && previewBatchId === b.id}
                                                     disabled={previewLoading}
                                                     onClick={() => openPreview(b)}
                                                 >
@@ -346,19 +377,21 @@ export default function DataImportsIndex({ batches, types }: Props) {
                 onClose={closePreview}
                 title="Vista previa del CSV"
                 description={
-                    previewBatch
-                        ? `${previewBatch.original_filename} · ${types[previewBatch.type] ?? previewBatch.type}`
-                        : undefined
+                    previewData
+                        ? `${previewData.filename} · ${types[previewData.type] ?? previewData.type}`
+                        : previewBatchId
+                          ? batches.data.find((b) => b.id === previewBatchId)?.original_filename
+                          : undefined
                 }
                 size="4xl"
                 footer={
-                    previewBatch ? (
+                    previewData ? (
                         <div className="flex flex-wrap items-center justify-end gap-2">
                             <Button type="button" variant="secondary" size="sm" onClick={closePreview}>
                                 Cerrar
                             </Button>
                             <a
-                                href={route('super-admin.data-imports.file', previewBatch.id)}
+                                href={route('super-admin.data-imports.file', previewData.batch_id)}
                                 className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
                             >
                                 <ArrowDownTrayIcon className="h-4 w-4" />

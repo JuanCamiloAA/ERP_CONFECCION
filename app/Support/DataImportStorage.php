@@ -51,29 +51,39 @@ final class DataImportStorage
         }
 
         if (str_starts_with($stored, 'firebase:')) {
-            $objectPath = substr($stored, strlen('firebase:'));
-
-            try {
-                return app(FirebaseStorageService::class)->downloadContents($objectPath);
-            } catch (Throwable $e) {
-                Log::warning('data_import_firebase_read_failed', [
-                    'batch_id' => $batch->id,
-                    'object' => $objectPath,
-                    'message' => $e->getMessage(),
-                ]);
-
-                return null;
-            }
+            return self::readFirebaseObject(substr($stored, strlen('firebase:')), $batch->id);
         }
 
         $path = self::absolutePath($batch);
-        if ($path === null) {
-            return null;
+        if ($path !== null) {
+            $contents = file_get_contents($path);
+
+            return $contents === false ? null : $contents;
         }
 
-        $contents = file_get_contents($path);
+        if (self::usesFirebase()) {
+            $basename = basename($stored);
+            if ($basename !== '' && $basename === $stored) {
+                return self::readFirebaseObject('imports/'.$basename, $batch->id);
+            }
+        }
 
-        return $contents === false ? null : $contents;
+        return null;
+    }
+
+    private static function readFirebaseObject(string $objectPath, ?int $batchId = null): ?string
+    {
+        try {
+            return app(FirebaseStorageService::class)->downloadContents($objectPath);
+        } catch (Throwable $e) {
+            Log::warning('data_import_firebase_read_failed', [
+                'batch_id' => $batchId,
+                'object' => $objectPath,
+                'message' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
     }
 
     /**
@@ -135,6 +145,20 @@ final class DataImportStorage
             }
 
             return;
+        }
+
+        if (self::usesFirebase()) {
+            $basename = basename($stored);
+            if ($basename !== '' && $basename === ltrim($stored, '/')) {
+                try {
+                    app(FirebaseStorageService::class)->delete('imports/'.$basename);
+                } catch (Throwable $e) {
+                    Log::warning('data_import_firebase_delete_failed', [
+                        'stored' => $stored,
+                        'message' => $e->getMessage(),
+                    ]);
+                }
+            }
         }
 
         $path = ltrim($stored, '/');

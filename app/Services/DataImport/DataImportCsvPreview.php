@@ -33,7 +33,13 @@ final class DataImportCsvPreview
         $truncated = false;
 
         foreach ($reader->getRecords() as $record) {
-            if (self::rowIsEmpty($record)) {
+            if (! is_array($record)) {
+                continue;
+            }
+
+            $normalized = self::normalizeKeys($record);
+
+            if (self::rowIsEmpty($normalized)) {
                 continue;
             }
 
@@ -47,8 +53,8 @@ final class DataImportCsvPreview
 
             $line = [];
             foreach ($headers as $header) {
-                $value = $record[$header] ?? '';
-                $line[] = $value === null ? '' : (string) $value;
+                $key = strtolower(trim($header));
+                $line[] = $normalized[$key] ?? '';
             }
             $rows[] = $line;
         }
@@ -59,6 +65,24 @@ final class DataImportCsvPreview
             'truncated' => $truncated,
             'total_data_rows' => $dataRowCount,
         ];
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $record
+     * @return array<string, string>
+     */
+    private static function normalizeKeys(array $record): array
+    {
+        $out = [];
+        foreach ($record as $k => $v) {
+            $key = strtolower(trim((string) $k));
+            if ($key === '') {
+                continue;
+            }
+            $out[$key] = $v === null ? '' : (string) $v;
+        }
+
+        return $out;
     }
 
     /**

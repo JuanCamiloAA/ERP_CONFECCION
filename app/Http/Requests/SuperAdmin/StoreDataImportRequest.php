@@ -42,7 +42,12 @@ class StoreDataImportRequest extends FormRequest
             $mime = (string) $file->getMimeType();
             $allowed = config('data_import.allowed_mimes', []);
             if ($allowed !== [] && ! in_array($mime, $allowed, true)) {
-                $validator->errors()->add('file', 'Tipo de contenido no permitido: '.$mime);
+                $message = match ($mime) {
+                    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' => 'El archivo es un Excel (.xlsx), no un CSV. Aunque tenga extension .csv, el contenido sigue siendo Excel. En Excel: Archivo → Guardar como → «CSV UTF-8 (delimitado por comas) (.csv)». En Google Hojas: Descargar → Valores separados por comas (.csv).',
+                    'application/vnd.ms-excel' => 'El archivo parece ser Excel (.xls), no CSV de texto. Exportelo como CSV UTF-8 desde Excel o Google Hojas.',
+                    default => 'Tipo de contenido no permitido ('.$mime.'). Solo se aceptan archivos CSV de texto (UTF-8), no hojas de calculo.',
+                };
+                $validator->errors()->add('file', $message);
             }
         });
     }
