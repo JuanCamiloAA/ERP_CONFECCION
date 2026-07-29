@@ -182,9 +182,24 @@ function DynamicIcon({ name, className }: { name: string; className?: string }) 
     return <Cmp className={className ?? 'h-8 w-8 text-indigo-600'} />;
 }
 
-function NavLink({ href, children }: { href: string; children: React.ReactNode }) {
+function NavLink({
+    href,
+    children,
+    className,
+    onNavigate,
+}: {
+    href: string;
+    children: React.ReactNode;
+    className?: string;
+    onNavigate?: () => void;
+}) {
+    const linkClass =
+        className ??
+        'text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400';
+
     const hashClick = (e: MouseEvent<HTMLAnchorElement>) => {
         if (!href.startsWith('#') || href === '#' || href === '# ') {
+            onNavigate?.();
             return;
         }
         const id = href.slice(1);
@@ -193,22 +208,19 @@ function NavLink({ href, children }: { href: string; children: React.ReactNode }
             e.preventDefault();
             el.scrollIntoView({ behavior: 'smooth', block: 'start' });
             window.history.replaceState(null, '', href);
+            onNavigate?.();
         }
     };
 
     if (href.startsWith('/') && !href.startsWith('//')) {
         return (
-            <Link href={href} className="text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400">
+            <Link href={href} className={linkClass} onClick={() => onNavigate?.()}>
                 {children}
             </Link>
         );
     }
     return (
-        <a
-            href={href}
-            onClick={hashClick}
-            className="text-sm font-medium text-slate-600 hover:text-indigo-600 dark:text-slate-300 dark:hover:text-indigo-400"
-        >
+        <a href={href} onClick={hashClick} className={linkClass}>
             {children}
         </a>
     );
@@ -233,12 +245,23 @@ function CtaButton({ href, children, variant = 'primary' }: { href: string; chil
     );
 }
 
-function ContactCtaButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function ContactCtaButton({
+    children,
+    onClick,
+    className,
+}: {
+    children: React.ReactNode;
+    onClick: () => void;
+    className?: string;
+}) {
     return (
         <button
             type="button"
             onClick={onClick}
-            className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+            className={
+                className ??
+                'inline-flex items-center justify-center rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500'
+            }
         >
             {children}
         </button>
@@ -256,11 +279,41 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
 
     const [planInquiryOpen, setPlanInquiryOpen] = useState(false);
     const [planInquiryPlan, setPlanInquiryPlan] = useState<PlanInquirySelection | null>(null);
+    const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+    const closeMobileNav = () => setMobileNavOpen(false);
 
     const openPlanInquiry = (plan?: PlanInquirySelection | null) => {
         setPlanInquiryPlan(plan ?? null);
         setPlanInquiryOpen(true);
     };
+
+    const openPlanInquiryFromNav = (plan?: PlanInquirySelection | null) => {
+        closeMobileNav();
+        openPlanInquiry(plan);
+    };
+
+    useEffect(() => {
+        if (!mobileNavOpen) {
+            return;
+        }
+        const prev = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.body.style.overflow = prev;
+        };
+    }, [mobileNavOpen]);
+
+    useEffect(() => {
+        const mq = window.matchMedia('(min-width: 768px)');
+        const onChange = () => {
+            if (mq.matches) {
+                setMobileNavOpen(false);
+            }
+        };
+        mq.addEventListener('change', onChange);
+        return () => mq.removeEventListener('change', onChange);
+    }, []);
 
     const metaTitle = globals.meta_title || displayName;
     const metaDesc = globals.meta_description || '';
@@ -321,7 +374,7 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
                             <span className="text-lg font-bold text-indigo-700 dark:text-indigo-400">{displayName}</span>
                         )}
                     </Link>
-                    <nav className="hidden items-center gap-6 md:flex">
+                    <nav className="hidden items-center gap-6 md:flex" aria-label="Navegacion principal">
                         <NavLink href="#features">Capacidades</NavLink>
                         <NavLink href="#membership-plans">Planes</NavLink>
                         <NavLink href="#partners">Clientes</NavLink>
@@ -333,10 +386,79 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
                         ) : null}
                         <ContactCtaButton onClick={() => openPlanInquiry()}>Solicitar acceso</ContactCtaButton>
                     </nav>
-                    <div className="md:hidden">
-                        <ContactCtaButton onClick={() => openPlanInquiry()}>Solicitar acceso</ContactCtaButton>
+                    <div className="flex items-center gap-2 md:hidden">
+                        <ContactCtaButton
+                            onClick={() => openPlanInquiry()}
+                            className="inline-flex items-center justify-center rounded-xl bg-indigo-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-indigo-500 sm:px-4 sm:py-2.5 sm:text-sm"
+                        >
+                            Solicitar acceso
+                        </ContactCtaButton>
+                        <button
+                            type="button"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-slate-300 bg-white text-slate-700 shadow-sm hover:bg-slate-50 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:hover:bg-slate-700"
+                            aria-expanded={mobileNavOpen}
+                            aria-controls="landing-mobile-nav"
+                            aria-label={mobileNavOpen ? 'Cerrar menu' : 'Abrir menu'}
+                            onClick={() => setMobileNavOpen((open) => !open)}
+                        >
+                            {mobileNavOpen ? (
+                                <HeroIcons.XMarkIcon className="h-6 w-6" aria-hidden />
+                            ) : (
+                                <HeroIcons.Bars3Icon className="h-6 w-6" aria-hidden />
+                            )}
+                        </button>
                     </div>
                     </div>
+                    {mobileNavOpen ? (
+                        <div
+                            id="landing-mobile-nav"
+                            className="border-t border-slate-200 bg-slate-50 px-4 py-4 dark:border-slate-700 dark:bg-slate-900 md:hidden"
+                        >
+                            <nav className="flex flex-col gap-1" aria-label="Navegacion movil">
+                                <NavLink
+                                    href="#features"
+                                    className="rounded-lg px-3 py-3 text-base font-medium text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                                    onNavigate={closeMobileNav}
+                                >
+                                    Capacidades
+                                </NavLink>
+                                <NavLink
+                                    href="#membership-plans"
+                                    className="rounded-lg px-3 py-3 text-base font-medium text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                                    onNavigate={closeMobileNav}
+                                >
+                                    Planes
+                                </NavLink>
+                                <NavLink
+                                    href="#partners"
+                                    className="rounded-lg px-3 py-3 text-base font-medium text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                                    onNavigate={closeMobileNav}
+                                >
+                                    Clientes
+                                </NavLink>
+                                <NavLink
+                                    href="#about"
+                                    className="rounded-lg px-3 py-3 text-base font-medium text-slate-800 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800"
+                                    onNavigate={closeMobileNav}
+                                >
+                                    Nosotros
+                                </NavLink>
+                                <div className="mt-3 flex flex-col gap-2 border-t border-slate-200 pt-4 dark:border-slate-700">
+                                    {globals.navbar_cta_text && globals.navbar_cta_url ? (
+                                        <CtaButton href={globals.navbar_cta_url} variant="secondary">
+                                            {globals.navbar_cta_text}
+                                        </CtaButton>
+                                    ) : null}
+                                    <ContactCtaButton
+                                        onClick={() => openPlanInquiryFromNav()}
+                                        className="w-full justify-center rounded-xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500"
+                                    >
+                                        Solicitar acceso
+                                    </ContactCtaButton>
+                                </div>
+                            </nav>
+                        </div>
+                    ) : null}
                 </header>
             </div>
 
