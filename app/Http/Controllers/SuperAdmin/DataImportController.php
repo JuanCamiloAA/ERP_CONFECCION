@@ -5,9 +5,11 @@ namespace App\Http\Controllers\SuperAdmin;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\StoreDataImportRequest;
 use App\Models\DataImportBatch;
+use App\Services\DataImport\DataImportCsvPreview;
 use App\Services\DataImport\DataImportProcessor;
 use App\Services\DataImport\TemplateGeneratorService;
 use App\Support\DataImportStorage;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -178,6 +180,56 @@ class DataImportController extends Controller
         }
 
         return back()->with('success', $message.'.');
+    }
+
+    public function preview(DataImportBatch $batch): JsonResponse
+    {
+        $this->authorize('view', $batch);
+
+        $contents = DataImportStorage::readCsvContents($batch);
+        if ($contents === null || $contents === '') {
+            return response()->json(['message' => 'Archivo no encontrado o ilegible.'], 404);
+        }
+
+        $preview = DataImportCsvPreview::fromContents($contents, 50);
+
+        return response()->json([
+            'filename' => $batch->original_filename,
+            'type' => $batch->type,
+            ...$preview,
+        ]);
+    }
+
+    public function downloadFile(DataImportBatch $batch): RedirectResponse|\Symfony\Component\HttpFoundation\Response
+    {
+        $this->authorize('view', $batch);
+
+        $contents = DataImportStorage::readCsvContents($batch);
+        if ($contents === null || $contents === '') {
+            return back()->with('warning', 'No se pudo descargar el archivo CSV.');
+        }
+
+        $name = $batch->original_filename ?: ('import_'.$batch->id.'.csv');
+        $safeName = str_replace(['"', "\r", "\n"], '', $name);
+
+        return response($contents, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$safeName.'"',
+        ]);
+    }
+
+    public function destroy(DataImportBatch $batch): RedirectResponse
+    {
+        $this->authorize('delete', $batch);
+
+        if ($batch->status === DataImportBatch::STATUS_PROCESSING) {
+            return back()->with('warning', 'No se puede eliminar una importacion en curso.');
+        }
+
+        DataImportStorage::deleteBatchArtifacts($batch);
+        $batch->delete();
+
+        return back()->with('success', 'Importacion eliminada del historial.');
     }
 
     /**

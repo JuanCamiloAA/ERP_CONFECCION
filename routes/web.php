@@ -167,7 +167,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::get('data-imports/templates/zip', [DataImportController::class, 'downloadTemplatesZip'])->name('data-imports.templates.zip');
         Route::get('data-imports/templates/{type}', [DataImportController::class, 'downloadTemplate'])->whereIn('type', DataImportBatch::types())->name('data-imports.templates');
         Route::get('data-imports/{batch}/errors', [DataImportController::class, 'downloadErrors'])->name('data-imports.errors');
+        Route::get('data-imports/{batch}/preview', [DataImportController::class, 'preview'])->name('data-imports.preview');
+        Route::get('data-imports/{batch}/file', [DataImportController::class, 'downloadFile'])->name('data-imports.file');
         Route::post('data-imports/{batch}/process', [DataImportController::class, 'process'])->name('data-imports.process');
+        Route::delete('data-imports/{batch}', [DataImportController::class, 'destroy'])->name('data-imports.destroy');
         Route::get('data-imports/{batch}', [DataImportController::class, 'show'])->name('data-imports.show');
         Route::post('data-imports', [DataImportController::class, 'store'])
             ->name('data-imports.store');

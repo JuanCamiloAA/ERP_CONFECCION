@@ -115,4 +115,46 @@ final class DataImportStorage
 
         return null;
     }
+
+    public static function deleteStoredFile(?string $stored): void
+    {
+        if ($stored === null || trim($stored) === '') {
+            return;
+        }
+
+        $stored = trim($stored);
+
+        if (str_starts_with($stored, 'firebase:')) {
+            try {
+                app(FirebaseStorageService::class)->delete(substr($stored, strlen('firebase:')));
+            } catch (Throwable $e) {
+                Log::warning('data_import_firebase_delete_failed', [
+                    'stored' => $stored,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+
+            return;
+        }
+
+        $path = ltrim($stored, '/');
+        $disk = Storage::disk(self::diskName());
+
+        if ($disk->exists($path)) {
+            $disk->delete($path);
+        }
+    }
+
+    public static function deleteBatchArtifacts(DataImportBatch $batch): void
+    {
+        self::deleteStoredFile($batch->stored_path);
+
+        $errorPath = $batch->error_report_path;
+        if ($errorPath !== null && $errorPath !== '') {
+            $disk = Storage::disk(self::diskName());
+            if ($disk->exists($errorPath)) {
+                $disk->delete($errorPath);
+            }
+        }
+    }
 }

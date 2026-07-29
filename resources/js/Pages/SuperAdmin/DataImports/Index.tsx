@@ -1,9 +1,12 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon, EyeIcon, TrashIcon } from '@heroicons/react/24/outline';
+import axios from 'axios';
 import { FormEventHandler, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
+import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { Modal } from '@/Components/UI/Modal';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
@@ -15,6 +18,15 @@ const TYPE_KEYS = ['companies', 'banks', 'operations', 'references', 'employees_
 interface Props {
     batches: PaginatedResponse<DataImportBatch>;
     types: Record<string, string>;
+}
+
+interface CsvPreviewPayload {
+    filename: string;
+    type: string;
+    headers: string[];
+    rows: string[][];
+    truncated: boolean;
+    total_data_rows: number;
 }
 
 function statusLabel(status: string): string {
@@ -38,10 +50,20 @@ function canProcessBatch(status: string): boolean {
     return status === 'pending' || status === 'failed';
 }
 
+function canDeleteBatch(status: string): boolean {
+    return status !== 'processing';
+}
+
 export default function DataImportsIndex({ batches, types }: Props) {
     const [openHelp, setOpenHelp] = useState(true);
     const [uploadingType, setUploadingType] = useState<string | null>(null);
     const [processingBatchId, setProcessingBatchId] = useState<number | null>(null);
+    const [previewOpen, setPreviewOpen] = useState(false);
+    const [previewLoading, setPreviewLoading] = useState(false);
+    const [previewData, setPreviewData] = useState<CsvPreviewPayload | null>(null);
+    const [previewBatch, setPreviewBatch] = useState<DataImportBatch | null>(null);
+    const [confirmDelete, setConfirmDelete] = useState<DataImportBatch | null>(null);
+    const [deletingBatchId, setDeletingBatchId] = useState<number | null>(null);
 
     const submitImport: (type: string) => FormEventHandler<HTMLFormElement> =
         (type) => (e) => {
@@ -76,6 +98,44 @@ export default function DataImportsIndex({ batches, types }: Props) {
         router.post(route('super-admin.data-imports.process', batchId), {}, {
             preserveScroll: true,
             onFinish: () => setProcessingBatchId(null),
+        });
+    };
+
+    const closePreview = () => {
+        setPreviewOpen(false);
+        setPreviewData(null);
+        setPreviewBatch(null);
+    };
+
+    const openPreview = async (batch: DataImportBatch) => {
+        if (previewLoading) {
+            return;
+        }
+        setPreviewBatch(batch);
+        setPreviewOpen(true);
+        setPreviewData(null);
+        setPreviewLoading(true);
+        try {
+            const { data } = await axios.get<CsvPreviewPayload>(route('super-admin.data-imports.preview', batch.id));
+            setPreviewData(data);
+        } catch {
+            toast.error('No se pudo cargar la vista previa del CSV.');
+            closePreview();
+        } finally {
+            setPreviewLoading(false);
+        }
+    };
+
+    const handleDelete = () => {
+        if (!confirmDelete || deletingBatchId !== null) {
+            return;
+        }
+        const id = confirmDelete.id;
+        setDeletingBatchId(id);
+        router.delete(route('super-admin.data-imports.destroy', id), {
+            preserveScroll: true,
+            onSuccess: () => setConfirmDelete(null),
+            onFinish: () => setDeletingBatchId(null),
         });
     };
 
@@ -228,6 +288,17 @@ export default function DataImportsIndex({ batches, types }: Props) {
                                         </TableCell>
                                         <TableCell align="right">
                                             <div className="flex flex-wrap items-center justify-end gap-2">
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    loading={previewLoading && previewBatch?.id === b.id}
+                                                    disabled={previewLoading}
+                                                    onClick={() => openPreview(b)}
+                                                >
+                                                    <EyeIcon className="h-4 w-4" aria-hidden />
+                                                    <span className="sr-only sm:not-sr-only sm:ml-1">Vista previa</span>
+                                                </Button>
                                                 {canProcessBatch(b.status) ? (
                                                     <Button
                                                         type="button"
@@ -246,6 +317,19 @@ export default function DataImportsIndex({ batches, types }: Props) {
                                                 >
                                                     Ver detalle
                                                 </Link>
+                                                {canDeleteBatch(b.status) ? (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        loading={deletingBatchId === b.id}
+                                                        disabled={deletingBatchId !== null}
+                                                        onClick={() => setConfirmDelete(b)}
+                                                        aria-label="Eliminar importacion"
+                                                    >
+                                                        <TrashIcon className="h-4 w-4 text-rose-500" aria-hidden />
+                                                    </Button>
+                                                ) : null}
                                             </div>
                                         </TableCell>
                                     </TableRow>
@@ -256,6 +340,92 @@ export default function DataImportsIndex({ batches, types }: Props) {
                     <Pagination links={batches.links} meta={batches.meta} />
                 </section>
             </div>
+
+            <Modal
+                open={previewOpen}
+                onClose={closePreview}
+                title="Vista previa del CSV"
+                description={
+                    previewBatch
+                        ? `${previewBatch.original_filename} · ${types[previewBatch.type] ?? previewBatch.type}`
+                        : undefined
+                }
+                size="4xl"
+                footer={
+                    previewBatch ? (
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Button type="button" variant="secondary" size="sm" onClick={closePreview}>
+                                Cerrar
+                            </Button>
+                            <a
+                                href={route('super-admin.data-imports.file', previewBatch.id)}
+                                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
+                            >
+                                <ArrowDownTrayIcon className="h-4 w-4" />
+                                Descargar CSV
+                            </a>
+                        </div>
+                    ) : undefined
+                }
+            >
+                {previewLoading ? (
+                    <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">Cargando vista previa…</p>
+                ) : previewData ? (
+                    <div className="space-y-3">
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            Mostrando {previewData.rows.length} de {previewData.total_data_rows} filas con datos
+                            {previewData.truncated ? ' (vista limitada)' : ''}.
+                        </p>
+                        <div className="max-h-[min(60vh,28rem)] overflow-auto rounded-lg border border-slate-200 dark:border-slate-600">
+                            <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-slate-600">
+                                <thead className="sticky top-0 bg-slate-100 dark:bg-slate-900">
+                                    <tr>
+                                        {previewData.headers.map((h) => (
+                                            <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">
+                                                {h}
+                                            </th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-700 dark:bg-slate-800">
+                                    {previewData.rows.length === 0 ? (
+                                        <tr>
+                                            <td colSpan={previewData.headers.length || 1} className="px-3 py-6 text-center text-slate-500">
+                                                El archivo no tiene filas de datos.
+                                            </td>
+                                        </tr>
+                                    ) : (
+                                        previewData.rows.map((row, ri) => (
+                                            <tr key={ri}>
+                                                {row.map((cell, ci) => (
+                                                    <td key={ci} className="max-w-[14rem] truncate whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200" title={cell}>
+                                                        {cell || '—'}
+                                                    </td>
+                                                ))}
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                ) : null}
+            </Modal>
+
+            <ConfirmDialog
+                open={!!confirmDelete}
+                onClose={() => setConfirmDelete(null)}
+                onConfirm={handleDelete}
+                title="Eliminar importacion"
+                message={
+                    confirmDelete
+                        ? `Se borrara el registro «${confirmDelete.original_filename}» del historial y el archivo CSV almacenado. Los datos ya importados en el sistema no se revierten.`
+                        : ''
+                }
+                confirmText="Eliminar"
+                variant="danger"
+                loading={deletingBatchId !== null}
+            />
         </AppLayout>
     );
 }

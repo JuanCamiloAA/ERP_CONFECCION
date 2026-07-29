@@ -25,4 +25,9 @@ class DataImportBatchPolicy
     {
         return false;
     }
+
+    public function delete(User $user, DataImportBatch $batch): bool
+    {
+        return false;
+    }
 }
