@@ -79,6 +79,64 @@ function useSyncLandingChromeHeight(containerRef: RefObject<HTMLElement | null>)
     }, [containerRef]);
 }
 
+function useScrolled(thresholdPx: number): boolean {
+    const [scrolled, setScrolled] = useState(false);
+
+    useEffect(() => {
+        let raf = 0;
+        const evaluate = () => {
+            raf = 0;
+            setScrolled(window.scrollY > thresholdPx);
+        };
+        const onScroll = () => {
+            if (raf) return;
+            raf = requestAnimationFrame(evaluate);
+        };
+        onScroll();
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('scroll', onScroll);
+        };
+    }, [thresholdPx]);
+
+    return scrolled;
+}
+
+function useHideOnScrollDown(hideAfterPx = 24, deltaThreshold = 6): boolean {
+    const [hidden, setHidden] = useState(false);
+
+    useEffect(() => {
+        let lastY = window.scrollY;
+        let raf = 0;
+        const evaluate = () => {
+            raf = 0;
+            const y = window.scrollY;
+            const diff = y - lastY;
+            if (Math.abs(diff) < deltaThreshold) {
+                return;
+            }
+            if (diff > 0 && y > hideAfterPx) {
+                setHidden(true);
+            } else if (diff < 0) {
+                setHidden(false);
+            }
+            lastY = y;
+        };
+        const onScroll = () => {
+            if (raf) return;
+            raf = requestAnimationFrame(evaluate);
+        };
+        window.addEventListener('scroll', onScroll, { passive: true });
+        return () => {
+            cancelAnimationFrame(raf);
+            window.removeEventListener('scroll', onScroll);
+        };
+    }, [hideAfterPx, deltaThreshold]);
+
+    return hidden;
+}
+
 function RevealFloatIn({ children, className }: { children: React.ReactNode; className?: string }) {
     const shellRef = useRef<HTMLDivElement>(null);
     const [visible, setVisible] = useState(false);
@@ -280,6 +338,9 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
     const [planInquiryOpen, setPlanInquiryOpen] = useState(false);
     const [planInquiryPlan, setPlanInquiryPlan] = useState<PlanInquirySelection | null>(null);
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const scrolled = useScrolled(12);
+    const hiddenByScroll = useHideOnScrollDown();
+    const navHidden = hiddenByScroll && !mobileNavOpen;
 
     const closeMobileNav = () => setMobileNavOpen(false);
 
@@ -349,7 +410,13 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
 
             <div
                 ref={landingChromeRef}
-                className="fixed inset-x-0 top-0 z-40 border-b border-slate-200/80 bg-slate-50/95 backdrop-blur-md dark:border-slate-700 dark:bg-slate-900/95"
+                className={cn(
+                    'fixed inset-x-0 top-0 z-40 border-b backdrop-blur-md transition-[transform,box-shadow,background-color,border-color] duration-300 ease-out',
+                    navHidden ? '-translate-y-full' : 'translate-y-0',
+                    scrolled
+                        ? 'border-slate-200 bg-slate-50/95 shadow-md shadow-slate-900/5 dark:border-slate-700 dark:bg-slate-900/95'
+                        : 'border-slate-200/0 bg-slate-50/70 shadow-none dark:border-slate-700/0 dark:bg-slate-900/70',
+                )}
             >
                 {authUser?.is_super_admin ? (
                     <div className="border-b border-indigo-200 bg-indigo-50 px-4 py-2 text-center text-sm text-indigo-900 dark:border-indigo-900 dark:bg-indigo-950 dark:text-indigo-100">
@@ -366,12 +433,31 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
                 ) : null}
 
                 <header className="border-b border-transparent bg-transparent">
-                    <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-4">
+                    <div
+                        className={cn(
+                            'mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 transition-[padding] duration-300 ease-out',
+                            scrolled ? 'py-2.5' : 'py-4',
+                        )}
+                    >
                     <Link href={route('landing')} className="flex items-center gap-2">
                         {globals.header_logo_url ? (
-                            <img src={globals.header_logo_url} alt="" className="h-10 w-auto max-w-[180px] object-contain" />
+                            <img
+                                src={globals.header_logo_url}
+                                alt=""
+                                className={cn(
+                                    'w-auto max-w-[180px] object-contain transition-[height] duration-300 ease-out',
+                                    scrolled ? 'h-8' : 'h-10',
+                                )}
+                            />
                         ) : (
-                            <span className="text-lg font-bold text-indigo-700 dark:text-indigo-400">{displayName}</span>
+                            <span
+                                className={cn(
+                                    'font-bold text-indigo-700 transition-[font-size] duration-300 ease-out dark:text-indigo-400',
+                                    scrolled ? 'text-base' : 'text-lg',
+                                )}
+                            >
+                                {displayName}
+                            </span>
                         )}
                     </Link>
                     <nav className="hidden items-center gap-6 md:flex" aria-label="Navegacion principal">
