@@ -1,5 +1,6 @@
 import { useForm } from '@inertiajs/react';
 import { FormEvent, useEffect, useMemo } from 'react';
+import { PhotoIcon } from '@heroicons/react/24/outline';
 import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
@@ -12,10 +13,22 @@ export interface ReferenceWithOps {
     id: number;
     code: string;
     name: string;
+    image?: string | null;
     lot_total_quantity?: number | null;
     productions_sum_quantity?: number | null;
     productions_quantity_by_operation?: Record<string, number>;
     operations: ReferenceOperationPivot[];
+}
+
+const LAST_REFERENCE_STORAGE_KEY = 'production-register-form:last-reference-id';
+
+function readCachedReferenceId(): number | '' {
+    if (typeof window === 'undefined') {
+        return '';
+    }
+    const raw = window.localStorage.getItem(LAST_REFERENCE_STORAGE_KEY);
+    const parsed = raw ? Number(raw) : NaN;
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : '';
 }
 
 interface ProductionRegisterFormProps {
@@ -36,9 +49,14 @@ export function ProductionRegisterForm({
 }: ProductionRegisterFormProps) {
     const isWorkerLocked = Boolean(lockedEmployeeId && lockedEmployeeName);
 
+    const initialReferenceId = useMemo(() => {
+        const cached = readCachedReferenceId();
+        return cached !== '' && references.some((r) => r.id === cached) ? cached : '';
+    }, [references]);
+
     const { data, setData, post, processing, errors } = useForm({
         employee_id: (lockedEmployeeId ?? '') as number | '',
-        reference_id: '' as number | '',
+        reference_id: initialReferenceId as number | '',
         operation_id: '' as number | '',
         quantity: 1,
         unit_price: '' as string,
@@ -81,6 +99,15 @@ export function ProductionRegisterForm({
     }, [selectedReference?.id, data.operation_id, lotCapInfo.remaining]);
 
     useEffect(() => {
+        if (typeof window === 'undefined') {
+            return;
+        }
+        if (data.reference_id) {
+            window.localStorage.setItem(LAST_REFERENCE_STORAGE_KEY, String(data.reference_id));
+        }
+    }, [data.reference_id]);
+
+    useEffect(() => {
         if (data.operation_id && availableOperations.length > 0) {
             const op = availableOperations.find((o) => o.id === Number(data.operation_id));
             if (op) {
@@ -99,7 +126,7 @@ export function ProductionRegisterForm({
             onSuccess: () => {
                 setData((prev) => ({
                     ...prev,
-                    reference_id: '',
+                    // La referencia se mantiene seleccionada (cacheada) para agilizar registros seguidos.
                     operation_id: '',
                     quantity: 1,
                     unit_price: '',
@@ -122,6 +149,30 @@ export function ProductionRegisterForm({
                             : 'Completa los datos del trabajo realizado.'
                     }
                 />
+                {selectedReference ? (
+                    <div className="mt-4 flex items-center gap-4 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-slate-600 dark:bg-slate-900/40">
+                        {selectedReference.image ? (
+                            <img
+                                src={selectedReference.image}
+                                alt={selectedReference.name}
+                                className="h-20 w-20 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-600"
+                            />
+                        ) : (
+                            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-100 text-slate-400 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-500">
+                                <PhotoIcon className="h-8 w-8" />
+                            </div>
+                        )}
+                        <div className="min-w-0">
+                            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Referencia seleccionada</p>
+                            <p className="truncate text-base font-semibold text-slate-900 dark:text-slate-100">
+                                {selectedReference.code} - {selectedReference.name}
+                            </p>
+                            {!selectedReference.image ? (
+                                <p className="text-xs text-slate-500 dark:text-slate-400">Sin imagen registrada.</p>
+                            ) : null}
+                        </div>
+                    </div>
+                ) : null}
                 <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                     {lockedEmployeeId && lockedEmployeeName ? (
                         <div className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900/40">
