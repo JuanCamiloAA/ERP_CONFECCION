@@ -2,6 +2,7 @@ import { Head, useForm } from '@inertiajs/react';
 import { FormEvent } from 'react';
 import { Button } from '@/Components/UI/Button';
 import { Input } from '@/Components/UI/Input';
+import { PasswordInput } from '@/Components/UI/PasswordInput';
 import AuthLayout from '@/Layouts/AuthLayout';
 
 interface Props {
@@ -35,21 +36,21 @@ export default function ResetPassword({ email, token }: Props) {
                     error={errors.email}
                     required
                 />
-                <Input
+                <PasswordInput
                     label="Nueva contrasena"
-                    type="password"
                     value={data.password}
                     onChange={(e) => setData('password', e.target.value)}
                     error={errors.password}
                     required
                     autoFocus
+                    autoComplete="new-password"
                 />
-                <Input
+                <PasswordInput
                     label="Confirmar contrasena"
-                    type="password"
                     value={data.password_confirmation}
                     onChange={(e) => setData('password_confirmation', e.target.value)}
                     required
+                    autoComplete="new-password"
                 />
 
                 <Button type="submit" loading={processing} fullWidth size="lg">

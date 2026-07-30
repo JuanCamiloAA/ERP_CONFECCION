@@ -3,8 +3,8 @@ import { ArrowLeftIcon, KeyIcon, ShieldExclamationIcon } from '@heroicons/react/
 import { FormEvent } from 'react';
 import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
-import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { PasswordInput } from '@/Components/UI/PasswordInput';
 import AppLayout from '@/Layouts/AppLayout';
 
 export default function ChangePassword() {
@@ -58,29 +58,29 @@ export default function ChangePassword() {
                     />
                     <form onSubmit={submit} className="mt-4 space-y-4">
                         {!forceChange && (
-                            <Input
-                                type="password"
+                            <PasswordInput
                                 label="Contrasena actual"
                                 value={data.current_password}
                                 onChange={(e) => setData('current_password', e.target.value)}
                                 error={errors.current_password}
                                 required
+                                autoComplete="current-password"
                             />
                         )}
-                        <Input
-                            type="password"
+                        <PasswordInput
                             label="Nueva contrasena"
                             value={data.password}
                             onChange={(e) => setData('password', e.target.value)}
                             error={errors.password}
                             required
+                            autoComplete="new-password"
                         />
-                        <Input
-                            type="password"
+                        <PasswordInput
                             label="Confirmar contrasena"
                             value={data.password_confirmation}
                             onChange={(e) => setData('password_confirmation', e.target.value)}
                             required
+                            autoComplete="new-password"
                         />
                         <div className="flex justify-end">
                             <Button type="submit" loading={processing} icon={<KeyIcon className="h-4 w-4" />}>

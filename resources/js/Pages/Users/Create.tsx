@@ -6,6 +6,7 @@ import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { PasswordInput } from '@/Components/UI/PasswordInput';
 import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
 import AppLayout from '@/Layouts/AppLayout';
@@ -110,8 +111,8 @@ export default function UserCreate({ roles, companies }: Props) {
                         }
                     />
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Input type="text" label="Contrasena" value={data.password} onChange={(e) => setData('password', e.target.value)} error={errors.password} required />
-                        <Input type="text" label="Confirmar contrasena" value={data.password_confirmation} onChange={(e) => setData('password_confirmation', e.target.value)} required />
+                        <PasswordInput defaultVisible label="Contrasena" value={data.password} onChange={(e) => setData('password', e.target.value)} error={errors.password} required autoComplete="new-password" />
+                        <PasswordInput defaultVisible label="Confirmar contrasena" value={data.password_confirmation} onChange={(e) => setData('password_confirmation', e.target.value)} required autoComplete="new-password" />
                     </div>
                 </Card>
 

@@ -1,7 +1,7 @@
 import { forwardRef, InputHTMLAttributes, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
-interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
+export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
     label?: string;
     error?: string;
     description?: string;

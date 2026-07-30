@@ -3,6 +3,7 @@ import { EnvelopeIcon, LockClosedIcon } from '@heroicons/react/24/outline';
 import { FormEvent } from 'react';
 import { Button } from '@/Components/UI/Button';
 import { Input } from '@/Components/UI/Input';
+import { PasswordInput } from '@/Components/UI/PasswordInput';
 import AuthLayout from '@/Layouts/AuthLayout';
 
 interface LoginProps {
@@ -43,9 +44,8 @@ export default function Login({ loginCompany = null }: LoginProps) {
                     autoComplete="email"
                 />
 
-                <Input
+                <PasswordInput
                     label="Contrasena"
-                    type="password"
                     value={data.password}
                     onChange={(e) => setData('password', e.target.value)}
                     error={errors.password}

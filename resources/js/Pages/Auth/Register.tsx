@@ -3,6 +3,7 @@ import { ArrowRightIcon, BuildingOfficeIcon, UserCircleIcon } from '@heroicons/r
 import { FormEvent, useState } from 'react';
 import { Button } from '@/Components/UI/Button';
 import { Input } from '@/Components/UI/Input';
+import { PasswordInput } from '@/Components/UI/PasswordInput';
 import AuthLayout from '@/Layouts/AuthLayout';
 import { cn } from '@/lib/utils';
 
@@ -129,21 +130,21 @@ export default function Register() {
                         required
                     />
 
-                    <Input
+                    <PasswordInput
                         label="Contrasena"
-                        type="password"
                         value={data.password}
                         onChange={(e) => setData('password', e.target.value)}
                         error={errors.password}
                         required
+                        autoComplete="new-password"
                     />
 
-                    <Input
+                    <PasswordInput
                         label="Confirmar contrasena"
-                        type="password"
                         value={data.password_confirmation}
                         onChange={(e) => setData('password_confirmation', e.target.value)}
                         required
+                        autoComplete="new-password"
                     />
 
                     <div className="flex gap-3">

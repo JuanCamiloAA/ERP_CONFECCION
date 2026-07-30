@@ -1,8 +1,8 @@
-import { ArrowPathIcon, KeyIcon } from '@heroicons/react/24/outline';
-import { useId } from 'react';
+import { ArrowPathIcon, EyeIcon, EyeSlashIcon, KeyIcon } from '@heroicons/react/24/outline';
+import { useId, useState } from 'react';
 import { Button } from '@/Components/UI/Button';
 import { Checkbox } from '@/Components/UI/Checkbox';
-import { Input } from '@/Components/UI/Input';
+import { PasswordInput } from '@/Components/UI/PasswordInput';
 import { cn, generatePassword } from '@/lib/utils';
 
 export type AccessPasswordMode = 'auto' | 'manual';
@@ -53,7 +53,9 @@ interface Props {
 
 export function AccessPasswordFields({ value, onChange, errors }: Props) {
     const modeGroupId = useId();
+    const [generatedVisible, setGeneratedVisible] = useState(true);
     const isManual = value.password_mode === 'manual';
+    const generatedToggleLabel = generatedVisible ? 'Ocultar contrasena' : 'Mostrar contrasena';
 
     const selectMode = (mode: AccessPasswordMode) => {
         if (mode === value.password_mode) {
@@ -117,8 +119,8 @@ export function AccessPasswordFields({ value, onChange, errors }: Props) {
 
             {isManual ? (
                 <div className="space-y-3">
-                    <Input
-                        type="text"
+                    <PasswordInput
+                        defaultVisible
                         label="Contrasena"
                         value={value.user_password}
                         onChange={(e) => onChange({ user_password: e.target.value })}
@@ -127,8 +129,8 @@ export function AccessPasswordFields({ value, onChange, errors }: Props) {
                         autoComplete="new-password"
                         required
                     />
-                    <Input
-                        type="text"
+                    <PasswordInput
+                        defaultVisible
                         label="Confirmar contrasena"
                         value={value.user_password_confirmation}
                         onChange={(e) => onChange({ user_password_confirmation: e.target.value })}
@@ -154,8 +156,24 @@ export function AccessPasswordFields({ value, onChange, errors }: Props) {
             ) : (
                 <div>
                     <div className="flex gap-2">
-                        <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm break-all text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                            {value.user_password}
+                        <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                            <span className="min-w-0 flex-1 font-mono text-sm break-all text-slate-900 dark:text-slate-100">
+                                {generatedVisible ? value.user_password : '•'.repeat(value.user_password.length)}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => setGeneratedVisible((current) => !current)}
+                                aria-label={generatedToggleLabel}
+                                aria-pressed={generatedVisible}
+                                title={generatedToggleLabel}
+                                className="rounded p-1 text-slate-400 transition-colors hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-indigo-500/40 focus-visible:outline-none dark:text-slate-500 dark:hover:text-slate-200"
+                            >
+                                {generatedVisible ? (
+                                    <EyeSlashIcon className="h-4 w-4" />
+                                ) : (
+                                    <EyeIcon className="h-4 w-4" />
+                                )}
+                            </button>
                         </div>
                         <Button
                             type="button"

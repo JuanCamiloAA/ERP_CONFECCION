@@ -7,6 +7,7 @@ import { Card, CardHeader } from '@/Components/UI/Card';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { PasswordInput } from '@/Components/UI/PasswordInput';
 import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
 import AppLayout from '@/Layouts/AppLayout';
@@ -185,8 +186,8 @@ export default function UserEdit({
                         }
                     />
                     <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Input type="text" label="Nueva contrasena" value={data.password} onChange={(e) => setData('password', e.target.value)} error={errors.password} description="Deja en blanco para no modificar" />
-                        <Input type="text" label="Confirmar contrasena" value={data.password_confirmation} onChange={(e) => setData('password_confirmation', e.target.value)} />
+                        <PasswordInput defaultVisible label="Nueva contrasena" value={data.password} onChange={(e) => setData('password', e.target.value)} error={errors.password} description="Deja en blanco para no modificar" autoComplete="new-password" />
+                        <PasswordInput defaultVisible label="Confirmar contrasena" value={data.password_confirmation} onChange={(e) => setData('password_confirmation', e.target.value)} autoComplete="new-password" />
                     </div>
                 </Card>
 
