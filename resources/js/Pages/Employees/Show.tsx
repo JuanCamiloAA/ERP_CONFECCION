@@ -17,11 +17,18 @@ import {
 } from '@heroicons/react/24/outline';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
+import {
+    AccessPasswordData,
+    AccessPasswordFields,
+    createAccessPasswordData,
+} from '@/Components/Employees/AccessPasswordFields';
 import { Avatar } from '@/Components/UI/Avatar';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
+import { Checkbox } from '@/Components/UI/Checkbox';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { collectUnmappedErrors, FormErrorAlert } from '@/Components/UI/FormErrorAlert';
 import { Input } from '@/Components/UI/Input';
 import { Modal } from '@/Components/UI/Modal';
 import { PageHeader } from '@/Components/UI/PageHeader';
@@ -30,7 +37,7 @@ import { Tabs } from '@/Components/UI/Tabs';
 import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import { Can } from '@/Components/UI/Can';
 import AppLayout from '@/Layouts/AppLayout';
-import { formatCurrency, formatDate, formatDateTime, generatePassword, formatRoleSelectLabel } from '@/lib/utils';
+import { formatCurrency, formatDate, formatDateTime, formatRoleSelectLabel } from '@/lib/utils';
 import type { Advance, Employee, PayrollEmployee, Production } from '@/types';
 
 function maskAccountDisplay(num: string | null | undefined): string {
@@ -72,6 +79,16 @@ interface Props {
 
 type TabKey = 'info' | 'production' | 'payroll' | 'access';
 
+/** Campos que el modal de acceso puede mostrar; el resto se avisa aparte. */
+const ACCESS_FIELD_KEYS = [
+    'email',
+    'role_id',
+    'password_mode',
+    'user_password',
+    'user_password_confirmation',
+    'require_password_change',
+];
+
 export default function EmployeeShow({ employee, productions, monthSummary, advances, payrolls, roles }: Props) {
     const page = usePage();
     const flash = (page.props as unknown as App.PageProps).flash;
@@ -83,9 +100,11 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
     const [toggleConfirm, setToggleConfirm] = useState(false);
 
     const [accessEmail, setAccessEmail] = useState(employee.email ?? '');
-    const [accessPassword, setAccessPassword] = useState(() => generatePassword(10));
+    const [accessPassword, setAccessPassword] = useState<AccessPasswordData>(createAccessPasswordData);
+    const [accessErrors, setAccessErrors] = useState<Record<string, string>>({});
     const [accessRoleId, setAccessRoleId] = useState(roles.find((r) => r.name === 'operario_produccion')?.id ?? roles[0]?.id ?? '');
     const [newRoleId, setNewRoleId] = useState(employee.user?.roles?.[0]?.id ?? roles[0]?.id ?? '');
+    const [resetRequireChange, setResetRequireChange] = useState(true);
 
     useEffect(() => {
         if (flash?.temporary_password) {
@@ -96,12 +115,30 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
         }
     }, [flash?.temporary_password]);
 
+    const openAccessModal = () => {
+        setAccessPassword(createAccessPasswordData());
+        setAccessErrors({});
+        setAccessModal(true);
+    };
+
     const submitAccess = () => {
         router.post(route('employees.access.store', employee.id), {
             email: accessEmail,
             role_id: accessRoleId,
+            ...accessPassword,
         }, {
-            onSuccess: () => setAccessModal(false),
+            preserveScroll: true,
+            onSuccess: () => {
+                setAccessModal(false);
+                setAccessErrors({});
+            },
+            onError: (formErrors) => {
+                setAccessErrors(formErrors as Record<string, string>);
+                const blocking = collectUnmappedErrors(formErrors, ACCESS_FIELD_KEYS);
+                if (blocking.length > 0) {
+                    toast.error(blocking[0]);
+                }
+            },
         });
     };
 
@@ -120,7 +157,10 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
     };
 
     const handleResetPassword = () => {
-        router.post(route('employees.access.reset-password', employee.id), {}, {
+        router.post(route('employees.access.reset-password', employee.id), {
+            require_password_change: resetRequireChange,
+        }, {
+            preserveScroll: true,
             onFinish: () => setResetConfirm(false),
         });
     };
@@ -381,7 +421,7 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                                     <p className="text-sm font-semibold text-slate-700 dark:text-slate-200">
                                         Este empleado no tiene acceso al sistema
                                     </p>
-                                    <Button icon={<UserPlusIcon className="h-4 w-4" />} onClick={() => setAccessModal(true)}>
+                                    <Button icon={<UserPlusIcon className="h-4 w-4" />} onClick={openAccessModal}>
                                         Crear acceso
                                     </Button>
                                 </div>
@@ -467,28 +507,36 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                 }
             >
                 <div className="space-y-4">
-                    <Input label="Correo de acceso" type="email" value={accessEmail} onChange={(e) => setAccessEmail(e.target.value)} required />
+                    <FormErrorAlert
+                        messages={collectUnmappedErrors(accessErrors, ACCESS_FIELD_KEYS)}
+                        title="No se pudo crear el acceso"
+                    />
+                    <Input
+                        label="Correo de acceso"
+                        type="email"
+                        value={accessEmail}
+                        onChange={(e) => setAccessEmail(e.target.value)}
+                        error={accessErrors.email}
+                        required
+                    />
                     <Select
                         label="Rol asignado"
                         value={accessRoleId}
                         onChange={(e) => setAccessRoleId(Number(e.target.value))}
                         options={roles.map((r) => ({ value: r.id, label: formatRoleSelectLabel(r) }))}
+                        error={accessErrors.role_id}
                         required
                     />
-                    <div>
-                        <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Contrasena temporal</label>
-                        <div className="flex gap-2">
-                            <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm dark:border-slate-700 dark:bg-slate-900">
-                                {accessPassword}
-                            </div>
-                            <Button type="button" variant="outline" onClick={() => setAccessPassword(generatePassword(10))}>
-                                Regenerar
-                            </Button>
-                        </div>
-                        <p className="mt-1.5 text-xs text-amber-600 dark:text-amber-400">
-                            La contrasena solo se mostrara una vez al crear la cuenta.
-                        </p>
-                    </div>
+                    <AccessPasswordFields
+                        value={accessPassword}
+                        onChange={(patch) => setAccessPassword((current) => ({ ...current, ...patch }))}
+                        errors={{
+                            password_mode: accessErrors.password_mode,
+                            user_password: accessErrors.user_password,
+                            user_password_confirmation: accessErrors.user_password_confirmation,
+                            require_password_change: accessErrors.require_password_change,
+                        }}
+                    />
                 </div>
             </Modal>
 
@@ -512,15 +560,30 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                 />
             </Modal>
 
-            <ConfirmDialog
+            <Modal
                 open={resetConfirm}
                 onClose={() => setResetConfirm(false)}
-                onConfirm={handleResetPassword}
                 title="Restablecer contrasena"
-                message="Se generara una nueva contrasena temporal y se forzara cambio en el siguiente ingreso."
-                confirmText="Restablecer"
-                variant="primary"
-            />
+                size="md"
+                footer={
+                    <>
+                        <Button variant="ghost" onClick={() => setResetConfirm(false)}>Cancelar</Button>
+                        <Button onClick={handleResetPassword}>Restablecer</Button>
+                    </>
+                }
+            >
+                <div className="space-y-4">
+                    <p className="text-sm text-slate-700 dark:text-slate-300">
+                        Se generara una nueva contrasena temporal y se mostrara una sola vez.
+                    </p>
+                    <Checkbox
+                        checked={resetRequireChange}
+                        onChange={(e) => setResetRequireChange(e.target.checked)}
+                        label="Requerir cambio de contrasena en el primer inicio de sesion"
+                        description="El usuario debera establecer una nueva contrasena antes de acceder al sistema."
+                    />
+                </div>
+            </Modal>
 
             <ConfirmDialog
                 open={toggleConfirm}

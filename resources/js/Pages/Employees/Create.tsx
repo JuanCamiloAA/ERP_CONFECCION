@@ -1,17 +1,25 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeftIcon, ArrowPathIcon, KeyIcon } from '@heroicons/react/24/outline';
-import { FormEvent, useState } from 'react';
+import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { FormEvent } from 'react';
+import { toast } from 'sonner';
+import {
+    AccessPasswordData,
+    AccessPasswordFields,
+    createAccessPasswordData,
+    stripAccessPasswordData,
+} from '@/Components/Employees/AccessPasswordFields';
 import { MembershipLimitAlert } from '@/Components/Membership/MembershipLimitAlert';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
+import { collectUnmappedErrors, FormErrorAlert } from '@/Components/UI/FormErrorAlert';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
-import { generatePassword, formatRoleSelectLabel } from '@/lib/utils';
+import { formatRoleSelectLabel } from '@/lib/utils';
 
 interface Role {
     id: number;
@@ -35,9 +43,7 @@ interface Props {
 }
 
 export default function EmployeeCreate({ roles, banks }: Props) {
-    const [generatedPassword, setGeneratedPassword] = useState(() => generatePassword(10));
-
-    const { data, setData, post, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, transform } = useForm({
         first_name: '',
         last_name: '',
         document_type: 'CC',
@@ -59,14 +65,27 @@ export default function EmployeeCreate({ roles, banks }: Props) {
         create_user_account: false,
         user_email: '',
         user_role_id: roles.find((r) => !r.is_system)?.id ?? roles[0]?.id ?? '',
+        ...createAccessPasswordData(),
     });
+
+    const updateAccessPassword = (patch: Partial<AccessPasswordData>) =>
+        setData((current) => ({ ...current, ...patch }));
+
+    // `membership_limit` ya se muestra con MembershipLimitAlert.
+    const unmappedErrors = collectUnmappedErrors(errors, Object.keys(data), ['membership_limit']);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        post(route('employees.store'), { forceFormData: true });
+        transform((current) => (current.create_user_account ? current : stripAccessPasswordData(current)));
+        post(route('employees.store'), {
+            forceFormData: true,
+            onError: (formErrors) => {
+                const blocking = collectUnmappedErrors(formErrors, Object.keys(data), ['membership_limit']);
+                toast.error(blocking[0] ?? 'Revisa los campos marcados en el formulario.');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
+            },
+        });
     };
-
-    const regeneratePassword = () => setGeneratedPassword(generatePassword(10));
 
     return (
         <AppLayout title="Nuevo empleado">
@@ -94,6 +113,7 @@ export default function EmployeeCreate({ roles, banks }: Props) {
                 />
 
                 <MembershipLimitAlert />
+                <FormErrorAlert messages={unmappedErrors} />
 
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <Card className="lg:col-span-2">
@@ -317,26 +337,16 @@ export default function EmployeeCreate({ roles, banks }: Props) {
                                             }))}
                                             required
                                         />
-                                        <div>
-                                            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                                                Contrasena temporal
-                                            </label>
-                                            <div className="flex gap-2">
-                                                <div className="flex-1 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 font-mono text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100">
-                                                    {generatedPassword}
-                                                </div>
-                                                <Button
-                                                    type="button"
-                                                    variant="outline"
-                                                    onClick={regeneratePassword}
-                                                    icon={<ArrowPathIcon className="h-4 w-4" />}
-                                                />
-                                            </div>
-                                            <p className="mt-1.5 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400">
-                                                <KeyIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                                                Esta contrasena solo se mostrara en este momento.
-                                            </p>
-                                        </div>
+                                        <AccessPasswordFields
+                                            value={data}
+                                            onChange={updateAccessPassword}
+                                            errors={{
+                                                password_mode: errors.password_mode,
+                                                user_password: errors.user_password,
+                                                user_password_confirmation: errors.user_password_confirmation,
+                                                require_password_change: errors.require_password_change,
+                                            }}
+                                        />
                                     </div>
                                 )}
                             </div>

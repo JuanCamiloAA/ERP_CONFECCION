@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Employee;
 
+use App\Http\Requests\Concerns\ValidatesAccessPassword;
 use App\Models\Bank;
 use App\Models\Employee;
 use Illuminate\Foundation\Http\FormRequest;
@@ -10,6 +11,8 @@ use Illuminate\Validation\Validator;
 
 class StoreEmployeeRequest extends FormRequest
 {
+    use ValidatesAccessPassword;
+
     public function authorize(): bool
     {
         return $this->user()?->can('employees.index.create') || $this->user()?->isSuperAdmin();
@@ -93,7 +96,7 @@ class StoreEmployeeRequest extends FormRequest
                 Rule::unique('users', 'email'),
             ],
             'user_role_id' => ['required_if:create_user_account,1', 'nullable', 'integer', 'exists:roles,id'],
-        ] + $bankRules;
+        ] + $bankRules + $this->accessPasswordRules();
     }
 
     public function withValidator(Validator $validator): void
@@ -127,6 +130,6 @@ class StoreEmployeeRequest extends FormRequest
             'user_email.required_if' => 'El correo es obligatorio para crear el acceso.',
             'user_email.unique' => 'Ya existe un usuario con ese correo.',
             'user_role_id.required_if' => 'Debes seleccionar un rol para el usuario.',
-        ];
+        ] + $this->accessPasswordMessages();
     }
 }

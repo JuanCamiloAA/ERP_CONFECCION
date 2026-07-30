@@ -84,7 +84,16 @@ class EmployeeController extends Controller
             $data = $request->validated();
             $createUser = (bool) ($data['create_user_account'] ?? false);
 
-            unset($data['photo'], $data['create_user_account'], $data['user_email'], $data['user_role_id']);
+            unset(
+                $data['photo'],
+                $data['create_user_account'],
+                $data['user_email'],
+                $data['user_role_id'],
+                $data['password_mode'],
+                $data['user_password'],
+                $data['user_password_confirmation'],
+                $data['require_password_change'],
+            );
 
             $data['company_id'] = TenantContext::requireCompanyIdForWrite($user);
             $data['is_active'] = $data['is_active'] ?? true;
@@ -126,17 +135,19 @@ class EmployeeController extends Controller
             $temporaryPassword = null;
 
             if ($createUser) {
-                $temporaryPassword = $this->generateTemporaryPassword();
+                $account = $this->resolveAccountPassword($request);
+                $temporaryPassword = $account['reveal'] ? $account['plain'] : null;
+
                 $newUser = User::create([
                     'company_id' => $employee->company_id,
                     'employee_id' => $employee->id,
                     'name' => $employee->first_name,
                     'last_name' => $employee->last_name,
                     'email' => $request->validated('user_email'),
-                    'password' => Hash::make($temporaryPassword),
+                    'password' => Hash::make($account['plain']),
                     'phone' => $employee->phone,
                     'is_active' => true,
-                    'password_change_required' => true,
+                    'password_change_required' => $account['require_change'],
                 ]);
 
                 $role = Role::find($request->validated('user_role_id'));
@@ -254,7 +265,7 @@ class EmployeeController extends Controller
         }
 
         $data = $request->validated();
-        $temporaryPassword = $this->generateTemporaryPassword();
+        $account = $this->resolveAccountPassword($request);
 
         $newUser = User::create([
             'company_id' => $employee->company_id,
@@ -262,10 +273,10 @@ class EmployeeController extends Controller
             'name' => $employee->first_name,
             'last_name' => $employee->last_name,
             'email' => $data['email'],
-            'password' => Hash::make($temporaryPassword),
+            'password' => Hash::make($account['plain']),
             'phone' => $employee->phone,
             'is_active' => true,
-            'password_change_required' => true,
+            'password_change_required' => $account['require_change'],
         ]);
 
         $role = Role::find($data['role_id']);
@@ -288,7 +299,7 @@ class EmployeeController extends Controller
 
         return back()->with([
             'success' => 'Acceso creado correctamente.',
-            'temporary_password' => $temporaryPassword,
+            'temporary_password' => $account['reveal'] ? $account['plain'] : null,
         ]);
     }
 
@@ -337,7 +348,7 @@ class EmployeeController extends Controller
         return back()->with('success', 'Rol actualizado.');
     }
 
-    public function resetPassword(Employee $employee): RedirectResponse
+    public function resetPassword(Request $request, Employee $employee): RedirectResponse
     {
         if (! $employee->user_id) {
             return back()->with('error', 'Este empleado no tiene cuenta de usuario.');
@@ -345,7 +356,7 @@ class EmployeeController extends Controller
 
         $temporaryPassword = $this->generateTemporaryPassword();
         $employee->user->password = Hash::make($temporaryPassword);
-        $employee->user->password_change_required = true;
+        $employee->user->password_change_required = $request->boolean('require_password_change', true);
         $employee->user->save();
 
         return back()->with([
@@ -415,6 +426,29 @@ class EmployeeController extends Controller
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Contrasena de la cuenta: la enviada por el administrador o una temporal generada aqui.
+     *
+     * `reveal` indica si debe mostrarse al administrador (solo cuando no la definio el mismo).
+     *
+     * @return array{plain: string, require_change: bool, reveal: bool}
+     */
+    protected function resolveAccountPassword(Request $request): array
+    {
+        $plain = trim((string) $request->input('user_password', ''));
+        $wasGenerated = $plain === '';
+
+        if ($wasGenerated) {
+            $plain = $this->generateTemporaryPassword();
+        }
+
+        return [
+            'plain' => $plain,
+            'require_change' => $request->boolean('require_password_change', true),
+            'reveal' => $wasGenerated || $request->input('password_mode', 'auto') !== 'manual',
+        ];
     }
 
     protected function generateTemporaryPassword(): string
