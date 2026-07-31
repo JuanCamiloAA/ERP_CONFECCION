@@ -2,6 +2,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { ArrowLeftIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { FormEvent, useMemo, useState } from 'react';
 import { Button } from '@/Components/UI/Button';
+import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
@@ -9,6 +10,7 @@ import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
 import { Textarea } from '@/Components/UI/Textarea';
 import { ReferenceUnitEconomicsCard } from '@/Components/References/ReferenceUnitEconomicsCard';
+import { OperationQuickCreateModal, type QuickCreatedOperation } from '@/Components/Operations/OperationQuickCreateModal';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency } from '@/lib/utils';
 
@@ -32,9 +34,11 @@ export default function ReferenceCreate({ operations }: Props) {
     const page = usePage<App.PageProps>();
     const settings = page.props.activeCompany?.settings as Record<string, unknown> | null | undefined;
     const companyCurrency = typeof settings?.currency === 'string' ? settings.currency : 'COP';
+    const [availableOperations, setAvailableOperations] = useState<OperationOption[]>(operations);
     const [refOperations, setRefOperations] = useState<RefOperation[]>([]);
     const [selectedOpId, setSelectedOpId] = useState<number | ''>('');
     const [opPrice, setOpPrice] = useState<string>('');
+    const [showOperationModal, setShowOperationModal] = useState(false);
 
     const { data, setData, processing, errors } = useForm({
         code: '',
@@ -62,7 +66,7 @@ export default function ReferenceCreate({ operations }: Props) {
 
     const addOperation = () => {
         if (!selectedOpId) return;
-        const op = operations.find((o) => o.id === Number(selectedOpId));
+        const op = availableOperations.find((o) => o.id === Number(selectedOpId));
         if (!op) return;
         if (refOperations.some((r) => r.operation_id === op.id)) return;
 
@@ -75,6 +79,12 @@ export default function ReferenceCreate({ operations }: Props) {
     };
 
     const removeOp = (id: number) => setRefOperations((prev) => prev.filter((r) => r.operation_id !== id));
+
+    const handleOperationCreated = (op: QuickCreatedOperation) => {
+        setAvailableOperations((prev) => [...prev, op].sort((a, b) => a.name.localeCompare(b.name)));
+        setRefOperations((prev) => [...prev, { operation_id: op.id, name: op.name, price: Number(op.base_price) }]);
+        setShowOperationModal(false);
+    };
 
     return (
         <AppLayout title="Nueva referencia">
@@ -152,10 +162,10 @@ export default function ReferenceCreate({ operations }: Props) {
                                 onChange={(e) => {
                                     const id = Number(e.target.value);
                                     setSelectedOpId(id);
-                                    const op = operations.find((o) => o.id === id);
+                                    const op = availableOperations.find((o) => o.id === id);
                                     if (op) setOpPrice(String(op.base_price));
                                 }}
-                                options={operations.filter((o) => !refOperations.some((r) => r.operation_id === o.id)).map((o) => ({
+                                options={availableOperations.filter((o) => !refOperations.some((r) => r.operation_id === o.id)).map((o) => ({
                                     value: o.id, label: `${o.name} (${formatCurrency(o.base_price)})`,
                                 }))}
                                 placeholder="Selecciona una operacion"
@@ -167,6 +177,19 @@ export default function ReferenceCreate({ operations }: Props) {
                                 </Button>
                             </div>
                         </div>
+                        <Can permission="operations.index.create">
+                            <div className="mt-3">
+                                <Button
+                                    type="button"
+                                    variant="secondary"
+                                    size="sm"
+                                    icon={<PlusIcon className="h-4 w-4" />}
+                                    onClick={() => setShowOperationModal(true)}
+                                >
+                                    Nueva operacion
+                                </Button>
+                            </div>
+                        </Can>
 
                         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
                             <table className="w-full text-sm">
@@ -207,6 +230,12 @@ export default function ReferenceCreate({ operations }: Props) {
                     />
                 </div>
             </form>
+
+            <OperationQuickCreateModal
+                open={showOperationModal}
+                onClose={() => setShowOperationModal(false)}
+                onCreated={handleOperationCreated}
+            />
         </AppLayout>
     );
 }

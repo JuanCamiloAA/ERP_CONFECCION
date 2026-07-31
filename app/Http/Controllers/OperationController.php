@@ -6,6 +6,7 @@ use App\Http\Requests\Operation\StoreOperationRequest;
 use App\Http\Requests\Operation\UpdateOperationRequest;
 use App\Models\Operation;
 use App\Support\TenantContext;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -36,13 +37,17 @@ class OperationController extends Controller
         return Inertia::render('Operations/Create');
     }
 
-    public function store(StoreOperationRequest $request): RedirectResponse
+    public function store(StoreOperationRequest $request): RedirectResponse|JsonResponse
     {
         $data = $request->validated();
         $data['company_id'] = TenantContext::requireCompanyIdForWrite($request->user());
         $data['is_active'] = $data['is_active'] ?? true;
 
-        Operation::create($data);
+        $operation = Operation::create($data);
+
+        if ($request->wantsJson()) {
+            return response()->json($operation);
+        }
 
         return redirect()->route('operations.index')->with('success', 'Operacion creada.');
     }

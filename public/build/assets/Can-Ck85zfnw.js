@@ -1,0 +1,1 @@
+import{d as f,j as o}from"./app-DxsVek59.js";function u({permission:r,role:i,any:t,all:s,fallback:a=null,children:c}){const e=f();let n=!0;return r&&(n=n&&e.can(r)),i&&(n=n&&e.hasRole(i)),t&&t.length>0&&(n=n&&e.canAny(t)),s&&s.length>0&&(n=n&&e.canAll(s)),o.jsx(o.Fragment,{children:n?c:a})}export{u as C};
