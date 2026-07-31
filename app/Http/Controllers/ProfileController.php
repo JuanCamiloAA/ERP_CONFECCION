@@ -5,6 +5,8 @@ namespace App\Http\Controllers;
 use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Profile\ChangePasswordRequest;
 use App\Http\Requests\Profile\UpdateProfileRequest;
+use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Services\Files\StoredFileDeleter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -42,6 +44,14 @@ class ProfileController extends Controller
         }
 
         $user->update($data);
+
+        if ($request->hasFile('avatar') && $user->employee_id) {
+            $employee = Employee::withoutGlobalScope(CompanyScope::class)->find($user->employee_id);
+            if ($employee) {
+                $this->storedFileDeleter->deleteIfPresent($employee->getAttributes()['photo'] ?? null);
+                $employee->update(['photo' => $data['avatar']]);
+            }
+        }
 
         return back()->with('success', 'Perfil actualizado.');
     }
