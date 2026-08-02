@@ -1,16 +1,82 @@
-import { HTMLAttributes, ReactNode, TableHTMLAttributes, ThHTMLAttributes } from 'react';
+import {
+    Children,
+    cloneElement,
+    createContext,
+    isValidElement,
+    useContext,
+    useMemo,
+    type HTMLAttributes,
+    type ReactElement,
+    type ReactNode,
+    type TableHTMLAttributes,
+    type ThHTMLAttributes,
+} from 'react';
 import { cn } from '@/lib/utils';
 
+/**
+ * Contexto interno para la vista de tarjetas en movil: guarda las etiquetas de columna
+ * (extraidas de <TableHeader>) y si el <tr> actual esta dentro de <TableBody>, para que
+ * cada <TableCell> reciba automaticamente su data-label sin que cada pagina lo declare.
+ * Ver reglas CSS ".responsive-table" en resources/css/app.css.
+ */
+const TableHeaderLabelsContext = createContext<string[]>([]);
+const InTableBodyContext = createContext(false);
+
+function flattenToText(node: ReactNode): string {
+    return Children.toArray(node)
+        .map((child) => {
+            if (typeof child === 'string' || typeof child === 'number') {
+                return String(child);
+            }
+            if (isValidElement(child)) {
+                return flattenToText((child.props as { children?: ReactNode }).children);
+            }
+            return '';
+        })
+        .join('')
+        .trim();
+}
+
+function extractHeaderLabels(node: ReactNode): string[] {
+    const labels: string[] = [];
+    Children.forEach(node, (child) => {
+        if (!isValidElement(child)) return;
+        if (child.type === TableHeader) {
+            labels.push(flattenToText((child.props as { children?: ReactNode }).children));
+            return;
+        }
+        const childProps = child.props as { children?: ReactNode } | undefined;
+        if (childProps?.children) {
+            labels.push(...extractHeaderLabels(childProps.children));
+        }
+    });
+    return labels;
+}
+
+function collectHeaderLabels(children: ReactNode): string[] {
+    let labels: string[] = [];
+    Children.forEach(children, (child) => {
+        if (isValidElement(child) && child.type === TableHead) {
+            labels = extractHeaderLabels((child.props as { children?: ReactNode }).children);
+        }
+    });
+    return labels;
+}
+
 export function Table({ className, children, ...props }: TableHTMLAttributes<HTMLTableElement>) {
+    const headerLabels = useMemo(() => collectHeaderLabels(children), [children]);
+
     return (
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-            <table
-                className={cn('w-full divide-y divide-slate-200 text-sm dark:divide-slate-700', className)}
-                {...props}
-            >
-                {children}
-            </table>
-        </div>
+        <TableHeaderLabelsContext.Provider value={headerLabels}>
+            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                <table
+                    className={cn('responsive-table w-full divide-y divide-slate-200 text-sm dark:divide-slate-700', className)}
+                    {...props}
+                >
+                    {children}
+                </table>
+            </div>
+        </TableHeaderLabelsContext.Provider>
     );
 }
 
@@ -24,12 +90,14 @@ export function TableHead({ children, ...props }: HTMLAttributes<HTMLTableSectio
 
 export function TableBody({ children, className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
     return (
-        <tbody
-            className={cn('divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800', className)}
-            {...props}
-        >
-            {children}
-        </tbody>
+        <InTableBodyContext.Provider value={true}>
+            <tbody
+                className={cn('divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800', className)}
+                {...props}
+            >
+                {children}
+            </tbody>
+        </InTableBodyContext.Provider>
     );
 }
 
@@ -42,12 +110,24 @@ export function TableFoot({ children, ...props }: HTMLAttributes<HTMLTableSectio
 }
 
 export function TableRow({ className, children, ...props }: HTMLAttributes<HTMLTableRowElement>) {
+    const headerLabels = useContext(TableHeaderLabelsContext);
+    const inBody = useContext(InTableBodyContext);
+
+    const content = inBody
+        ? Children.map(children, (child, index) => {
+              if (isValidElement(child) && child.type === TableCell) {
+                  const cell = child as ReactElement<TableCellProps>;
+                  return cloneElement(cell, {
+                      'data-label': cell.props['data-label'] ?? headerLabels[index] ?? '',
+                  });
+              }
+              return child;
+          })
+        : children;
+
     return (
-        <tr
-            className={cn('transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/30', className)}
-            {...props}
-        >
-            {children}
+        <tr className={cn('transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/30', className)} {...props}>
+            {content}
         </tr>
     );
 }
@@ -76,6 +156,7 @@ export function TableHeader({ className, children, align = 'left', ...props }: T
 
 export interface TableCellProps extends HTMLAttributes<HTMLTableCellElement> {
     align?: 'left' | 'right' | 'center';
+    'data-label'?: string;
 }
 
 export function TableCell({ className, children, align = 'left', ...props }: TableCellProps) {

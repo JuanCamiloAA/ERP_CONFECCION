@@ -410,7 +410,7 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
                             {previewData.truncated ? ' (vista limitada)' : ''}.
                         </p>
                         <div className="max-h-[min(60vh,28rem)] overflow-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                            <table className="min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-slate-600">
+                            <table className="responsive-table min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-slate-600">
                                 <thead className="sticky top-0 bg-slate-100 dark:bg-slate-900">
                                     <tr>
                                         {previewData.headers.map((h) => (
@@ -431,7 +431,12 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
                                         previewData.rows.map((row, ri) => (
                                             <tr key={ri}>
                                                 {row.map((cell, ci) => (
-                                                    <td key={ci} className="max-w-[14rem] truncate whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200" title={cell}>
+                                                    <td
+                                                        key={ci}
+                                                        className="max-w-[14rem] truncate whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200"
+                                                        title={cell}
+                                                        data-label={previewData.headers[ci] ?? ''}
+                                                    >
                                                         {cell || '—'}
                                                     </td>
                                                 ))}

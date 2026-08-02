@@ -200,7 +200,7 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
                         }
                     />
                     <div className="mt-4 min-h-0 flex-1 overflow-auto">
-                        <table className="w-full text-sm">
+                        <table className="responsive-table w-full text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 text-xs uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:text-slate-400">
                                     <th className="py-2 text-left font-semibold">Fecha</th>
@@ -220,16 +220,16 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
                                 ) : (
                                     stats.latest_productions.map((p) => (
                                         <tr key={p.id} className="text-slate-700 dark:text-slate-300">
-                                            <td className="py-2">{formatDate(p.date)}</td>
-                                            <td className="py-2">
+                                            <td className="py-2" data-label="Fecha">{formatDate(p.date)}</td>
+                                            <td className="py-2" data-label="Empleado">
                                                 {p.employee ? `${p.employee.first_name} ${p.employee.last_name}` : '—'}
                                             </td>
-                                            <td className="py-2">
+                                            <td className="py-2" data-label="Referencia · operación">
                                                 {p.reference?.code ?? ''}{p.reference?.code && ' '}{p.reference?.name}
                                                 {p.operation?.name && ` · ${p.operation.name}`}
                                             </td>
-                                            <td className="py-2 text-right">{formatNumber(p.quantity)}</td>
-                                            <td className="py-2 text-right font-medium">{formatCurrency(p.total_value)}</td>
+                                            <td className="py-2 text-right" data-label="Cantidad">{formatNumber(p.quantity)}</td>
+                                            <td className="py-2 text-right font-medium" data-label="Valor">{formatCurrency(p.total_value)}</td>
                                         </tr>
                                     ))
                                 )}

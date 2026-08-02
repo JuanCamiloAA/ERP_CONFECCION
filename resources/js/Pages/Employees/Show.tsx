@@ -300,7 +300,7 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                         <Card>
                             <CardHeader title="Historial de produccion" description="Ultimos 50 registros" />
                             <div className="mt-4 overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table className="responsive-table w-full text-sm">
                                     <thead className="border-b border-slate-200 dark:border-slate-700">
                                         <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
                                             <th className="py-2">Fecha</th>
@@ -318,11 +318,11 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                                         ) : (
                                             productions.map((p) => (
                                                 <tr key={p.id}>
-                                                    <td className="py-2">{formatDate(p.date)}</td>
-                                                    <td className="py-2">{p.reference?.code} - {p.reference?.name}</td>
-                                                    <td className="py-2">{p.operation?.name}</td>
-                                                    <td className="py-2 text-right">{p.quantity}</td>
-                                                    <td className="py-2 text-right font-medium">{formatCurrency(p.total_value)}</td>
+                                                    <td className="py-2" data-label="Fecha">{formatDate(p.date)}</td>
+                                                    <td className="py-2" data-label="Referencia">{p.reference?.code} - {p.reference?.name}</td>
+                                                    <td className="py-2" data-label="Operacion">{p.operation?.name}</td>
+                                                    <td className="py-2 text-right" data-label="Cantidad">{p.quantity}</td>
+                                                    <td className="py-2 text-right font-medium" data-label="Valor">{formatCurrency(p.total_value)}</td>
                                                 </tr>
                                             ))
                                         )}
@@ -338,7 +338,7 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                         <Card>
                             <CardHeader title="Pagos por nomina" />
                             <div className="mt-4 overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table className="responsive-table w-full text-sm">
                                     <thead className="border-b border-slate-200 dark:border-slate-700">
                                         <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
                                             <th className="py-2">Periodo</th>
@@ -356,11 +356,11 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                                                 const pr = (row as PayrollEmployee & { payroll?: { name: string; period_start: string; period_end: string; status: string } }).payroll;
                                                 return (
                                                     <tr key={row.id}>
-                                                        <td className="py-2">{pr?.name} <span className="text-xs text-slate-500">({formatDate(pr?.period_start)} - {formatDate(pr?.period_end)})</span></td>
-                                                        <td className="py-2 text-right">{formatCurrency(row.production_total)}</td>
-                                                        <td className="py-2 text-right">{formatCurrency(row.advances_discount)}</td>
-                                                        <td className="py-2 text-right font-semibold">{formatCurrency(row.net_payment)}</td>
-                                                        <td className="py-2 text-center">
+                                                        <td className="py-2" data-label="Periodo">{pr?.name} <span className="text-xs text-slate-500">({formatDate(pr?.period_start)} - {formatDate(pr?.period_end)})</span></td>
+                                                        <td className="py-2 text-right" data-label="Producido">{formatCurrency(row.production_total)}</td>
+                                                        <td className="py-2 text-right" data-label="Anticipos">{formatCurrency(row.advances_discount)}</td>
+                                                        <td className="py-2 text-right font-semibold" data-label="Neto">{formatCurrency(row.net_payment)}</td>
+                                                        <td className="py-2 text-center" data-label="Estado">
                                                             <Badge variant={row.is_paid ? 'success' : 'warning'}>{row.is_paid ? 'Pagado' : 'Pendiente'}</Badge>
                                                         </td>
                                                     </tr>
@@ -375,7 +375,7 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                         <Card>
                             <CardHeader title="Anticipos" />
                             <div className="mt-4 overflow-x-auto">
-                                <table className="w-full text-sm">
+                                <table className="responsive-table w-full text-sm">
                                     <thead className="border-b border-slate-200 dark:border-slate-700">
                                         <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
                                             <th className="py-2">Fecha</th>
@@ -390,10 +390,10 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                                         ) : (
                                             advances.map((a) => (
                                                 <tr key={a.id}>
-                                                    <td className="py-2">{formatDate(a.date)}</td>
-                                                    <td className="py-2">{a.reason}</td>
-                                                    <td className="py-2 text-right">{formatCurrency(a.amount)}</td>
-                                                    <td className="py-2 text-center">
+                                                    <td className="py-2" data-label="Fecha">{formatDate(a.date)}</td>
+                                                    <td className="py-2" data-label="Motivo">{a.reason}</td>
+                                                    <td className="py-2 text-right" data-label="Monto">{formatCurrency(a.amount)}</td>
+                                                    <td className="py-2 text-center" data-label="Estado">
                                                         <Badge variant={a.status === 'descontado' ? 'success' : 'warning'}>{a.status}</Badge>
                                                     </td>
                                                 </tr>

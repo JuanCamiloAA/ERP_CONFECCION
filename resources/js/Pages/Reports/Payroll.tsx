@@ -93,7 +93,7 @@ export default function ReportPayroll({ filters, summary, chartPayrolls, payroll
                 <Card>
                     <CardHeader title="Detalle de nominas" />
                     <div className="mt-4 overflow-x-auto">
-                        <table className="w-full text-sm">
+                        <table className="responsive-table w-full text-sm">
                             <thead className="border-b border-slate-200 dark:border-slate-700">
                                 <tr className="text-left text-xs uppercase text-slate-500">
                                     <th className="py-2">Nomina</th>
@@ -107,10 +107,10 @@ export default function ReportPayroll({ filters, summary, chartPayrolls, payroll
                                     <tr><td colSpan={4} className="py-6 text-center text-slate-400">No hay nominas en este ano</td></tr>
                                 ) : payrolls.data.map((p) => (
                                     <tr key={p.id}>
-                                        <td className="py-2"><Link href={route('payrolls.show', p.id)} className="text-indigo-600 hover:underline dark:text-indigo-400">{p.name}</Link></td>
-                                        <td className="py-2">{formatDate(p.period_start)} - {formatDate(p.period_end)}</td>
-                                        <td className="py-2"><Badge variant={statusVariant[p.status]}>{p.status}</Badge></td>
-                                        <td className="py-2 text-right font-medium">{formatCurrency(p.total_amount)}</td>
+                                        <td className="py-2" data-label="Nomina"><Link href={route('payrolls.show', p.id)} className="text-indigo-600 hover:underline dark:text-indigo-400">{p.name}</Link></td>
+                                        <td className="py-2" data-label="Periodo">{formatDate(p.period_start)} - {formatDate(p.period_end)}</td>
+                                        <td className="py-2" data-label="Estado"><Badge variant={statusVariant[p.status]}>{p.status}</Badge></td>
+                                        <td className="py-2 text-right font-medium" data-label="Total">{formatCurrency(p.total_amount)}</td>
                                     </tr>
                                 ))}
                             </tbody>

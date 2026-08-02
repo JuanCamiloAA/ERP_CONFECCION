@@ -192,7 +192,7 @@ export default function ReferenceCreate({ operations }: Props) {
                         </Can>
 
                         <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                            <table className="w-full text-sm">
+                            <table className="responsive-table w-full text-sm">
                                 <thead className="bg-slate-50 dark:bg-slate-900/50">
                                     <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
                                         <th className="px-4 py-2">Operacion</th>
@@ -206,9 +206,9 @@ export default function ReferenceCreate({ operations }: Props) {
                                     ) : (
                                         refOperations.map((r) => (
                                             <tr key={r.operation_id}>
-                                                <td className="px-4 py-2">{r.name}</td>
-                                                <td className="px-4 py-2 text-right font-medium">{formatCurrency(r.price)}</td>
-                                                <td className="px-4 py-2 text-right">
+                                                <td className="px-4 py-2" data-label="Operacion">{r.name}</td>
+                                                <td className="px-4 py-2 text-right font-medium" data-label="Precio">{formatCurrency(r.price)}</td>
+                                                <td className="px-4 py-2 text-right" data-label="">
                                                     <Button type="button" variant="ghost" size="sm" icon={<TrashIcon className="h-4 w-4 text-rose-500" />} onClick={() => removeOp(r.operation_id)} />
                                                 </td>
                                             </tr>

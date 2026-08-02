@@ -266,7 +266,7 @@ export default function PayrollShow({
                 <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">Sin ajustes registrados.</p>
             ) : (
                 <div className="mt-3 overflow-x-auto">
-                    <table className="w-full min-w-[560px] text-left text-sm">
+                    <table className="responsive-table w-full min-w-[560px] text-left text-sm">
                         <thead>
                             <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-700">
                                 <th className="py-2 pr-2">Concepto</th>
@@ -278,12 +278,12 @@ export default function PayrollShow({
                         <tbody>
                             {(row.adjustments ?? []).map((a) => (
                                 <tr key={a.id} className="border-b border-slate-100 dark:border-slate-800">
-                                    <td className="py-2 pr-2">
+                                    <td className="py-2 pr-2" data-label="Concepto">
                                         {a.payroll_concept?.name ?? `#${a.payroll_concept_id}`}
                                     </td>
-                                    <td className="py-2 pr-2 text-right tabular-nums">{formatCurrency(a.amount)}</td>
-                                    <td className="py-2 pr-2 text-slate-600 dark:text-slate-400">{a.notes ?? '—'}</td>
-                                    <td className="py-2 pr-2 text-right">
+                                    <td className="py-2 pr-2 text-right tabular-nums" data-label="Valor">{formatCurrency(a.amount)}</td>
+                                    <td className="py-2 pr-2 text-slate-600 dark:text-slate-400" data-label="Nota">{a.notes ?? '—'}</td>
+                                    <td className="py-2 pr-2 text-right" data-label="Acciones">
                                         {canManageConceptAdjustments ? (
                                             <div className="flex justify-end gap-1">
                                                 <Button
@@ -553,7 +553,7 @@ export default function PayrollShow({
                                                                     <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">No hay sesiones registradas.</p>
                                                                 ) : (
                                                                     <div className="mt-2 overflow-x-auto">
-                                                                        <table className="w-full min-w-[640px] text-left text-sm">
+                                                                        <table className="responsive-table w-full min-w-[640px] text-left text-sm">
                                                                             <thead>
                                                                                 <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-700">
                                                                                     <th className="py-2 pr-2">Fecha</th>
@@ -578,20 +578,20 @@ export default function PayrollShow({
                                                                                     };
                                                                                     return (
                                                                                         <tr key={s.id} className="border-b border-slate-100 dark:border-slate-800">
-                                                                                            <td className="py-2 pr-2">{formatDate(s.work_date)}</td>
-                                                                                            <td className="py-2 pr-2 capitalize">{s.status}</td>
-                                                                                            <td className="py-2 pr-2">
+                                                                                            <td className="py-2 pr-2" data-label="Fecha">{formatDate(s.work_date)}</td>
+                                                                                            <td className="py-2 pr-2 capitalize" data-label="Estado">{s.status}</td>
+                                                                                            <td className="py-2 pr-2" data-label="Entrada">
                                                                                                 {s.clock_in_at
                                                                                                     ? new Date(s.clock_in_at).toLocaleString()
                                                                                                     : '—'}
                                                                                             </td>
-                                                                                            <td className="py-2 pr-2">
+                                                                                            <td className="py-2 pr-2" data-label="Salida">
                                                                                                 {s.clock_out_at
                                                                                                     ? new Date(s.clock_out_at).toLocaleString()
                                                                                                     : '—'}
                                                                                             </td>
-                                                                                            <td className="py-2 pr-2">{s.duration_minutes ?? '—'}</td>
-                                                                                            <td className="py-2 pr-2">
+                                                                                            <td className="py-2 pr-2" data-label="Minutos">{s.duration_minutes ?? '—'}</td>
+                                                                                            <td className="py-2 pr-2" data-label="Ajuste min.">
                                                                                                 {canEditRow ? (
                                                                                                     <Input
                                                                                                         containerClassName="!mb-0"
@@ -612,7 +612,7 @@ export default function PayrollShow({
                                                                                                     '—'
                                                                                                 )}
                                                                                             </td>
-                                                                                            <td className="py-2 pr-2">
+                                                                                            <td className="py-2 pr-2" data-label="Motivo">
                                                                                                 {canEditRow ? (
                                                                                                     <Input
                                                                                                         containerClassName="!mb-0"
@@ -646,7 +646,7 @@ export default function PayrollShow({
                                                                 <div>
                                                                     <p className="text-xs font-semibold uppercase text-slate-500">Liquidacion por dia (calculada)</p>
                                                                     <div className="mt-2 overflow-x-auto">
-                                                                        <table className="w-full min-w-[560px] text-left text-sm">
+                                                                        <table className="responsive-table w-full min-w-[560px] text-left text-sm">
                                                                             <thead>
                                                                                 <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-700">
                                                                                     <th className="py-2 pr-2">Fecha</th>
@@ -658,10 +658,10 @@ export default function PayrollShow({
                                                                             <tbody>
                                                                                 {row.validated_work_days.map((d) => (
                                                                                     <tr key={`${d.work_date}-${d.session_id}`} className="border-b border-slate-100 dark:border-slate-800">
-                                                                                        <td className="py-2 pr-2">{formatDate(d.work_date)}</td>
-                                                                                        <td className="py-2 pr-2">{d.duration_minutes}</td>
-                                                                                        <td className="py-2 pr-2">{d.effective_minutes}</td>
-                                                                                        <td className="py-2 pr-2 text-right">{formatCurrency(d.day_earnings)}</td>
+                                                                                        <td className="py-2 pr-2" data-label="Fecha">{formatDate(d.work_date)}</td>
+                                                                                        <td className="py-2 pr-2" data-label="Minutos">{d.duration_minutes}</td>
+                                                                                        <td className="py-2 pr-2" data-label="Efectivos">{d.effective_minutes}</td>
+                                                                                        <td className="py-2 pr-2 text-right" data-label="Valor dia">{formatCurrency(d.day_earnings)}</td>
                                                                                     </tr>
                                                                                 ))}
                                                                             </tbody>
@@ -679,7 +679,7 @@ export default function PayrollShow({
                                                                         listadas aqui son referencia del periodo (no se suman al total de la columna Producido).
                                                                     </p>
                                                                     <div className="mt-2 overflow-x-auto">
-                                                                        <table className="w-full min-w-[720px] text-left text-sm">
+                                                                        <table className="responsive-table w-full min-w-[720px] text-left text-sm">
                                                                             <thead>
                                                                                 <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-700">
                                                                                     <th className="py-2 pr-2">Fecha</th>
@@ -693,16 +693,16 @@ export default function PayrollShow({
                                                                             <tbody>
                                                                                 {empProductions.map((p) => (
                                                                                     <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800">
-                                                                                        <td className="py-2 pr-2">{formatDate(p.date)}</td>
-                                                                                        <td className="py-2 pr-2">
+                                                                                        <td className="py-2 pr-2" data-label="Fecha">{formatDate(p.date)}</td>
+                                                                                        <td className="py-2 pr-2" data-label="Referencia">
                                                                                             {p.reference ? `${p.reference.code} · ${p.reference.name}` : '—'}
                                                                                         </td>
-                                                                                        <td className="py-2 pr-2">{p.operation?.name ?? '—'}</td>
-                                                                                        <td className="py-2 pr-2 text-right tabular-nums">{p.quantity}</td>
-                                                                                        <td className="py-2 pr-2 text-right tabular-nums">
+                                                                                        <td className="py-2 pr-2" data-label="Operacion">{p.operation?.name ?? '—'}</td>
+                                                                                        <td className="py-2 pr-2 text-right tabular-nums" data-label="Cantidad">{p.quantity}</td>
+                                                                                        <td className="py-2 pr-2 text-right tabular-nums" data-label="Valor">
                                                                                             {formatCurrency(p.total_value)}
                                                                                         </td>
-                                                                                        <td className="py-2 pr-2 capitalize">{p.status}</td>
+                                                                                        <td className="py-2 pr-2 capitalize" data-label="Estado">{p.status}</td>
                                                                                     </tr>
                                                                                 ))}
                                                                             </tbody>
@@ -728,7 +728,7 @@ export default function PayrollShow({
                                                                 </p>
                                                             ) : (
                                                                 <div className="mt-2 overflow-x-auto">
-                                                                    <table className="w-full min-w-[720px] text-left text-sm">
+                                                                    <table className="responsive-table w-full min-w-[720px] text-left text-sm">
                                                                         <thead>
                                                                             <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-700">
                                                                                 <th className="py-2 pr-2">Fecha</th>
@@ -742,16 +742,16 @@ export default function PayrollShow({
                                                                         <tbody>
                                                                             {empProductions.map((p) => (
                                                                                 <tr key={p.id} className="border-b border-slate-100 dark:border-slate-800">
-                                                                                    <td className="py-2 pr-2">{formatDate(p.date)}</td>
-                                                                                    <td className="py-2 pr-2">
+                                                                                    <td className="py-2 pr-2" data-label="Fecha">{formatDate(p.date)}</td>
+                                                                                    <td className="py-2 pr-2" data-label="Referencia">
                                                                                         {p.reference ? `${p.reference.code} · ${p.reference.name}` : '—'}
                                                                                     </td>
-                                                                                    <td className="py-2 pr-2">{p.operation?.name ?? '—'}</td>
-                                                                                    <td className="py-2 pr-2 text-right tabular-nums">{p.quantity}</td>
-                                                                                    <td className="py-2 pr-2 text-right tabular-nums">
+                                                                                    <td className="py-2 pr-2" data-label="Operacion">{p.operation?.name ?? '—'}</td>
+                                                                                    <td className="py-2 pr-2 text-right tabular-nums" data-label="Cantidad">{p.quantity}</td>
+                                                                                    <td className="py-2 pr-2 text-right tabular-nums" data-label="Valor">
                                                                                         {formatCurrency(p.total_value)}
                                                                                     </td>
-                                                                                    <td className="py-2 pr-2 capitalize">{p.status}</td>
+                                                                                    <td className="py-2 pr-2 capitalize" data-label="Estado">{p.status}</td>
                                                                                 </tr>
                                                                             ))}
                                                                         </tbody>

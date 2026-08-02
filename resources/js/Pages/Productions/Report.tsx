@@ -95,7 +95,7 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
                     <Card>
                         <CardHeader title="Por empleado" />
-                        <table className="mt-4 w-full text-sm">
+                        <table className="responsive-table mt-4 w-full text-sm">
                             <thead className="border-b border-slate-200 dark:border-slate-700">
                                 <tr className="text-left text-xs uppercase text-slate-500">
                                     <th className="py-2">Empleado</th>
@@ -109,11 +109,11 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                                 ) : (
                                     byEmployee.data.map((row) => (
                                         <tr key={`emp-${row.employee_id}`}>
-                                            <td className="py-2">
+                                            <td className="py-2" data-label="Empleado">
                                                 {row.employee?.first_name} {row.employee?.last_name}
                                             </td>
-                                            <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
-                                            <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
+                                            <td className="py-2 text-right" data-label="Cantidad">{formatNumber(row.total_quantity)}</td>
+                                            <td className="py-2 text-right font-medium" data-label="Valor">{formatCurrency(row.total_value)}</td>
                                         </tr>
                                     ))
                                 )}
@@ -124,7 +124,7 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
 
                     <Card>
                         <CardHeader title="Por referencia" />
-                        <table className="mt-4 w-full text-sm">
+                        <table className="responsive-table mt-4 w-full text-sm">
                             <thead className="border-b border-slate-200 dark:border-slate-700">
                                 <tr className="text-left text-xs uppercase text-slate-500">
                                     <th className="py-2">Referencia</th>
@@ -138,11 +138,11 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                                 ) : (
                                     byReference.data.map((row) => (
                                         <tr key={`ref-${row.reference_id}`}>
-                                            <td className="py-2">
+                                            <td className="py-2" data-label="Referencia">
                                                 {row.reference?.code} - {row.reference?.name}
                                             </td>
-                                            <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
-                                            <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
+                                            <td className="py-2 text-right" data-label="Cantidad">{formatNumber(row.total_quantity)}</td>
+                                            <td className="py-2 text-right font-medium" data-label="Valor">{formatCurrency(row.total_value)}</td>
                                         </tr>
                                     ))
                                 )}
@@ -158,7 +158,7 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
 
                     <Card className="lg:col-span-2">
                         <CardHeader title="Por operacion" />
-                        <table className="mt-4 w-full text-sm">
+                        <table className="responsive-table mt-4 w-full text-sm">
                             <thead className="border-b border-slate-200 dark:border-slate-700">
                                 <tr className="text-left text-xs uppercase text-slate-500">
                                     <th className="py-2">Operacion</th>
@@ -172,9 +172,9 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                                 ) : (
                                     byOperation.data.map((row) => (
                                         <tr key={`op-${row.operation_id}`}>
-                                            <td className="py-2">{row.operation?.name}</td>
-                                            <td className="py-2 text-right">{formatNumber(row.total_quantity)}</td>
-                                            <td className="py-2 text-right font-medium">{formatCurrency(row.total_value)}</td>
+                                            <td className="py-2" data-label="Operacion">{row.operation?.name}</td>
+                                            <td className="py-2 text-right" data-label="Cantidad">{formatNumber(row.total_quantity)}</td>
+                                            <td className="py-2 text-right font-medium" data-label="Valor">{formatCurrency(row.total_value)}</td>
                                         </tr>
                                     ))
                                 )}

@@ -84,7 +84,7 @@ export function ReferenceUnitEconomicsCard({
                 ) : null}
 
                 <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                    <table className="w-full min-w-[280px] text-sm">
+                    <table className="responsive-table w-full min-w-[280px] text-sm">
                         <thead className="bg-slate-50 dark:bg-slate-900/50">
                             <tr className="text-left text-xs font-medium uppercase tracking-wider text-slate-500">
                                 <th className="px-3 py-2">Concepto</th>
@@ -93,24 +93,25 @@ export function ReferenceUnitEconomicsCard({
                         </thead>
                         <tbody className="divide-y divide-slate-100 dark:divide-slate-700/60">
                             <tr>
-                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300">Precio de pago (unitario)</td>
-                                <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300" data-label="Concepto">Precio de pago (unitario)</td>
+                                <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-900 dark:text-slate-100" data-label="Unitario">
                                     {formatCurrency(paymentPerUnit, currency)}
                                 </td>
                             </tr>
                             <tr>
-                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300">Costo operacional fijo (u.)</td>
-                                <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300" data-label="Concepto">Costo operacional fijo (u.)</td>
+                                <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-900 dark:text-slate-100" data-label="Unitario">
                                     {showCostFigures ? formatCurrency(productionCostPerUnit, currency) : '—'}
                                 </td>
                             </tr>
                             <tr>
-                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300">Margen unitario</td>
+                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300" data-label="Concepto">Margen unitario</td>
                                 <td
                                     className={cn(
                                         'px-3 py-2 text-right font-semibold tabular-nums',
                                         marginPerUnit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400',
                                     )}
+                                    data-label="Unitario"
                                 >
                                     {showCostFigures ? formatCurrency(marginPerUnit, currency) : '—'}
                                     {marginPctOnPayment != null && showCostFigures ? (

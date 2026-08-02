@@ -126,7 +126,7 @@ export default function ReferenceShow({ reference, allOperations, comparison }: 
                     </div>
 
                     <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                        <table className="w-full text-sm">
+                        <table className="responsive-table w-full text-sm">
                             <thead className="bg-slate-50 dark:bg-slate-900/50">
                                 <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
                                     <th className="px-4 py-2">Operacion</th>
@@ -141,12 +141,12 @@ export default function ReferenceShow({ reference, allOperations, comparison }: 
                                 ) : (
                                     attached.map((op) => (
                                         <tr key={op.id}>
-                                            <td className="px-4 py-2">{op.name}</td>
-                                            <td className="px-4 py-2 text-right font-medium">{formatCurrency(op.pivot.price)}</td>
-                                            <td className="px-4 py-2 text-center">
+                                            <td className="px-4 py-2" data-label="Operacion">{op.name}</td>
+                                            <td className="px-4 py-2 text-right font-medium" data-label="Precio">{formatCurrency(op.pivot.price)}</td>
+                                            <td className="px-4 py-2 text-center" data-label="Estado">
                                                 <Badge variant={op.pivot.is_active ? 'success' : 'danger'}>{op.pivot.is_active ? 'Activa' : 'Inactiva'}</Badge>
                                             </td>
-                                            <td className="px-4 py-2 text-right">
+                                            <td className="px-4 py-2 text-right" data-label="">
                                                 <Button variant="ghost" size="sm" icon={<TrashIcon className="h-4 w-4 text-rose-500" />} onClick={() => handleDetach(op.id)} />
                                             </td>
                                         </tr>

@@ -195,7 +195,7 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
                         }
                     />
                     <div className="mt-4 min-h-0 flex-1 overflow-auto">
-                        <table className="w-full min-w-[640px] text-sm">
+                        <table className="responsive-table w-full min-w-[640px] text-sm">
                             <thead>
                                 <tr className="border-b border-slate-200 text-left text-xs font-semibold uppercase tracking-wider text-slate-500 dark:border-slate-700 dark:text-slate-400">
                                     <th className="pb-3 pr-2">Empresa</th>
@@ -215,15 +215,15 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
                                 ) : (
                                     stats.memberships.map((row) => (
                                         <tr key={row.id} className="text-slate-800 dark:text-slate-100">
-                                            <td className="py-3 pr-2 align-top font-medium">{row.name}</td>
-                                            <td className="py-3 pr-2 align-top text-slate-600 dark:text-slate-400">{row.plan_name}</td>
-                                            <td className="py-3 pr-2 align-top text-slate-600 dark:text-slate-400">
+                                            <td className="py-3 pr-2 align-top font-medium" data-label="Empresa">{row.name}</td>
+                                            <td className="py-3 pr-2 align-top text-slate-600 dark:text-slate-400" data-label="Plan">{row.plan_name}</td>
+                                            <td className="py-3 pr-2 align-top text-slate-600 dark:text-slate-400" data-label="Fin membresía">
                                                 {row.membership_ends_at ? formatDate(row.membership_ends_at) : '—'}
                                             </td>
-                                            <td className="py-3 px-2 text-center align-top">
+                                            <td className="py-3 px-2 text-center align-top" data-label="Vencimiento">
                                                 <Badge variant={membershipBadgeVariant(row.badge)}>{membershipBadgeLabel(row.badge)}</Badge>
                                             </td>
-                                            <td className="py-3 px-2 text-center align-top">
+                                            <td className="py-3 px-2 text-center align-top" data-label="Estado">
                                                 <Badge variant={row.is_active ? 'success' : 'neutral'}>
                                                     {row.is_active ? 'Empresa activa' : 'Inactiva'}
                                                 </Badge>
