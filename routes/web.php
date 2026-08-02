@@ -4,6 +4,8 @@ use App\Http\Controllers\AdvanceController;
 use App\Http\Controllers\BankController;
 use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\DashboardLayoutController;
+use App\Http\Controllers\DashboardWidgetDataController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
@@ -21,6 +23,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SuperAdmin\ActiveCompanyController;
+use App\Http\Controllers\SuperAdmin\DashboardWidgetController;
 use App\Http\Controllers\SuperAdmin\DataImportController;
 use App\Http\Controllers\SuperAdmin\LandingCmsController;
 use App\Http\Controllers\SuperAdmin\MembershipPlanController;
@@ -42,6 +45,14 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])
         ->name('dashboard')
+        ->middleware('permission:dashboard.index.view');
+
+    Route::get('/dashboard/widgets/{widget}/data', [DashboardWidgetDataController::class, 'show'])
+        ->name('dashboard.widgets.data')
+        ->middleware('permission:dashboard.index.view');
+
+    Route::put('/dashboard/layout', [DashboardLayoutController::class, 'update'])
+        ->name('dashboard.layout.update')
         ->middleware('permission:dashboard.index.view');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
@@ -187,6 +198,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::put('landing/globals', [LandingCmsController::class, 'updateGlobals'])->name('landing.globals');
 
         Route::resource('membership-plans', MembershipPlanController::class)->except(['show']);
+
+        Route::post('dashboard-widgets/preview', [DashboardWidgetController::class, 'preview'])->name('dashboard-widgets.preview');
+        Route::put('dashboard-widgets/{dashboard_widget}/visibility', [DashboardWidgetController::class, 'updateVisibility'])->name('dashboard-widgets.visibility');
+        Route::resource('dashboard-widgets', DashboardWidgetController::class)->except(['show']);
     });
 });
 

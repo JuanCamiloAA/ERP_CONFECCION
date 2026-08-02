@@ -36,6 +36,7 @@ class User extends Authenticatable
         'is_active',
         'last_login_at',
         'password_change_required',
+        'dashboard_layout',
     ];
 
     protected $hidden = [
@@ -51,6 +52,7 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'password_change_required' => 'boolean',
             'last_login_at' => 'datetime',
+            'dashboard_layout' => 'array',
         ];
     }
 

@@ -195,6 +195,19 @@ class PermissionHelper
                     ],
                 ],
             ],
+            'dashboard_builder' => [
+                'display' => 'Constructor de Dashboards',
+                'icon' => 'Cog6ToothIcon',
+                'order' => 88,
+                'super_admin_only' => true,
+                'pages' => [
+                    'index' => [
+                        'display' => 'Widgets de Dashboard',
+                        'route' => 'super-admin.dashboard-widgets.index',
+                        'actions' => ['view', 'create', 'edit', 'delete'],
+                    ],
+                ],
+            ],
             'users' => [
                 'display' => 'Usuarios',
                 'icon' => 'UserGroupIcon',

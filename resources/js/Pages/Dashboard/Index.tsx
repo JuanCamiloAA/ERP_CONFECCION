@@ -1,5 +1,5 @@
 import type { ReactElement } from 'react';
-import type { CompanyAdminStats, DashboardVariant, EmployeeStats, SuperAdminStats } from './dashboard-types';
+import type { CompanyAdminStats, CustomWidgetMeta, DashboardLayout, DashboardVariant, EmployeeStats, SuperAdminStats } from './dashboard-types';
 import { Head } from '@inertiajs/react';
 import { BuildingOfficeIcon } from '@heroicons/react/24/outline';
 import { EmptyState } from '@/Components/UI/EmptyState';
@@ -12,9 +12,19 @@ interface Props {
     variant: DashboardVariant | null | undefined;
     stats: SuperAdminStats | CompanyAdminStats | EmployeeStats | null | undefined;
     requireCompany: boolean | undefined;
+    customWidgets?: CustomWidgetMeta[];
+    layoutVariant?: string;
+    dashboardLayout?: DashboardLayout;
 }
 
-export default function Dashboard({ variant = null, stats = null, requireCompany = false }: Props) {
+export default function Dashboard({
+    variant = null,
+    stats = null,
+    requireCompany = false,
+    customWidgets = [],
+    layoutVariant,
+    dashboardLayout = [],
+}: Props) {
     if (requireCompany || stats == null) {
         return (
             <AppLayout title="Dashboard">
@@ -31,13 +41,34 @@ export default function Dashboard({ variant = null, stats = null, requireCompany
     let content: ReactElement | null = null;
     switch (variant) {
         case 'super_admin':
-            content = <SuperAdminOverview stats={stats as SuperAdminStats} />;
+            content = (
+                <SuperAdminOverview
+                    stats={stats as SuperAdminStats}
+                    customWidgets={customWidgets}
+                    layoutVariant={layoutVariant}
+                    dashboardLayout={dashboardLayout}
+                />
+            );
             break;
         case 'company_admin':
-            content = <CompanyAdminOverview stats={stats as CompanyAdminStats} />;
+            content = (
+                <CompanyAdminOverview
+                    stats={stats as CompanyAdminStats}
+                    customWidgets={customWidgets}
+                    layoutVariant={layoutVariant}
+                    dashboardLayout={dashboardLayout}
+                />
+            );
             break;
         case 'employee':
-            content = <EmployeeOverview stats={stats as EmployeeStats} />;
+            content = (
+                <EmployeeOverview
+                    stats={stats as EmployeeStats}
+                    customWidgets={customWidgets}
+                    layoutVariant={layoutVariant}
+                    dashboardLayout={dashboardLayout}
+                />
+            );
             break;
         default:
             content = (

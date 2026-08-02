@@ -53,6 +53,7 @@ const moduleIcons: Record<string, typeof HomeIcon> = {
     users: UserGroupIcon,
     roles: ShieldCheckIcon,
     settings: Cog6ToothIcon,
+    dashboard_builder: Cog6ToothIcon,
 };
 
 interface NavItem {
@@ -85,6 +86,7 @@ const moduleSections: Record<string, NavItem['section']> = {
     users: 'admin',
     roles: 'admin',
     settings: 'admin',
+    dashboard_builder: 'admin',
 };
 
 const moduleLabels: Record<string, string> = {
@@ -104,6 +106,7 @@ const moduleLabels: Record<string, string> = {
     users: 'Usuarios',
     roles: 'Roles y Permisos',
     settings: 'Mi empresa',
+    dashboard_builder: 'Constructor de Dashboards',
 };
 
 const moduleRoutes: Record<string, string> = {
@@ -123,6 +126,7 @@ const moduleRoutes: Record<string, string> = {
     users: 'users.index',
     roles: 'roles.index',
     settings: 'settings.index',
+    dashboard_builder: 'super-admin.dashboard-widgets.index',
 };
 
 const sectionTitles: Record<NavItem['section'], string> = {

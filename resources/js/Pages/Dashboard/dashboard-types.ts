@@ -1,3 +1,7 @@
+export type { CustomWidgetMeta } from '@/Components/Dashboard/CustomWidgetPanel';
+export type { WidgetDataPayload } from '@/Components/DashboardBuilder/dashboard-builder-types';
+export type { Layout as DashboardLayout } from 'react-grid-layout/legacy';
+
 export type DashboardVariant = 'super_admin' | 'company_admin' | 'employee' | null;
 
 export interface MembershipRow {
