@@ -92,6 +92,11 @@ class PermissionHelper
                         'route' => 'productions.report',
                         'actions' => ['view', 'export'],
                     ],
+                    'ranking' => [
+                        'display' => 'Ranking de Produccion',
+                        'route' => 'productions.ranking',
+                        'actions' => ['view'],
+                    ],
                 ],
             ],
             'payrolls' => [
@@ -120,6 +125,30 @@ class PermissionHelper
                         'display' => 'Conceptos de nomina',
                         'route' => 'payroll-concepts.index',
                         'actions' => ['view', 'create', 'edit', 'delete'],
+                    ],
+                ],
+            ],
+            'payroll_legal_parameters' => [
+                'display' => 'Parametros Legales de Nomina',
+                'icon' => 'ScaleIcon',
+                'order' => 7.6,
+                'pages' => [
+                    'index' => [
+                        'display' => 'Parametros Legales',
+                        'route' => 'payroll-legal-parameters.index',
+                        'actions' => ['view', 'create', 'edit', 'delete'],
+                    ],
+                ],
+            ],
+            'holidays' => [
+                'display' => 'Festivos',
+                'icon' => 'CalendarDaysIcon',
+                'order' => 7.7,
+                'pages' => [
+                    'index' => [
+                        'display' => 'Festivos',
+                        'route' => 'holidays.index',
+                        'actions' => ['view', 'create', 'delete', 'sync'],
                     ],
                 ],
             ],
@@ -320,6 +349,7 @@ class PermissionHelper
                     'productions.index.workday_start',
                     'productions.index.workday_close',
                     'productions.report.view',
+                    'productions.ranking.view',
                     'payrolls.index.view',
                     'payrolls.show.view',
                 ];

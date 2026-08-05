@@ -39,6 +39,43 @@ class ProductionReportService
             ->get();
     }
 
+    /**
+     * Ranking de empleados por unidades producidas, ponderadas por el grado de dificultad de cada
+     * operacion (el de la referencia si esta definido, si no el del dato maestro de la operacion).
+     */
+    public function rankingByEmployee(string $start, string $end, ?int $companyId = null, bool $onlyConfirmed = false): Collection
+    {
+        $query = Production::query();
+
+        if ($companyId) {
+            $query->withoutGlobalScope(CompanyScope::class)->where('productions.company_id', $companyId);
+        }
+
+        $query->whereBetween('productions.date', [$start, $end]);
+
+        if ($onlyConfirmed) {
+            $query->where('productions.status', Production::STATUS_CONFIRMED);
+        }
+
+        return $query
+            ->join('operations', 'operations.id', '=', 'productions.operation_id')
+            ->leftJoin('reference_operations', function ($join) {
+                $join->on('reference_operations.reference_id', '=', 'productions.reference_id')
+                    ->on('reference_operations.operation_id', '=', 'productions.operation_id');
+            })
+            ->selectRaw(
+                'productions.employee_id as employee_id, '.
+                'SUM(productions.quantity) as total_quantity, '.
+                'SUM(productions.total_value) as total_value, '.
+                'SUM(productions.quantity * COALESCE(reference_operations.difficulty_level, operations.difficulty_level, 1)) as total_points, '.
+                'COUNT(*) as records'
+            )
+            ->groupBy('productions.employee_id')
+            ->with('employee:id,first_name,last_name,document_number,photo')
+            ->orderByDesc('total_points')
+            ->get();
+    }
+
     public function summary(string $start, string $end, ?int $companyId = null, ?int $employeeId = null, bool $onlyConfirmed = false): array
     {
         $row = $this->baseQuery($start, $end, $companyId, $employeeId, $onlyConfirmed)

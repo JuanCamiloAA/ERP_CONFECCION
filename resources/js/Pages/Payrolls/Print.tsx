@@ -14,11 +14,18 @@ export default function PayrollPrint({ payroll }: Props) {
 
     const rows = payroll.payroll_employees ?? [];
     const showDaily = rows.some((r) => Number(r.daily_work_subtotal ?? 0) > 0);
+    const showLegal = rows.some((r) => Number(r.legal_hourly_subtotal ?? 0) > 0);
     const totalProduction = rows.reduce((s, r) => s + Number(r.production_total), 0);
     const totalDaily = rows.reduce((s, r) => s + Number(r.daily_work_subtotal ?? 0), 0);
+    const totalLegal = rows.reduce((s, r) => s + Number(r.legal_hourly_subtotal ?? 0), 0);
     const totalAdjustments = rows.reduce((s, r) => s + Number(r.adjustments_subtotal ?? 0), 0);
     const totalGross = rows.reduce(
-        (s, r) => s + Number(r.production_total) + Number(r.daily_work_subtotal ?? 0) + Number(r.adjustments_subtotal ?? 0),
+        (s, r) =>
+            s +
+            Number(r.production_total) +
+            Number(r.daily_work_subtotal ?? 0) +
+            Number(r.legal_hourly_subtotal ?? 0) +
+            Number(r.adjustments_subtotal ?? 0),
         0,
     );
     const totalAdvances = rows.reduce((s, r) => s + Number(r.advances_discount), 0);
@@ -60,6 +67,7 @@ export default function PayrollPrint({ payroll }: Props) {
                             <th className="px-2 py-2">Documento</th>
                             <th className="px-2 py-2 text-right">Producido</th>
                             {showDaily ? <th className="px-2 py-2 text-right">Jornada</th> : null}
+                            {showLegal ? <th className="px-2 py-2 text-right">Legal (horas)</th> : null}
                             <th className="px-2 py-2 text-right">Ajustes</th>
                             <th className="px-2 py-2 text-right">Bruto</th>
                             <th className="px-2 py-2 text-right">Deducciones</th>
@@ -73,6 +81,7 @@ export default function PayrollPrint({ payroll }: Props) {
                             const gross =
                                 Number(row.production_total) +
                                 Number(row.daily_work_subtotal ?? 0) +
+                                Number(row.legal_hourly_subtotal ?? 0) +
                                 Number(row.adjustments_subtotal ?? 0);
                             return (
                                 <tr key={row.id} className="border-b border-slate-200">
@@ -81,6 +90,9 @@ export default function PayrollPrint({ payroll }: Props) {
                                     <td className="px-2 py-2 text-right">{formatCurrency(row.production_total)}</td>
                                     {showDaily ? (
                                         <td className="px-2 py-2 text-right">{formatCurrency(row.daily_work_subtotal ?? 0)}</td>
+                                    ) : null}
+                                    {showLegal ? (
+                                        <td className="px-2 py-2 text-right">{formatCurrency(row.legal_hourly_subtotal ?? 0)}</td>
                                     ) : null}
                                     <td className="px-2 py-2 text-right">{formatCurrency(row.adjustments_subtotal ?? 0)}</td>
                                     <td className="px-2 py-2 text-right font-medium">{formatCurrency(gross)}</td>
@@ -96,6 +108,7 @@ export default function PayrollPrint({ payroll }: Props) {
                             <td colSpan={2} className="px-2 py-2 text-right text-xs uppercase">Totales</td>
                             <td className="px-2 py-2 text-right">{formatCurrency(totalProduction)}</td>
                             {showDaily ? <td className="px-2 py-2 text-right">{formatCurrency(totalDaily)}</td> : null}
+                            {showLegal ? <td className="px-2 py-2 text-right">{formatCurrency(totalLegal)}</td> : null}
                             <td className="px-2 py-2 text-right">{formatCurrency(totalAdjustments)}</td>
                             <td className="px-2 py-2 text-right font-medium">{formatCurrency(totalGross)}</td>
                             <td className="px-2 py-2 text-right">{formatCurrency(totalDeductions)}</td>
@@ -104,6 +117,50 @@ export default function PayrollPrint({ payroll }: Props) {
                         </tr>
                     </tfoot>
                 </table>
+
+                {showLegal && (
+                    <div className="mt-8">
+                        <h3 className="mb-2 text-sm font-semibold uppercase text-slate-600">
+                            Desglose modalidad por horas (legal)
+                        </h3>
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="border-b border-slate-300 bg-slate-100 text-left">
+                                    <th className="px-2 py-1.5">Empleado</th>
+                                    <th className="px-2 py-1.5 text-right">Salario base</th>
+                                    <th className="px-2 py-1.5 text-right">Recargo nocturno</th>
+                                    <th className="px-2 py-1.5 text-right">Recargo dom/festivo</th>
+                                    <th className="px-2 py-1.5 text-right">Horas extra</th>
+                                    <th className="px-2 py-1.5 text-right">Subtotal legal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {rows
+                                    .filter((r) => Number(r.legal_hourly_subtotal ?? 0) > 0)
+                                    .map((row) => (
+                                        <tr key={row.id} className="border-b border-slate-200">
+                                            <td className="px-2 py-1.5">{row.employee?.first_name} {row.employee?.last_name}</td>
+                                            <td className="px-2 py-1.5 text-right">
+                                                {formatCurrency(row.legal_hours_breakdown?.base_salary_earned ?? 0)}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right">
+                                                {formatCurrency(row.legal_hours_breakdown?.night_surcharge_amount ?? 0)}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right">
+                                                {formatCurrency(row.legal_hours_breakdown?.sunday_holiday_surcharge_amount ?? 0)}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right">
+                                                {formatCurrency(row.legal_hours_breakdown?.overtime_amount ?? 0)}
+                                            </td>
+                                            <td className="px-2 py-1.5 text-right font-medium">
+                                                {formatCurrency(row.legal_hourly_subtotal ?? 0)}
+                                            </td>
+                                        </tr>
+                                    ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
 
                 <div className="mt-12 grid grid-cols-2 gap-12 text-sm">
                     <div className="border-t border-slate-300 pt-2 text-center">

@@ -25,6 +25,7 @@ class StoreOperationRequest extends FormRequest
             ],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
+            'estimated_minutes' => ['required', 'numeric', 'min:0.01', 'max:9999.99'],
             'is_active' => ['nullable', 'boolean'],
         ];
     }
@@ -35,6 +36,8 @@ class StoreOperationRequest extends FormRequest
             'name.required' => 'El nombre es obligatorio.',
             'name.unique' => 'Ya existe una operacion con ese nombre.',
             'base_price.required' => 'El precio base es obligatorio.',
+            'estimated_minutes.required' => 'Indica los minutos estandar de la operacion.',
+            'estimated_minutes.min' => 'Los minutos deben ser mayores a 0.',
         ];
     }
 }

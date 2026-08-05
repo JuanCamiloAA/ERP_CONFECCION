@@ -32,6 +32,7 @@ class StoreReferenceRequest extends FormRequest
             'operations' => ['nullable', 'array'],
             'operations.*.operation_id' => ['required', 'integer', 'exists:operations,id'],
             'operations.*.price' => ['required', 'numeric', 'min:0'],
+            'operations.*.estimated_minutes' => ['nullable', 'numeric', 'min:0.01', 'max:9999.99'],
         ];
     }
 

@@ -21,7 +21,7 @@ export function formatCurrency(
         style: 'currency',
         currency,
         minimumFractionDigits: 0,
-        maximumFractionDigits: 0,
+        maximumFractionDigits: 2,
     }).format(value);
 }
 

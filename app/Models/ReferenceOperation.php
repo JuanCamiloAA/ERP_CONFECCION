@@ -11,11 +11,15 @@ class ReferenceOperation extends Model
         'reference_id',
         'operation_id',
         'price',
+        'estimated_minutes',
+        'difficulty_level',
         'is_active',
     ];
 
     protected $casts = [
         'price' => 'decimal:2',
+        'estimated_minutes' => 'decimal:2',
+        'difficulty_level' => 'integer',
         'is_active' => 'boolean',
     ];
 

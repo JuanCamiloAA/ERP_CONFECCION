@@ -61,6 +61,7 @@ class CompanyDefaultRolesService
             'productions.index.workday_others',
             'productions.report.view',
             'productions.report.export',
+            'productions.ranking.view',
             'reports.production.view',
             'reports.production.export',
         ]);
@@ -93,6 +94,8 @@ class CompanyDefaultRolesService
             'payroll_concepts.index.view',
             'payroll_concepts.index.create',
             'payroll_concepts.index.edit',
+            'payroll_legal_parameters.index.view',
+            'holidays.index.view',
             'banks.index.view',
             'banks.index.create',
             'banks.index.edit',

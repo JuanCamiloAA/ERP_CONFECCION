@@ -1,6 +1,7 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import { BuildingOffice2Icon, CheckIcon, MinusCircleIcon, PhotoIcon, PlusIcon } from '@heroicons/react/24/outline';
 import { FormEvent, useMemo, useState } from 'react';
+import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
@@ -9,6 +10,7 @@ import { Select } from '@/Components/UI/Select';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
 import { mediaUrl } from '@/lib/mediaUrl';
+import { DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS, DIFFICULTY_LABELS } from '@/lib/difficulty';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import type { Company } from '@/types';
 
@@ -22,6 +24,7 @@ interface SettingsData {
     currency: string;
     payroll_periodicity: string;
     default_deductions: Deduction[];
+    difficulty_minute_thresholds: number[];
 }
 
 interface SettingsFormData {
@@ -61,6 +64,7 @@ export default function SettingsIndex({ company, settings }: Props) {
             currency: settings.currency ?? 'COP',
             payroll_periodicity: settings.payroll_periodicity ?? 'quincenal',
             default_deductions: settings.default_deductions ?? [],
+            difficulty_minute_thresholds: settings.difficulty_minute_thresholds ?? DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS,
         },
     });
 
@@ -72,6 +76,12 @@ export default function SettingsIndex({ company, settings }: Props) {
 
     const updateSettings = (next: Partial<SettingsData>) => {
         setData('settings', { ...data.settings, ...next });
+    };
+
+    const updateThreshold = (index: number, value: number) => {
+        const arr = [...data.settings.difficulty_minute_thresholds];
+        arr[index] = value;
+        updateSettings({ difficulty_minute_thresholds: arr });
     };
 
     const updateDeduction = (index: number, patch: Partial<Deduction>) => {
@@ -277,6 +287,46 @@ export default function SettingsIndex({ company, settings }: Props) {
                                     </div>
                                 </div>
                             ))
+                        )}
+                    </div>
+                </Card>
+
+                <Card>
+                    <CardHeader
+                        title="Dificultad por minutos"
+                        description="Define, en minutos, hasta donde llega cada grado de dificultad. El grado de cada operacion se calcula solo con estos rangos (no se elige a mano)."
+                    />
+                    <div className="mt-4 space-y-2">
+                        {data.settings.difficulty_minute_thresholds.map((value, index) => (
+                            <div key={index} className="flex items-center gap-3">
+                                <Badge variant="info" className="w-28 shrink-0 justify-center">
+                                    {index + 1} - {DIFFICULTY_LABELS[index + 1]}
+                                </Badge>
+                                <span className="text-sm text-slate-500 dark:text-slate-400">Hasta</span>
+                                <Input
+                                    type="number"
+                                    step="0.1"
+                                    min={0.1}
+                                    value={String(value)}
+                                    onChange={(e) => updateThreshold(index, parseFloat(e.target.value) || 0)}
+                                    suffix="min"
+                                    containerClassName="w-36"
+                                    disabled={!canEdit}
+                                />
+                            </div>
+                        ))}
+                        <div className="flex items-center gap-3">
+                            <Badge variant="warning" className="w-28 shrink-0 justify-center">
+                                5 - {DIFFICULTY_LABELS[5]}
+                            </Badge>
+                            <span className="text-sm text-slate-500 dark:text-slate-400">
+                                Mas de {data.settings.difficulty_minute_thresholds[3]} min
+                            </span>
+                        </div>
+                        {(errors as Record<string, string>)['settings.difficulty_minute_thresholds'] && (
+                            <p className="text-xs text-rose-500">
+                                {(errors as Record<string, string>)['settings.difficulty_minute_thresholds']}
+                            </p>
                         )}
                     </div>
                 </Card>

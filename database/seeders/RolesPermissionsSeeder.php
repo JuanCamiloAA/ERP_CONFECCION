@@ -21,6 +21,8 @@ class RolesPermissionsSeeder extends Seeder
         $this->seedDemoCompanyRoles();
         $this->grantUserOverridePermissionToCompanyAdmins();
         $this->grantPayrollConceptsModuleToCompanyRoles();
+        $this->grantProductionsRankingPermissionToCompanyRoles();
+        $this->grantHourlyLegalModulePermissionsToCompanyRoles();
     }
 
     /**
@@ -148,6 +150,112 @@ class RolesPermissionsSeeder extends Seeder
             $permission = Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
             Role::query()
                 ->where('name', 'supervisor_produccion')
+                ->where('guard_name', 'web')
+                ->whereNotNull('company_id')
+                ->each(function (Role $role) use ($permission): void {
+                    if (! $role->hasPermissionTo($permission)) {
+                        $role->givePermissionTo($permission);
+                    }
+                });
+        }
+
+        $superAdmin = Role::query()
+            ->where('name', 'super_admin')
+            ->where('guard_name', 'web')
+            ->whereNull('company_id')
+            ->first();
+
+        if ($superAdmin) {
+            $superAdmin->syncPermissions(Permission::all());
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    /**
+     * Otorga el permiso del nuevo ranking de produccion a los roles por defecto de empresas ya existentes.
+     * Usa givePermissionTo (aditivo) en vez de syncPermissions para no perder permisos personalizados por el admin de cada empresa.
+     */
+    protected function grantProductionsRankingPermissionToCompanyRoles(): void
+    {
+        $name = 'productions.ranking.view';
+
+        if (! PermissionHelper::permissionExists($name)) {
+            return;
+        }
+
+        $permission = Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+
+        Role::query()
+            ->whereIn('name', ['admin', 'supervisor_produccion', 'operario_produccion', 'solo_consulta'])
+            ->where('guard_name', 'web')
+            ->whereNotNull('company_id')
+            ->each(function (Role $role) use ($permission): void {
+                if (! $role->hasPermissionTo($permission)) {
+                    $role->givePermissionTo($permission);
+                }
+            });
+
+        $superAdmin = Role::query()
+            ->where('name', 'super_admin')
+            ->where('guard_name', 'web')
+            ->whereNull('company_id')
+            ->first();
+
+        if ($superAdmin) {
+            $superAdmin->syncPermissions(Permission::all());
+        }
+
+        app(PermissionRegistrar::class)->forgetCachedPermissions();
+    }
+
+    /**
+     * Modulo nuevo "hourly_legal" (jornada/recargos/horas extra + festivos, §4.6 del prompt de
+     * nomina legal): el admin de empresa gestiona sus propios parametros legales; contable y
+     * solo-consulta solo los ven (para saber que reglas rigen la liquidacion, sin poder cambiarlas).
+     * Aditivo (givePermissionTo), no sync, para no perder personalizaciones de cada empresa.
+     */
+    protected function grantHourlyLegalModulePermissionsToCompanyRoles(): void
+    {
+        $adminPermissions = [
+            'payroll_legal_parameters.index.view',
+            'payroll_legal_parameters.index.create',
+            'payroll_legal_parameters.index.edit',
+            'payroll_legal_parameters.index.delete',
+            'holidays.index.view',
+            'holidays.index.create',
+            'holidays.index.delete',
+            'holidays.index.sync',
+        ];
+
+        $viewOnlyPermissions = [
+            'payroll_legal_parameters.index.view',
+            'holidays.index.view',
+        ];
+
+        foreach ($adminPermissions as $name) {
+            if (! PermissionHelper::permissionExists($name)) {
+                continue;
+            }
+            $permission = Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+            Role::query()
+                ->where('name', 'admin')
+                ->where('guard_name', 'web')
+                ->whereNotNull('company_id')
+                ->each(function (Role $role) use ($permission): void {
+                    if (! $role->hasPermissionTo($permission)) {
+                        $role->givePermissionTo($permission);
+                    }
+                });
+        }
+
+        foreach ($viewOnlyPermissions as $name) {
+            if (! PermissionHelper::permissionExists($name)) {
+                continue;
+            }
+            $permission = Permission::firstOrCreate(['name' => $name, 'guard_name' => 'web']);
+            Role::query()
+                ->whereIn('name', ['auxiliar_contable', 'solo_consulta'])
                 ->where('guard_name', 'web')
                 ->whereNotNull('company_id')
                 ->each(function (Role $role) use ($permission): void {

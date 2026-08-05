@@ -22,11 +22,15 @@ class Operation extends Model
         'name',
         'description',
         'base_price',
+        'estimated_minutes',
+        'difficulty_level',
         'is_active',
     ];
 
     protected $casts = [
         'base_price' => 'decimal:2',
+        'estimated_minutes' => 'decimal:2',
+        'difficulty_level' => 'integer',
         'is_active' => 'boolean',
     ];
 
@@ -38,7 +42,7 @@ class Operation extends Model
     public function references(): BelongsToMany
     {
         return $this->belongsToMany(Reference::class, 'reference_operations')
-            ->withPivot(['id', 'price', 'is_active'])
+            ->withPivot(['id', 'price', 'estimated_minutes', 'difficulty_level', 'is_active'])
             ->withTimestamps();
     }
 

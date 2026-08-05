@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Company;
 use App\Models\Employee;
+use App\Models\Payroll;
 use App\Models\User;
 use App\Models\WorkDaySession;
 use Carbon\Carbon;
@@ -20,8 +21,8 @@ class WorkDaySessionService
         if (! $employee->is_active) {
             throw new \DomainException('El empleado no esta activo.');
         }
-        if (! $employee->isPayrollFixedDaily()) {
-            throw new \DomainException('Solo empleados con modalidad salario diario pueden registrar jornada.');
+        if (! $employee->usesWorkDaySessions()) {
+            throw new \DomainException('Solo empleados con modalidad salario diario u horas legales pueden registrar jornada.');
         }
         if ((int) $employee->company_id !== (int) $company->id) {
             throw new \DomainException('El empleado no pertenece a esta empresa.');
@@ -72,6 +73,10 @@ class WorkDaySessionService
     {
         if (! $session->isOpen()) {
             throw new \DomainException('La jornada no esta abierta.');
+        }
+
+        if (Payroll::paidPeriodCoversDate((int) $session->company_id, $session->work_date)) {
+            throw new \DomainException('Esta fecha ya pertenece a una nomina pagada. No se puede cerrar la jornada.');
         }
 
         return DB::transaction(function () use ($session, $actor) {

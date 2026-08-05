@@ -44,7 +44,8 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
         }
 
         $payrollMode = strtolower(trim((string) ($row['payroll_mode'] ?? Employee::PAYROLL_MODE_OPERATIONS)));
-        if (! in_array($payrollMode, [Employee::PAYROLL_MODE_OPERATIONS, Employee::PAYROLL_MODE_FIXED_DAILY], true)) {
+        $allowedModes = [Employee::PAYROLL_MODE_OPERATIONS, Employee::PAYROLL_MODE_FIXED_DAILY, Employee::PAYROLL_MODE_HOURLY_LEGAL];
+        if (! in_array($payrollMode, $allowedModes, true)) {
             $payrollMode = Employee::PAYROLL_MODE_OPERATIONS;
         }
 
@@ -63,6 +64,18 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
         if ($baseSalaryRaw !== null && trim((string) $baseSalaryRaw) !== '') {
             $baseSalary = (float) str_replace(',', '.', (string) $baseSalaryRaw);
         }
+        if ($payrollMode === Employee::PAYROLL_MODE_HOURLY_LEGAL && $baseSalary <= 0) {
+            throw new RowImportException('base_salary obligatorio (> 0) si payroll_mode es hourly_legal.', $lineNumber);
+        }
+
+        $ordinaryHoursPerDay = 8.0;
+        if ($payrollMode === Employee::PAYROLL_MODE_HOURLY_LEGAL) {
+            $ohpRaw = $row['ordinary_hours_per_day'] ?? null;
+            if ($ohpRaw !== null && trim((string) $ohpRaw) !== '') {
+                $ordinaryHoursPerDay = (float) str_replace(',', '.', (string) $ohpRaw);
+            }
+        }
+        $isExemptFromOvertime = $this->parseBool($row['is_exempt_from_overtime'] ?? null, false);
 
         $bankName = trim((string) ($row['bank_name'] ?? ''));
         $bankAccount = trim((string) ($row['bank_account_number'] ?? ''));
@@ -142,6 +155,8 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
             $dailySalary,
             $hireDate,
             $baseSalary,
+            $ordinaryHoursPerDay,
+            $isExemptFromOvertime,
             $bankId,
             $bankAccount,
             $bankKey,
@@ -164,6 +179,9 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
                 'payroll_mode' => $payrollMode,
                 'daily_salary' => $payrollMode === Employee::PAYROLL_MODE_FIXED_DAILY ? $dailySalary : null,
                 'minutes_per_full_workday' => 480,
+                'ordinary_hours_per_day' => $ordinaryHoursPerDay,
+                'is_exempt_from_overtime' => $isExemptFromOvertime,
+                'scheduled_work_days' => Employee::DEFAULT_SCHEDULED_WORK_DAYS,
                 'bank_id' => $bankId,
                 'bank_account_number' => $bankId ? $bankAccount : null,
                 'bank_key' => $bankId ? $bankKey : null,

@@ -25,6 +25,13 @@ class CalculatePayrollRequest extends FormRequest
             'employee_adjustments.*.sessions.*.clock_out_at' => ['nullable', 'date'],
             'employee_adjustments.*.sessions.*.duration_minutes' => ['nullable', 'integer', 'min:0', 'max:2000'],
             'employee_adjustments.*.sessions.*.reason' => ['nullable', 'string', 'max:500'],
+
+            'absence_confirmations' => ['nullable', 'array'],
+            'absence_confirmations.*.employee_id' => ['required', 'integer', 'exists:employees,id'],
+            'absence_confirmations.*.dates' => ['nullable', 'array'],
+            'absence_confirmations.*.dates.*.date' => ['required', 'date'],
+            'absence_confirmations.*.dates.*.discount' => ['nullable', 'boolean'],
+            'absence_confirmations.*.dates.*.note' => ['nullable', 'string', 'max:500'],
         ];
     }
 
@@ -45,6 +52,14 @@ class CalculatePayrollRequest extends FormRequest
                 $emp = Employee::query()->withoutGlobalScopes()->where('company_id', $companyId)->find($eid);
                 if (! $emp) {
                     $validator->errors()->add("employee_adjustments.{$i}.employee_id", 'Empleado no valido.');
+                }
+            }
+
+            foreach ($this->input('absence_confirmations', []) as $i => $block) {
+                $eid = (int) ($block['employee_id'] ?? 0);
+                $emp = Employee::query()->withoutGlobalScopes()->where('company_id', $companyId)->find($eid);
+                if (! $emp) {
+                    $validator->errors()->add("absence_confirmations.{$i}.employee_id", 'Empleado no valido.');
                 }
             }
         });

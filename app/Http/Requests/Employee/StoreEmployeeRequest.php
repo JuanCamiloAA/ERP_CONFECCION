@@ -80,10 +80,29 @@ class StoreEmployeeRequest extends FormRequest
             'address' => ['nullable', 'string', 'max:255'],
             'hire_date' => ['required', 'date'],
             'photo' => ['nullable', 'image', 'max:2048'],
-            'base_salary' => ['nullable', 'numeric', 'min:0'],
-            'payroll_mode' => ['required', 'string', Rule::in([Employee::PAYROLL_MODE_OPERATIONS, Employee::PAYROLL_MODE_FIXED_DAILY])],
+            'base_salary' => [
+                'nullable',
+                'required_if:payroll_mode,'.Employee::PAYROLL_MODE_HOURLY_LEGAL,
+                'numeric',
+                'min:0',
+            ],
+            'payroll_mode' => ['required', 'string', Rule::in([
+                Employee::PAYROLL_MODE_OPERATIONS,
+                Employee::PAYROLL_MODE_FIXED_DAILY,
+                Employee::PAYROLL_MODE_HOURLY_LEGAL,
+            ])],
             'daily_salary' => ['nullable', 'required_if:payroll_mode,'.Employee::PAYROLL_MODE_FIXED_DAILY, 'numeric', 'min:0'],
             'minutes_per_full_workday' => ['nullable', 'integer', 'min:60', 'max:1440'],
+            'ordinary_hours_per_day' => [
+                'nullable',
+                'required_if:payroll_mode,'.Employee::PAYROLL_MODE_HOURLY_LEGAL,
+                'numeric',
+                'min:1',
+                'max:12',
+            ],
+            'is_exempt_from_overtime' => ['nullable', 'boolean'],
+            'scheduled_work_days' => ['nullable', 'array'],
+            'scheduled_work_days.*' => ['integer', 'min:1', 'max:7'],
             'is_active' => ['nullable', 'boolean'],
             'notes' => ['nullable', 'string', 'max:1000'],
 
@@ -130,6 +149,8 @@ class StoreEmployeeRequest extends FormRequest
             'user_email.required_if' => 'El correo es obligatorio para crear el acceso.',
             'user_email.unique' => 'Ya existe un usuario con ese correo.',
             'user_role_id.required_if' => 'Debes seleccionar un rol para el usuario.',
+            'base_salary.required_if' => 'El salario base es obligatorio para la modalidad por horas (legal).',
+            'ordinary_hours_per_day.required_if' => 'Indica la jornada ordinaria diaria para la modalidad por horas (legal).',
         ] + $this->accessPasswordMessages();
     }
 }

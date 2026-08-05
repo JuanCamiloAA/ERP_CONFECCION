@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\PayrollPeriodicity;
 use App\Services\Files\MediaUrlResolver;
 use App\Support\BrandIcon;
+use App\Support\OperationDifficulty;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -44,6 +45,7 @@ class HandleInertiaRequests extends Middleware
                 'location' => $request->url(),
             ]),
             'activeCompany' => fn () => $this->getActiveCompany($user),
+            'difficultyMinuteThresholds' => fn () => OperationDifficulty::thresholdsFor($this->getActiveCompany($user)),
             'permissionMatrix' => fn () => $request->routeIs('roles.*')
                 ? PermissionHelper::getPermissionMatrix()
                 : null,

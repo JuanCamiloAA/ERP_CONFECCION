@@ -156,6 +156,8 @@ export function TableHeader({ className, children, align = 'left', ...props }: T
 
 export interface TableCellProps extends HTMLAttributes<HTMLTableCellElement> {
     align?: 'left' | 'right' | 'center';
+    colSpan?: number;
+    rowSpan?: number;
     'data-label'?: string;
 }
 

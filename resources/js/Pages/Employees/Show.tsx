@@ -245,7 +245,11 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                             <div>
                                 <dt className="text-xs uppercase text-slate-500">Modalidad nomina</dt>
                                 <dd className="mt-1 text-sm capitalize text-slate-700 dark:text-slate-300">
-                                    {employee.payroll_mode === 'fixed_daily' ? 'Salario diario' : 'Por operaciones'}
+                                    {employee.payroll_mode === 'fixed_daily'
+                                        ? 'Salario diario'
+                                        : employee.payroll_mode === 'hourly_legal'
+                                          ? 'Por horas (legal)'
+                                          : 'Por operaciones'}
                                 </dd>
                             </div>
                             <div>

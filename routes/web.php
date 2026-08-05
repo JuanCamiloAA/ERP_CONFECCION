@@ -9,9 +9,11 @@ use App\Http\Controllers\DashboardWidgetDataController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\LandingPlanInquiryController;
 use App\Http\Controllers\OperationController;
+use App\Http\Controllers\PayrollLegalParameterController;
 use App\Http\Controllers\PayrollConceptController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollEmployeeAdjustmentController;
@@ -107,6 +109,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::resource('productions', ProductionController::class)->except(['show']);
     });
 
+    Route::middleware('permission:productions.ranking.view')->group(function () {
+        Route::get('/productions/ranking', [ProductionController::class, 'ranking'])->name('productions.ranking');
+    });
+
     // Nomina
     Route::middleware('permission:payrolls.index.view')->group(function () {
         Route::resource('payrolls', PayrollController::class)->except(['edit', 'update']);
@@ -127,6 +133,15 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     Route::middleware('permission:payroll_concepts.index.view')->group(function () {
         Route::resource('payroll-concepts', PayrollConceptController::class)->except(['show']);
+    });
+
+    Route::middleware('permission:payroll_legal_parameters.index.view')->group(function () {
+        Route::resource('payroll-legal-parameters', PayrollLegalParameterController::class)->except(['show']);
+    });
+
+    Route::middleware('permission:holidays.index.view')->group(function () {
+        Route::post('/holidays/sync', [HolidayController::class, 'sync'])->name('holidays.sync');
+        Route::resource('holidays', HolidayController::class)->only(['index', 'store', 'destroy']);
     });
 
     // Anticipos

@@ -36,6 +36,7 @@ export function PermissionPresets({ matrix, onApply }: PermissionPresetsProps) {
                     'dashboard.index.view',
                     'productions.index.view',
                     'productions.report.view',
+                    'productions.ranking.view',
                     'payrolls.index.view',
                     'payrolls.show.view',
                 ]),

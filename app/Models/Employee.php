@@ -26,6 +26,11 @@ class Employee extends Model
 
     public const PAYROLL_MODE_FIXED_DAILY = 'fixed_daily';
 
+    public const PAYROLL_MODE_HOURLY_LEGAL = 'hourly_legal';
+
+    /** Dias ISO (1=lunes...7=domingo) por defecto: lunes a sabado, domingo como descanso semanal. */
+    public const DEFAULT_SCHEDULED_WORK_DAYS = [1, 2, 3, 4, 5, 6];
+
     protected $fillable = [
         'company_id',
         'user_id',
@@ -42,6 +47,9 @@ class Employee extends Model
         'payroll_mode',
         'daily_salary',
         'minutes_per_full_workday',
+        'ordinary_hours_per_day',
+        'is_exempt_from_overtime',
+        'scheduled_work_days',
         'bank_id',
         'bank_account_number',
         'bank_key',
@@ -54,6 +62,9 @@ class Employee extends Model
         'base_salary' => 'decimal:2',
         'daily_salary' => 'decimal:2',
         'minutes_per_full_workday' => 'integer',
+        'ordinary_hours_per_day' => 'decimal:2',
+        'is_exempt_from_overtime' => 'boolean',
+        'scheduled_work_days' => 'array',
         'is_active' => 'boolean',
     ];
 
@@ -102,6 +113,24 @@ class Employee extends Model
     public function isPayrollFixedDaily(): bool
     {
         return ($this->payroll_mode ?? self::PAYROLL_MODE_OPERATIONS) === self::PAYROLL_MODE_FIXED_DAILY;
+    }
+
+    public function isPayrollHourlyLegal(): bool
+    {
+        return ($this->payroll_mode ?? self::PAYROLL_MODE_OPERATIONS) === self::PAYROLL_MODE_HOURLY_LEGAL;
+    }
+
+    /**
+     * true para cualquier modalidad que registre tiempo via work_day_sessions (el mismo boton
+     * Iniciar/Cerrar jornada de WorkDayBanner.tsx): fixed_daily y hourly_legal. Nunca operations.
+     * Usar este metodo en vez de comparar isPayrollFixedDaily() directamente en los puntos de
+     * integracion de jornada (WorkDaySessionService, WorkDaySessionController, ProductionController,
+     * PayrollCalculationService::applyWorkSessionAdjustments) para que ambas modalidades compartan
+     * el mismo mecanismo de fichaje sin duplicar la lista de modos en cada archivo.
+     */
+    public function usesWorkDaySessions(): bool
+    {
+        return $this->isPayrollFixedDaily() || $this->isPayrollHourlyLegal();
     }
 
     public function getFullNameAttribute(): string

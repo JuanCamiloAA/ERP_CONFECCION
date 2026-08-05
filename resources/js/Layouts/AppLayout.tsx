@@ -17,9 +17,11 @@ import {
     MoonIcon,
     PaintBrushIcon,
     ReceiptPercentIcon,
+    ScaleIcon,
     ShieldCheckIcon,
     SunIcon,
     TagIcon,
+    TrophyIcon,
     UserCircleIcon,
     UserGroupIcon,
     UsersIcon,
@@ -45,6 +47,8 @@ const moduleIcons: Record<string, typeof HomeIcon> = {
     productions: ClipboardDocumentListIcon,
     payrolls: BanknotesIcon,
     payroll_concepts: DocumentTextIcon,
+    payroll_legal_parameters: ScaleIcon,
+    holidays: CalendarDaysIcon,
     advances: CurrencyDollarIcon,
     expenses: ReceiptPercentIcon,
     reports: ChartBarIcon,
@@ -78,6 +82,8 @@ const moduleSections: Record<string, NavItem['section']> = {
     productions: 'production',
     payrolls: 'payroll',
     payroll_concepts: 'payroll',
+    payroll_legal_parameters: 'payroll',
+    holidays: 'payroll',
     advances: 'payroll',
     expenses: 'payroll',
     reports: 'main',
@@ -98,6 +104,8 @@ const moduleLabels: Record<string, string> = {
     productions: 'Produccion',
     payrolls: 'Nomina',
     payroll_concepts: 'Conceptos de nomina',
+    payroll_legal_parameters: 'Parametros Legales de Nomina',
+    holidays: 'Festivos',
     advances: 'Anticipos',
     expenses: 'Gastos',
     reports: 'Reportes',
@@ -118,6 +126,8 @@ const moduleRoutes: Record<string, string> = {
     productions: 'productions.index',
     payrolls: 'payrolls.index',
     payroll_concepts: 'payroll-concepts.index',
+    payroll_legal_parameters: 'payroll-legal-parameters.index',
+    holidays: 'holidays.index',
     advances: 'advances.index',
     'reports.production': 'reports.production',
     'reports.payroll': 'reports.payroll',
@@ -156,6 +166,17 @@ function buildNavigation(accessiblePages: string[], isSuperAdmin: boolean): NavI
                     section: 'main',
                 });
             }
+            return;
+        }
+
+        if (page === 'productions.ranking') {
+            items.push({
+                key: 'productions-ranking',
+                label: 'Ranking Produccion',
+                href: getRouteUrl('productions.ranking'),
+                icon: TrophyIcon,
+                section: 'production',
+            });
             return;
         }
 

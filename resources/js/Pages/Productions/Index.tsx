@@ -1,5 +1,5 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ChartBarIcon, PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ChartBarIcon, PencilSquareIcon, PlusIcon, TrashIcon, TrophyIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
@@ -95,6 +95,13 @@ export default function ProductionsIndex({
                                 <Link href={route('productions.report')}>
                                     <Button variant="outline" icon={<ChartBarIcon className="h-4 w-4" />}>
                                         Reporte
+                                    </Button>
+                                </Link>
+                            </Can>
+                            <Can permission="productions.ranking.view">
+                                <Link href={route('productions.ranking')}>
+                                    <Button variant="outline" icon={<TrophyIcon className="h-4 w-4" />}>
+                                        Ranking
                                     </Button>
                                 </Link>
                             </Can>

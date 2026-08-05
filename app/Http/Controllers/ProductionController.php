@@ -97,7 +97,7 @@ class ProductionController extends Controller
 
         if ($workerMode && $user->employee_id) {
             $emp = Employee::query()->find($user->employee_id);
-            if ($emp?->isPayrollFixedDaily()) {
+            if ($emp?->usesWorkDaySessions()) {
                 $svc = app(WorkDaySessionService::class);
                 $st = $svc->getTodayState($emp);
                 $workDayBanner = array_merge($st, [
@@ -108,7 +108,7 @@ class ProductionController extends Controller
         } elseif ($user->can('productions.index.workday_start')) {
             $workDaySelectableEmployees = Employee::query()
                 ->active()
-                ->where('payroll_mode', Employee::PAYROLL_MODE_FIXED_DAILY)
+                ->whereIn('payroll_mode', [Employee::PAYROLL_MODE_FIXED_DAILY, Employee::PAYROLL_MODE_HOURLY_LEGAL])
                 ->orderBy('first_name')
                 ->orderBy('last_name')
                 ->get(['id', 'first_name', 'last_name']);
@@ -140,7 +140,7 @@ class ProductionController extends Controller
 
         $workDaySelectableEmployees = Employee::query()
             ->active()
-            ->where('payroll_mode', Employee::PAYROLL_MODE_FIXED_DAILY)
+            ->whereIn('payroll_mode', [Employee::PAYROLL_MODE_FIXED_DAILY, Employee::PAYROLL_MODE_HOURLY_LEGAL])
             ->orderBy('first_name')
             ->orderBy('last_name')
             ->get(['id', 'first_name', 'last_name']);
@@ -233,6 +233,40 @@ class ProductionController extends Controller
             'byReference' => $service->byReference($start, $end, $companyId),
             'byOperation' => $service->byOperation($start, $end, $companyId),
             'dailySeries' => $service->dailySeries($start, $end, $companyId),
+        ]);
+    }
+
+    public function ranking(Request $request, ProductionReportService $service): Response
+    {
+        $user = $request->user();
+        $companyId = TenantContext::effectiveCompanyId($user);
+
+        $start = $request->input('start', now()->startOfMonth()->toDateString());
+        $end = $request->input('end', now()->endOfMonth()->toDateString());
+        $onlyConfirmed = $request->boolean('only_confirmed', false);
+
+        $ranking = $service->rankingByEmployee($start, $end, $companyId, $onlyConfirmed)
+            ->values()
+            ->map(function ($row, int $index) {
+                return [
+                    'position' => $index + 1,
+                    'employee_id' => (int) $row->employee_id,
+                    'employee' => $row->employee ? [
+                        'id' => $row->employee->id,
+                        'full_name' => trim($row->employee->first_name.' '.$row->employee->last_name),
+                        'document_number' => $row->employee->document_number,
+                        'photo' => $row->employee->toArray()['photo'] ?? null,
+                    ] : null,
+                    'total_quantity' => (int) $row->total_quantity,
+                    'total_value' => (float) $row->total_value,
+                    'total_points' => (int) $row->total_points,
+                    'records' => (int) $row->records,
+                ];
+            });
+
+        return Inertia::render('Productions/Ranking', [
+            'filters' => ['start' => $start, 'end' => $end, 'only_confirmed' => $onlyConfirmed],
+            'ranking' => $ranking,
         ]);
     }
 

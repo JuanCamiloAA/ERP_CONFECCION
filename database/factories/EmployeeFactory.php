@@ -30,4 +30,19 @@ class EmployeeFactory extends Factory
             'notes' => null,
         ];
     }
+
+    /**
+     * Modalidad hourly_legal: salario mensual (>= SMMLV 2026) usado para el valor/hora legal.
+     */
+    public function hourlyLegal(): static
+    {
+        return $this->state(fn () => [
+            'payroll_mode' => Employee::PAYROLL_MODE_HOURLY_LEGAL,
+            'base_salary' => $this->faker->numberBetween(1800000, 3500000),
+            'ordinary_hours_per_day' => 8,
+            'is_exempt_from_overtime' => false,
+            'scheduled_work_days' => Employee::DEFAULT_SCHEDULED_WORK_DAYS,
+            'minutes_per_full_workday' => 480,
+        ]);
+    }
 }

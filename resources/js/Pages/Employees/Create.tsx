@@ -9,9 +9,11 @@ import {
     stripAccessPasswordData,
 } from '@/Components/Employees/AccessPasswordFields';
 import { MembershipLimitAlert } from '@/Components/Membership/MembershipLimitAlert';
+import { ScheduledWorkDaysField } from '@/Components/Employees/ScheduledWorkDaysField';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
+import { Checkbox } from '@/Components/UI/Checkbox';
 import { collectUnmappedErrors, FormErrorAlert } from '@/Components/UI/FormErrorAlert';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
@@ -54,9 +56,12 @@ export default function EmployeeCreate({ roles, banks }: Props) {
         hire_date: new Date().toISOString().split('T')[0],
         photo: null as File | null,
         base_salary: '',
-        payroll_mode: 'operations' as 'operations' | 'fixed_daily',
+        payroll_mode: 'operations' as 'operations' | 'fixed_daily' | 'hourly_legal',
         daily_salary: '',
         minutes_per_full_workday: '480',
+        ordinary_hours_per_day: '8',
+        is_exempt_from_overtime: false,
+        scheduled_work_days: [1, 2, 3, 4, 5, 6] as number[],
         is_active: true,
         notes: '',
         bank_id: '' as string | number,
@@ -190,15 +195,18 @@ export default function EmployeeCreate({ roles, banks }: Props) {
                                 onChange={(e) => setData('base_salary', e.target.value)}
                                 error={errors.base_salary}
                                 prefix="$"
+                                required={data.payroll_mode === 'hourly_legal'}
+                                description={data.payroll_mode === 'hourly_legal' ? 'Salario mensual base usado para calcular el valor/hora legal.' : undefined}
                             />
                             <Select
                                 label="Modalidad de nomina"
                                 value={data.payroll_mode}
-                                onChange={(e) => setData('payroll_mode', e.target.value as 'operations' | 'fixed_daily')}
+                                onChange={(e) => setData('payroll_mode', e.target.value as 'operations' | 'fixed_daily' | 'hourly_legal')}
                                 error={errors.payroll_mode}
                                 options={[
                                     { value: 'operations', label: 'Por operaciones (produccion)' },
                                     { value: 'fixed_daily', label: 'Salario diario fijo (jornadas)' },
+                                    { value: 'hourly_legal', label: 'Por horas — liquidacion legal (jornada, recargos y extras)' },
                                 ]}
                                 containerClassName="sm:col-span-2"
                             />
@@ -224,6 +232,37 @@ export default function EmployeeCreate({ roles, banks }: Props) {
                                         description="Ej. 480 = 8 horas"
                                     />
                                 </>
+                            )}
+                            {data.payroll_mode === 'hourly_legal' && (
+                                <>
+                                    <Input
+                                        label="Jornada ordinaria diaria (horas)"
+                                        type="number"
+                                        step="0.1"
+                                        min={1}
+                                        max={12}
+                                        value={data.ordinary_hours_per_day}
+                                        onChange={(e) => setData('ordinary_hours_per_day', e.target.value)}
+                                        error={errors.ordinary_hours_per_day}
+                                        description="Minutos que excedan esto en un dia son candidatos a hora extra."
+                                        required
+                                    />
+                                    <div className="flex items-end pb-1">
+                                        <Checkbox
+                                            checked={data.is_exempt_from_overtime}
+                                            onChange={(e) => setData('is_exempt_from_overtime', e.target.checked)}
+                                            label="Exento de horas extra"
+                                            description="Cargos de direccion, confianza y manejo (art. 162 CST): nunca genera horas extra, aunque exceda la jornada."
+                                        />
+                                    </div>
+                                </>
+                            )}
+                            {(data.payroll_mode === 'fixed_daily' || data.payroll_mode === 'hourly_legal') && (
+                                <ScheduledWorkDaysField
+                                    value={data.scheduled_work_days}
+                                    onChange={(next) => setData('scheduled_work_days', next)}
+                                    error={errors.scheduled_work_days}
+                                />
                             )}
                             <Textarea
                                 label="Notas"

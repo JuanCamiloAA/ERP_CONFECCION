@@ -29,6 +29,8 @@ declare global {
             permissionMatrix?: PermissionMatrix;
             /** Opciones activas del maestro (Nomina / Configuracion). */
             payrollPeriodicities?: PayrollPeriodicityOption[];
+            /** Umbrales de minutos -> grado de dificultad (1 a 5) de la empresa activa; ver Mi empresa. */
+            difficultyMinuteThresholds?: number[];
             errors: Record<string, string>;
             [key: string]: unknown;
         }
@@ -194,9 +196,15 @@ export interface Employee {
     hire_date: string;
     photo: string | null;
     base_salary: string | number;
-    payroll_mode?: 'operations' | 'fixed_daily';
+    payroll_mode?: 'operations' | 'fixed_daily' | 'hourly_legal';
     daily_salary?: string | number | null;
     minutes_per_full_workday?: number;
+    /** Jornada ordinaria diaria pactada (horas), solo hourly_legal. */
+    ordinary_hours_per_day?: string | number;
+    /** Cargos de direccion/confianza/manejo (art. 162 CST): nunca genera horas extra. */
+    is_exempt_from_overtime?: boolean;
+    /** Dias ISO (1=lunes...7=domingo) en que se espera marcacion de jornada; fixed_daily/hourly_legal. */
+    scheduled_work_days?: number[];
     bank_id?: number | null;
     bank_account_number?: string | null;
     bank_key?: string | null;
@@ -281,6 +289,10 @@ export interface Operation {
     name: string;
     description: string | null;
     base_price: string | number;
+    /** Minutos estandar para realizar la operacion; define automaticamente el grado de dificultad. */
+    estimated_minutes: string | number;
+    /** Grado de dificultad (1 a 5), calculado desde estimated_minutes; usado para ponderar el ranking de produccion. */
+    difficulty_level: number;
     is_active: boolean;
     references_count?: number;
     created_at: string;
@@ -293,8 +305,22 @@ export interface ReferenceOperationPivot extends Operation {
         reference_id: number;
         operation_id: number;
         price: string | number;
+        /** Si es null, hereda los minutos (y por tanto la dificultad) del dato maestro de la operacion. */
+        estimated_minutes: string | number | null;
+        /** Si es null, hereda el grado de dificultad del dato maestro de la operacion. */
+        difficulty_level: number | null;
         is_active: boolean;
     };
+}
+
+export interface EmployeeRankingRow {
+    position: number;
+    employee_id: number;
+    employee: { id: number; full_name: string; document_number: string; photo: string | null } | null;
+    total_quantity: number;
+    total_value: number;
+    total_points: number;
+    records: number;
 }
 
 export interface Production {
@@ -335,12 +361,63 @@ export interface Payroll {
     created_at: string;
 }
 
+export interface LegalHoursDailyDetail {
+    work_date: string;
+    session_id: number;
+    clock_in_at: string | null;
+    clock_out_at: string | null;
+    duration_minutes: number;
+    ordinary_day_minutes: number;
+    ordinary_night_minutes: number;
+    extra_day_minutes: number;
+    extra_night_minutes: number;
+    is_sunday_holiday: boolean;
+    hourly_rate: number;
+    day_amount: number;
+}
+
+export interface LegalHoursBreakdown {
+    ordinary_day_minutes: number;
+    ordinary_night_minutes: number;
+    sunday_holiday_day_minutes: number;
+    sunday_holiday_night_minutes: number;
+    overtime_day_minutes: number;
+    overtime_night_minutes: number;
+    overtime_sunday_holiday_day_minutes: number;
+    overtime_sunday_holiday_night_minutes: number;
+    base_salary_earned: number;
+    days_in_period: number;
+    hourly_rate_applied: number;
+    night_surcharge_amount: number;
+    sunday_holiday_surcharge_amount: number;
+    overtime_amount: number;
+    legal_parameters_snapshot: Record<string, unknown>;
+    daily_detail: LegalHoursDailyDetail[];
+}
+
+export interface AbsenceDiscountDetailItem {
+    work_date: string;
+    reason: string;
+    computed_amount: number;
+    amount: number;
+    confirmed: boolean;
+    note: string | null;
+    confirmed_by_user_id: number | null;
+}
+
 export interface PayrollEmployee {
     id: number;
     payroll_id: number;
     employee_id: number;
     production_total: string | number;
     daily_work_subtotal?: string | number;
+    /** Devengo de la modalidad hourly_legal (salario base + recargos + extras); 0 en otras modalidades. */
+    legal_hourly_subtotal?: string | number;
+    legal_hours_breakdown?: LegalHoursBreakdown | null;
+    overtime_limit_alerts?: string[] | null;
+    /** Monto descontado por inasistencia sin marcar, ya confirmado por el admin. */
+    absence_discount_total?: string | number;
+    absence_discount_detail?: AbsenceDiscountDetailItem[] | null;
     /** Suma de conceptos manuales (>= 0); forma parte del bruto antes de deducciones. */
     adjustments_subtotal?: string | number;
     validated_work_days?: ValidatedWorkDaySnapshot[] | null;

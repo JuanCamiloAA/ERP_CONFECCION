@@ -1,0 +1,1 @@
+const r=[3,7,15,25],i={1:"Muy baja",2:"Baja",3:"Media",4:"Alta",5:"Muy alta"};function u(t,n=r){for(let a=0;a<n.length;a++)if(t<=n[a])return a+1;return 5}function e(t){return t?i[t]??String(t):"—"}export{r as D,i as a,e as d,u as l};

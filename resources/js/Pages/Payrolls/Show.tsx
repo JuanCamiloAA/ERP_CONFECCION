@@ -7,6 +7,7 @@ import {
     ChevronDownIcon,
     ChevronRightIcon,
     DocumentTextIcon,
+    ExclamationTriangleIcon,
     PencilSquareIcon,
     PlusIcon,
     PrinterIcon,
@@ -17,6 +18,7 @@ import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
+import { Checkbox } from '@/Components/UI/Checkbox';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { Input } from '@/Components/UI/Input';
 import { Modal } from '@/Components/UI/Modal';
@@ -27,18 +29,21 @@ import { Table, TableBody, TableCell, TableFoot, TableHead, TableHeader, TableRo
 import { Textarea } from '@/Components/UI/Textarea';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import AppLayout from '@/Layouts/AppLayout';
-import { formatCurrency, formatDate } from '@/lib/utils';
+import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 import type { Payroll, PayrollConcept, PayrollEmployee, PayrollEmployeeAdjustment, Production, WorkDaySession, PaginatedResponse } from '@/types';
 
 interface PayrollEmployeeTotals {
     employee_count: number;
     total_production: number;
     total_daily: number;
+    total_legal_hourly: number;
     total_adjustments: number;
     total_gross: number;
     total_advances: number;
+    total_absence_discount: number;
     total_deductions: number;
     show_daily_column: boolean;
+    show_legal_column: boolean;
 }
 
 interface Props {
@@ -61,12 +66,50 @@ function rowGross(row: PayrollEmployee): number {
     return (
         Number(row.production_total) +
         Number(row.daily_work_subtotal ?? 0) +
+        Number(row.legal_hourly_subtotal ?? 0) +
         Number(row.adjustments_subtotal ?? 0)
     );
 }
 
 function editKey(employeeId: number, sessionId: number): string {
     return `${employeeId}:${sessionId}`;
+}
+
+function absenceKey(employeeId: number, workDate: string): string {
+    return `${employeeId}:${workDate}`;
+}
+
+interface AbsenceEditState {
+    discount: boolean;
+    note: string;
+}
+
+function buildAbsenceConfirmations(
+    edits: Record<string, AbsenceEditState>,
+    rows: PayrollEmployee[],
+): { employee_id: number; dates: { date: string; discount: boolean; note: string | null }[] }[] {
+    const byEmp: Record<number, { date: string; discount: boolean; note: string | null }[]> = {};
+
+    rows.forEach((row) => {
+        const detail = row.absence_discount_detail ?? [];
+        if (!row.employee_id || detail.length === 0) return;
+
+        detail.forEach((item) => {
+            const k = absenceKey(row.employee_id, item.work_date);
+            const state = edits[k] ?? { discount: item.confirmed, note: item.note ?? '' };
+            byEmp[row.employee_id] = byEmp[row.employee_id] ?? [];
+            byEmp[row.employee_id].push({
+                date: item.work_date,
+                discount: state.discount,
+                note: state.note.trim() || null,
+            });
+        });
+    });
+
+    return Object.entries(byEmp).map(([employee_id, dates]) => ({
+        employee_id: Number(employee_id),
+        dates,
+    }));
 }
 
 function buildAdjustments(
@@ -125,6 +168,7 @@ export default function PayrollShow({
     const [adjAmount, setAdjAmount] = useState('');
     const [adjNotes, setAdjNotes] = useState('');
     const [adjSaving, setAdjSaving] = useState(false);
+    const [absenceEdits, setAbsenceEdits] = useState<Record<string, AbsenceEditState>>({});
 
     const rows = payrollEmployees.data;
     const employeeCount = payrollEmployeeTotals.employee_count;
@@ -134,13 +178,15 @@ export default function PayrollShow({
 
     const totalProduction = payrollEmployeeTotals.total_production;
     const totalDaily = payrollEmployeeTotals.total_daily;
+    const totalLegalHourly = payrollEmployeeTotals.total_legal_hourly;
     const totalAdjustments = payrollEmployeeTotals.total_adjustments;
     const totalGross = payrollEmployeeTotals.total_gross;
     const totalAdvances = payrollEmployeeTotals.total_advances;
     const totalDeductions = payrollEmployeeTotals.total_deductions;
 
     const showDailyColumn = payrollEmployeeTotals.show_daily_column;
-    const detailColSpan = 9 + (showDailyColumn ? 1 : 0);
+    const showLegalColumn = payrollEmployeeTotals.show_legal_column;
+    const detailColSpan = 9 + (showDailyColumn ? 1 : 0) + (showLegalColumn ? 1 : 0);
 
     useEffect(() => {
         if (!canManageConceptAdjustments || rows.length === 0) {
@@ -319,6 +365,81 @@ export default function PayrollShow({
         </div>
     );
 
+    const absenceBlock = (row: PayrollEmployee, isHourlyLegalRow: boolean) => {
+        const detail = row.absence_discount_detail ?? [];
+
+        return (
+            <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-900/60">
+                <p className="text-xs font-semibold uppercase text-slate-500">Días sin marcación</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    {isHourlyLegalRow
+                        ? 'Días hábiles esperados (según horario configurado) sin jornada cerrada. Desmarca y anota un motivo para excluir del descuento antes de recalcular.'
+                        : 'Solo informativo: en salario diario el día ya no se paga al no existir sesión; esto no resta nada adicional.'}
+                </p>
+                {detail.length === 0 ? (
+                    <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">
+                        No hay días hábiles esperados sin marcar en este periodo.
+                    </p>
+                ) : (
+                    <div className="mt-3 space-y-2">
+                        {detail.map((item) => {
+                            const k = absenceKey(row.employee_id, item.work_date);
+                            const state = absenceEdits[k] ?? { discount: item.confirmed, note: item.note ?? '' };
+                            const canEdit = isHourlyLegalRow && canAdjustBeforeCalc;
+
+                            return (
+                                <div
+                                    key={item.work_date}
+                                    className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 px-3 py-2 dark:border-slate-700"
+                                >
+                                    {isHourlyLegalRow ? (
+                                        <Checkbox
+                                            checked={state.discount}
+                                            disabled={!canEdit}
+                                            onChange={(e) =>
+                                                setAbsenceEdits((prev) => ({
+                                                    ...prev,
+                                                    [k]: { discount: e.target.checked, note: prev[k]?.note ?? state.note },
+                                                }))
+                                            }
+                                        />
+                                    ) : null}
+                                    <span className="w-28 shrink-0 text-sm">{formatDate(item.work_date)}</span>
+                                    {isHourlyLegalRow && (
+                                        <span className="w-28 shrink-0 text-sm font-medium tabular-nums">
+                                            {formatCurrency(item.computed_amount)}
+                                        </span>
+                                    )}
+                                    {canEdit ? (
+                                        <Input
+                                            containerClassName="!mb-0 flex-1 min-w-[180px]"
+                                            placeholder="Motivo si se justifica (opcional)"
+                                            value={state.note}
+                                            onChange={(e) =>
+                                                setAbsenceEdits((prev) => ({
+                                                    ...prev,
+                                                    [k]: { discount: prev[k]?.discount ?? state.discount, note: e.target.value },
+                                                }))
+                                            }
+                                        />
+                                    ) : (
+                                        <span className="flex-1 text-sm text-slate-500 dark:text-slate-400">{item.note || '—'}</span>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        {isHourlyLegalRow && (
+                            <p className="text-xs text-slate-500 dark:text-slate-400">
+                                Si el descuento no cambia al recalcular, verifica que &quot;Descontar día hábil sin marcación&quot; esté
+                                activo en Parámetros Legales de Nómina para esta empresa.
+                            </p>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     const toggleRow = (payrollEmployeeId: number) => {
         setExpanded((prev) => {
             const next = new Set(prev);
@@ -337,11 +458,11 @@ export default function PayrollShow({
 
         if (action === 'calculate') {
             const adjustments = buildAdjustments(sessionEdits, workSessionsByEmployee);
-            router.post(
-                url,
-                adjustments.length > 0 ? { employee_adjustments: adjustments } : {},
-                { onFinish: () => setConfirmAction(null) },
-            );
+            const absenceConfirmations = buildAbsenceConfirmations(absenceEdits, rows);
+            const payload: Record<string, unknown> = {};
+            if (adjustments.length > 0) payload.employee_adjustments = adjustments;
+            if (absenceConfirmations.length > 0) payload.absence_confirmations = absenceConfirmations;
+            router.post(url, payload as never, { onFinish: () => setConfirmAction(null) });
             return;
         }
 
@@ -462,6 +583,7 @@ export default function PayrollShow({
                                 <TableHeader>Empleado</TableHeader>
                                 <TableHeader align="right">Producido</TableHeader>
                                 {showDailyColumn ? <TableHeader align="right">Jornada</TableHeader> : null}
+                                {showLegalColumn ? <TableHeader align="right">Legal (horas)</TableHeader> : null}
                                 <TableHeader align="right">Ajustes</TableHeader>
                                 <TableHeader align="right">Bruto</TableHeader>
                                 <TableHeader align="right">Deducciones</TableHeader>
@@ -484,11 +606,13 @@ export default function PayrollShow({
                                         0,
                                     );
                                     const isFixed = row.employee?.payroll_mode === 'fixed_daily';
+                                    const isHourlyLegal = row.employee?.payroll_mode === 'hourly_legal';
                                     const isOpen = expanded.has(row.id);
                                     const empSessions = row.employee_id ? workSessionsByEmployee[String(row.employee_id)] ?? [] : [];
                                     const empProductions = row.employee_id ? productionsByEmployee[String(row.employee_id)] ?? [] : [];
-                                    const showProductionDetail = !isFixed;
-                                    const showExpandControl = isFixed || showProductionDetail;
+                                    const showProductionDetail = !isFixed && !isHourlyLegal;
+                                    const showExpandControl = isFixed || isHourlyLegal || showProductionDetail;
+                                    const overtimeAlerts = row.overtime_limit_alerts ?? [];
 
                                     return (
                                         <Fragment key={row.id}>
@@ -516,13 +640,26 @@ export default function PayrollShow({
                                                     <p className="text-xs text-slate-500">{row.employee?.document_number}</p>
                                                     {row.employee?.payroll_mode ? (
                                                         <Badge variant="neutral" className="mt-1 capitalize">
-                                                            {row.employee.payroll_mode === 'fixed_daily' ? 'Salario diario' : 'Por operaciones'}
+                                                            {row.employee.payroll_mode === 'fixed_daily'
+                                                                ? 'Salario diario'
+                                                                : row.employee.payroll_mode === 'hourly_legal'
+                                                                  ? 'Por horas (legal)'
+                                                                  : 'Por operaciones'}
                                                         </Badge>
                                                     ) : null}
+                                                    {overtimeAlerts.length > 0 && (
+                                                        <Badge variant="warning" className="mt-1 ml-1">
+                                                            <ExclamationTriangleIcon className="mr-1 h-3 w-3" />
+                                                            Tope excedido
+                                                        </Badge>
+                                                    )}
                                                 </TableCell>
                                                 <TableCell align="right">{formatCurrency(row.production_total)}</TableCell>
                                                 {showDailyColumn ? (
                                                     <TableCell align="right">{formatCurrency(row.daily_work_subtotal ?? 0)}</TableCell>
+                                                ) : null}
+                                                {showLegalColumn ? (
+                                                    <TableCell align="right">{formatCurrency(row.legal_hourly_subtotal ?? 0)}</TableCell>
                                                 ) : null}
                                                 <TableCell align="right" className="tabular-nums text-amber-700 dark:text-amber-400">
                                                     {formatCurrency(row.adjustments_subtotal ?? 0)}
@@ -710,6 +847,132 @@ export default function PayrollShow({
                                                                     </div>
                                                                 </div>
                                                             ) : null}
+                                                            {absenceBlock(row, false)}
+                                                            {adjustmentsPanel(row)}
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ) : null}
+                                            {isOpen && isHourlyLegal ? (
+                                                <TableRow key={`${row.id}-detail-legal`}>
+                                                    <TableCell colSpan={detailColSpan} className="bg-slate-50 px-4 py-4 dark:bg-slate-900/40">
+                                                        <div className="space-y-4">
+                                                            {overtimeAlerts.length > 0 && (
+                                                                <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-100">
+                                                                    <ExclamationTriangleIcon className="h-5 w-5 shrink-0" />
+                                                                    <div>
+                                                                        <p className="font-medium">Horas extra sobre el tope legal:</p>
+                                                                        <ul className="mt-1 list-inside list-disc">
+                                                                            {overtimeAlerts.map((alert, i) => (
+                                                                                <li key={i}>{alert}</li>
+                                                                            ))}
+                                                                        </ul>
+                                                                        <p className="mt-1 text-xs">
+                                                                            Las horas extra requieren autorizacion previa del Ministerio del
+                                                                            Trabajo; el sistema no verifica ese tramite.
+                                                                        </p>
+                                                                    </div>
+                                                                </div>
+                                                            )}
+
+                                                            {row.legal_hours_breakdown ? (
+                                                                <div>
+                                                                    <p className="text-xs font-semibold uppercase text-slate-500">
+                                                                        Resumen de liquidacion legal
+                                                                    </p>
+                                                                    <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                                                        <div>
+                                                                            <p className="text-xs text-slate-500">Salario base periodo</p>
+                                                                            <p className="font-medium tabular-nums">
+                                                                                {formatCurrency(row.legal_hours_breakdown.base_salary_earned)}
+                                                                            </p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs text-slate-500">Recargo nocturno</p>
+                                                                            <p className="font-medium tabular-nums">
+                                                                                {formatCurrency(row.legal_hours_breakdown.night_surcharge_amount)}
+                                                                            </p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs text-slate-500">Recargo dominical/festivo</p>
+                                                                            <p className="font-medium tabular-nums">
+                                                                                {formatCurrency(row.legal_hours_breakdown.sunday_holiday_surcharge_amount)}
+                                                                            </p>
+                                                                        </div>
+                                                                        <div>
+                                                                            <p className="text-xs text-slate-500">Horas extra</p>
+                                                                            <p className="font-medium tabular-nums">
+                                                                                {formatCurrency(row.legal_hours_breakdown.overtime_amount)}
+                                                                            </p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                                                        Valor/hora aplicado: {formatCurrency(row.legal_hours_breakdown.hourly_rate_applied)} ·
+                                                                        Jornada semanal legal: {String(row.legal_hours_breakdown.legal_parameters_snapshot?.weekly_legal_hours ?? '—')}h ·
+                                                                        Divisor mensual: {String(row.legal_hours_breakdown.legal_parameters_snapshot?.monthly_hours_divisor ?? '—')}
+                                                                    </p>
+                                                                </div>
+                                                            ) : null}
+
+                                                            {row.legal_hours_breakdown && row.legal_hours_breakdown.daily_detail.length > 0 ? (
+                                                                <div>
+                                                                    <p className="text-xs font-semibold uppercase text-slate-500">Detalle por dia</p>
+                                                                    <div className="mt-2 overflow-x-auto">
+                                                                        <table className="responsive-table w-full min-w-[820px] text-left text-sm">
+                                                                            <thead>
+                                                                                <tr className="border-b border-slate-200 text-xs uppercase text-slate-500 dark:border-slate-700">
+                                                                                    <th className="py-2 pr-2">Fecha</th>
+                                                                                    <th className="py-2 pr-2">Entrada</th>
+                                                                                    <th className="py-2 pr-2">Salida</th>
+                                                                                    <th className="py-2 pr-2 text-right">Ordinaria diurna</th>
+                                                                                    <th className="py-2 pr-2 text-right">Ordinaria nocturna</th>
+                                                                                    <th className="py-2 pr-2 text-right">Extra diurna</th>
+                                                                                    <th className="py-2 pr-2 text-right">Extra nocturna</th>
+                                                                                    <th className="py-2 pr-2 text-center">Dom/Festivo</th>
+                                                                                    <th className="py-2 pr-2 text-right">Valor del dia</th>
+                                                                                </tr>
+                                                                            </thead>
+                                                                            <tbody>
+                                                                                {row.legal_hours_breakdown.daily_detail.map((d) => (
+                                                                                    <tr key={d.session_id} className="border-b border-slate-100 dark:border-slate-800">
+                                                                                        <td className="py-2 pr-2" data-label="Fecha">{formatDate(d.work_date)}</td>
+                                                                                        <td className="py-2 pr-2" data-label="Entrada">
+                                                                                            {d.clock_in_at ? new Date(d.clock_in_at).toLocaleTimeString() : '—'}
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2" data-label="Salida">
+                                                                                            {d.clock_out_at ? new Date(d.clock_out_at).toLocaleTimeString() : '—'}
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2 text-right" data-label="Ordinaria diurna">
+                                                                                            {formatNumber(d.ordinary_day_minutes)} min
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2 text-right" data-label="Ordinaria nocturna">
+                                                                                            {formatNumber(d.ordinary_night_minutes)} min
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2 text-right" data-label="Extra diurna">
+                                                                                            {formatNumber(d.extra_day_minutes)} min
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2 text-right" data-label="Extra nocturna">
+                                                                                            {formatNumber(d.extra_night_minutes)} min
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2 text-center" data-label="Dom/Festivo">
+                                                                                            {d.is_sunday_holiday ? <Badge variant="warning">Sí</Badge> : '—'}
+                                                                                        </td>
+                                                                                        <td className="py-2 pr-2 text-right tabular-nums" data-label="Valor del dia">
+                                                                                            {formatCurrency(d.day_amount)}
+                                                                                        </td>
+                                                                                    </tr>
+                                                                                ))}
+                                                                            </tbody>
+                                                                        </table>
+                                                                    </div>
+                                                                </div>
+                                                            ) : (
+                                                                <p className="text-sm text-slate-600 dark:text-slate-400">
+                                                                    No hay jornadas cerradas o ajustadas en este periodo.
+                                                                </p>
+                                                            )}
+
+                                                            {absenceBlock(row, true)}
                                                             {adjustmentsPanel(row)}
                                                         </div>
                                                     </TableCell>
@@ -779,6 +1042,9 @@ export default function PayrollShow({
                                     <td className="px-4 py-3 text-right">{formatCurrency(totalProduction)}</td>
                                     {showDailyColumn ? (
                                         <td className="px-4 py-3 text-right">{formatCurrency(totalDaily)}</td>
+                                    ) : null}
+                                    {showLegalColumn ? (
+                                        <td className="px-4 py-3 text-right">{formatCurrency(totalLegalHourly)}</td>
                                     ) : null}
                                     <td className="px-4 py-3 text-right tabular-nums text-amber-700 dark:text-amber-400">
                                         {formatCurrency(totalAdjustments)}

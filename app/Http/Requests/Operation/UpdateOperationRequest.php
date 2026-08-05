@@ -28,6 +28,7 @@ class UpdateOperationRequest extends FormRequest
             ],
             'description' => ['nullable', 'string', 'max:500'],
             'base_price' => ['required', 'numeric', 'min:0'],
+            'estimated_minutes' => ['required', 'numeric', 'min:0.01', 'max:9999.99'],
             'is_active' => ['nullable', 'boolean'],
         ];
     }

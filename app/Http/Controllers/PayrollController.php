@@ -128,11 +128,14 @@ class PayrollController extends Controller
                 COUNT(*) as employee_count,
                 COALESCE(SUM(production_total), 0) as total_production,
                 COALESCE(SUM(daily_work_subtotal), 0) as total_daily,
+                COALESCE(SUM(legal_hourly_subtotal), 0) as total_legal_hourly,
                 COALESCE(SUM(adjustments_subtotal), 0) as total_adjustments,
                 COALESCE(SUM(advances_discount), 0) as total_advances,
+                COALESCE(SUM(absence_discount_total), 0) as total_absence_discount,
                 COALESCE(SUM(
                     COALESCE(production_total, 0)
                     + COALESCE(daily_work_subtotal, 0)
+                    + COALESCE(legal_hourly_subtotal, 0)
                     + COALESCE(adjustments_subtotal, 0)
                 ), 0) as total_gross
             ')
@@ -148,10 +151,11 @@ class PayrollController extends Controller
         });
 
         $showDailyColumn = (clone $peBase)->where('daily_work_subtotal', '>', 0)->exists();
+        $showLegalColumn = (clone $peBase)->where('legal_hourly_subtotal', '>', 0)->exists();
 
         $payrollEmployeeRows = (clone $peBase)
             ->with([
-                'employee:id,first_name,last_name,document_number,payroll_mode,daily_salary,minutes_per_full_workday',
+                'employee:id,first_name,last_name,document_number,payroll_mode,daily_salary,minutes_per_full_workday,ordinary_hours_per_day,is_exempt_from_overtime,scheduled_work_days',
                 'advances',
                 'adjustments.payrollConcept:id,name,code',
             ])
@@ -228,11 +232,14 @@ class PayrollController extends Controller
                 'employee_count' => (int) ($totalsRow->employee_count ?? 0),
                 'total_production' => (float) ($totalsRow->total_production ?? 0),
                 'total_daily' => (float) ($totalsRow->total_daily ?? 0),
+                'total_legal_hourly' => (float) ($totalsRow->total_legal_hourly ?? 0),
                 'total_adjustments' => (float) ($totalsRow->total_adjustments ?? 0),
                 'total_gross' => (float) ($totalsRow->total_gross ?? 0),
                 'total_advances' => (float) ($totalsRow->total_advances ?? 0),
+                'total_absence_discount' => (float) ($totalsRow->total_absence_discount ?? 0),
                 'total_deductions' => $totalDeductions,
                 'show_daily_column' => $showDailyColumn,
+                'show_legal_column' => $showLegalColumn,
             ],
             'workSessionsByEmployee' => $workSessionsByEmployee,
             'productionsByEmployee' => $productionsByEmployee,
@@ -251,11 +258,16 @@ class PayrollController extends Controller
 
         $request->validated();
 
-        $this->calculator->calculate(
-            $payroll,
-            $request->input('employee_adjustments'),
-            $request->user()
-        );
+        try {
+            $this->calculator->calculate(
+                $payroll,
+                $request->input('employee_adjustments'),
+                $request->user(),
+                $request->input('absence_confirmations'),
+            );
+        } catch (\DomainException $e) {
+            return back()->with('error', $e->getMessage());
+        }
 
         return back()->with('success', 'Nomina calculada.');
     }

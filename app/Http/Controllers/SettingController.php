@@ -5,8 +5,10 @@ namespace App\Http\Controllers;
 use App\Contracts\ObjectStorageInterface;
 use App\Models\PayrollPeriodicity;
 use App\Services\Files\StoredFileDeleter;
+use App\Support\OperationDifficulty;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -32,6 +34,7 @@ class SettingController extends Controller
                 ['key' => 'salud', 'label' => 'Salud', 'percent' => 4],
                 ['key' => 'pension', 'label' => 'Pension', 'percent' => 4],
             ],
+            'difficulty_minute_thresholds' => OperationDifficulty::DEFAULT_THRESHOLDS,
         ];
 
         $stored = $company->settings ?? [];
@@ -65,7 +68,7 @@ class SettingController extends Controller
             $request->merge(['nit' => $v === '' ? null : $v]);
         }
 
-        $data = $request->validate([
+        $validator = Validator::make($request->all(), [
             'name' => ['required', 'string', 'max:120'],
             'nit' => ['nullable', 'string', 'max:30', Rule::unique('companies', 'nit')->ignore($company->id)],
             'address' => ['nullable', 'string', 'max:255'],
@@ -84,7 +87,29 @@ class SettingController extends Controller
             'settings.default_deductions.*.key' => ['required_with:settings.default_deductions', 'string', 'max:30'],
             'settings.default_deductions.*.label' => ['required_with:settings.default_deductions', 'string', 'max:50'],
             'settings.default_deductions.*.percent' => ['required_with:settings.default_deductions', 'numeric', 'min:0', 'max:100'],
+            'settings.difficulty_minute_thresholds' => ['nullable', 'array', 'size:4'],
+            'settings.difficulty_minute_thresholds.*' => ['required_with:settings.difficulty_minute_thresholds', 'numeric', 'min:0.01', 'max:99999'],
         ]);
+
+        $validator->after(function ($validator) use ($request) {
+            $thresholds = $request->input('settings.difficulty_minute_thresholds');
+            if (! is_array($thresholds) || count($thresholds) !== 4) {
+                return;
+            }
+
+            $values = array_map('floatval', $thresholds);
+            for ($i = 1; $i < count($values); $i++) {
+                if ($values[$i] <= $values[$i - 1]) {
+                    $validator->errors()->add(
+                        'settings.difficulty_minute_thresholds',
+                        'Cada nivel debe tener mas minutos que el anterior.'
+                    );
+                    break;
+                }
+            }
+        });
+
+        $data = $validator->validate();
 
         $update = [
             'name' => $data['name'],

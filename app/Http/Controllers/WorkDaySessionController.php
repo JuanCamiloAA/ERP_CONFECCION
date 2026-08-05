@@ -39,7 +39,7 @@ class WorkDaySessionController extends Controller
             return response()->json(['applicable' => false]);
         }
 
-        if (! $employee->isPayrollFixedDaily()) {
+        if (! $employee->usesWorkDaySessions()) {
             return response()->json([
                 'applicable' => false,
                 'payroll_mode' => $employee->payroll_mode ?? Employee::PAYROLL_MODE_OPERATIONS,
@@ -50,7 +50,7 @@ class WorkDaySessionController extends Controller
 
         return response()->json([
             'applicable' => true,
-            'payroll_mode' => 'fixed_daily',
+            'payroll_mode' => $employee->payroll_mode ?? Employee::PAYROLL_MODE_OPERATIONS,
             'employee_id' => $employee->id,
             'work_date' => $state['work_date'],
             'open' => $state['open'],

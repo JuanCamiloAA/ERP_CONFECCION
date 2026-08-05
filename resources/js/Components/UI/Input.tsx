@@ -1,4 +1,4 @@
-import { forwardRef, InputHTMLAttributes, ReactNode } from 'react';
+import { forwardRef, useState, type ChangeEvent, type FocusEvent, type InputHTMLAttributes, type ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'prefix'> {
@@ -10,9 +10,99 @@ export interface InputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 
     containerClassName?: string;
 }
 
+/** Cuantos decimales mostrar segun el `step` (ej. "0.01" -> 2, "0.1" -> 1, sin step -> 0). */
+function decimalScaleFromStep(step: InputHTMLAttributes<HTMLInputElement>['step']): number {
+    if (step === undefined || step === null) return 0;
+    const s = String(step);
+    const dot = s.indexOf('.');
+    return dot === -1 ? 0 : s.length - dot - 1;
+}
+
+/** Miles con "." y decimales con "," (es-CO), solo para mostrar mientras el campo no tiene el foco. */
+function formatNumericDisplay(value: InputHTMLAttributes<HTMLInputElement>['value'], decimalScale: number): string {
+    if (value === undefined || value === null || value === '') return '';
+    const str = Array.isArray(value) ? '' : String(value);
+    if (str.trim() === '' || str === '-') return str;
+    const num = parseFloat(str);
+    if (Number.isNaN(num)) return str;
+    return new Intl.NumberFormat('es-CO', {
+        minimumFractionDigits: decimalScale,
+        maximumFractionDigits: decimalScale,
+    }).format(num);
+}
+
+/**
+ * Deja solo digitos, un "-" inicial y un separador decimal.
+ * Si hay coma, se asume formato agrupado ("1.500.000,50"): la coma es el decimal y los puntos son de miles.
+ * Si no hay coma pero hay mas de un punto (ej. pegar "1.500.000"), los puntos tambien se toman como miles.
+ * Con un solo punto y sin coma se interpreta como decimal directo (escritura normal, ej. "150.5").
+ */
+function sanitizeNumericInput(raw: string): string {
+    let s = raw.trim();
+    const negative = s.startsWith('-');
+    s = s.replace(/-/g, '');
+
+    const dotCount = (s.match(/\./g) ?? []).length;
+    if (s.includes(',')) {
+        s = s.replace(/\./g, '').replace(/,/g, '.');
+    } else if (dotCount > 1) {
+        s = s.replace(/\./g, '');
+    }
+
+    s = s.replace(/[^0-9.]/g, '');
+    const firstDot = s.indexOf('.');
+    if (firstDot !== -1) {
+        s = s.slice(0, firstDot + 1) + s.slice(firstDot + 1).replace(/\./g, '');
+    }
+    return (negative ? '-' : '') + s;
+}
+
 export const Input = forwardRef<HTMLInputElement, InputProps>(
-    ({ label, error, description, prefix, suffix, className, containerClassName, id, required, ...props }, ref) => {
+    (
+        {
+            label,
+            error,
+            description,
+            prefix,
+            suffix,
+            className,
+            containerClassName,
+            id,
+            required,
+            type,
+            value,
+            step,
+            inputMode,
+            onChange,
+            onFocus,
+            onBlur,
+            ...props
+        },
+        ref,
+    ) => {
         const inputId = id || `input-${Math.random().toString(36).slice(2)}`;
+        const isNumeric = type === 'number';
+        const [focused, setFocused] = useState(false);
+        const decimalScale = decimalScaleFromStep(step);
+
+        const displayValue = isNumeric && !focused ? formatNumericDisplay(value, decimalScale) : (value ?? '');
+
+        const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
+            if (isNumeric) {
+                e.target.value = sanitizeNumericInput(e.target.value);
+            }
+            onChange?.(e);
+        };
+
+        const handleFocus = (e: FocusEvent<HTMLInputElement>) => {
+            if (isNumeric) setFocused(true);
+            onFocus?.(e);
+        };
+
+        const handleBlur = (e: FocusEvent<HTMLInputElement>) => {
+            if (isNumeric) setFocused(false);
+            onBlur?.(e);
+        };
 
         return (
             <div className={cn('w-full', containerClassName)}>
@@ -43,6 +133,13 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                         ref={ref}
                         id={inputId}
                         required={required}
+                        type={isNumeric ? 'text' : type}
+                        inputMode={isNumeric ? 'decimal' : inputMode}
+                        value={displayValue}
+                        step={step}
+                        onChange={handleChange}
+                        onFocus={handleFocus}
+                        onBlur={handleBlur}
                         className={cn(
                             'flex-1 bg-transparent px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400',
                             'dark:text-slate-100 dark:placeholder:text-slate-500',

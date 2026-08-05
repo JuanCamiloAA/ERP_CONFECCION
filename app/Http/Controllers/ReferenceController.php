@@ -5,10 +5,12 @@ namespace App\Http\Controllers;
 use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Reference\StoreReferenceRequest;
 use App\Http\Requests\Reference\UpdateReferenceRequest;
+use App\Models\Company;
 use App\Models\Operation;
 use App\Models\Production;
 use App\Models\Reference;
 use App\Services\Files\StoredFileDeleter;
+use App\Support\OperationDifficulty;
 use App\Support\ReferenceLotCompletion;
 use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
@@ -71,7 +73,7 @@ class ReferenceController extends Controller
     public function create(): Response
     {
         return Inertia::render('References/Create', [
-            'operations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price']),
+            'operations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price', 'estimated_minutes', 'difficulty_level']),
         ]);
     }
 
@@ -106,9 +108,21 @@ class ReferenceController extends Controller
             }
 
             if (! empty($data['operations'])) {
-                $sync = collect($data['operations'])->mapWithKeys(fn ($row) => [
-                    $row['operation_id'] => ['price' => $row['price'], 'is_active' => true],
-                ])->all();
+                $thresholds = OperationDifficulty::thresholdsFor($reference->company);
+                $sync = collect($data['operations'])->mapWithKeys(function ($row) use ($thresholds) {
+                    $minutes = $row['estimated_minutes'] ?? null;
+
+                    return [
+                        $row['operation_id'] => [
+                            'price' => $row['price'],
+                            'estimated_minutes' => $minutes,
+                            'difficulty_level' => $minutes !== null && $minutes !== ''
+                                ? OperationDifficulty::levelFromMinutes((float) $minutes, $thresholds)
+                                : null,
+                            'is_active' => true,
+                        ],
+                    ];
+                })->all();
                 $reference->operations()->sync($sync);
             }
 
@@ -123,7 +137,7 @@ class ReferenceController extends Controller
 
         return Inertia::render('References/Show', [
             'reference' => $reference,
-            'allOperations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price']),
+            'allOperations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price', 'estimated_minutes', 'difficulty_level']),
             'comparison' => $this->buildEconomicsComparison($reference),
         ]);
     }
@@ -209,11 +223,21 @@ class ReferenceController extends Controller
         $request->validate([
             'operation_id' => ['required', 'integer', 'exists:operations,id'],
             'price' => ['required', 'numeric', 'min:0'],
+            'estimated_minutes' => ['nullable', 'numeric', 'min:0.01', 'max:9999.99'],
         ]);
+
+        $minutes = $request->input('estimated_minutes');
+        $difficultyLevel = null;
+        if ($minutes !== null && $minutes !== '') {
+            $thresholds = OperationDifficulty::thresholdsFor($reference->company);
+            $difficultyLevel = OperationDifficulty::levelFromMinutes((float) $minutes, $thresholds);
+        }
 
         $reference->operations()->syncWithoutDetaching([
             $request->input('operation_id') => [
                 'price' => $request->input('price'),
+                'estimated_minutes' => $minutes,
+                'difficulty_level' => $difficultyLevel,
                 'is_active' => true,
             ],
         ]);
@@ -225,11 +249,21 @@ class ReferenceController extends Controller
     {
         $request->validate([
             'price' => ['required', 'numeric', 'min:0'],
+            'estimated_minutes' => ['nullable', 'numeric', 'min:0.01', 'max:9999.99'],
             'is_active' => ['nullable', 'boolean'],
         ]);
 
+        $minutes = $request->input('estimated_minutes');
+        $difficultyLevel = null;
+        if ($minutes !== null && $minutes !== '') {
+            $thresholds = OperationDifficulty::thresholdsFor($reference->company);
+            $difficultyLevel = OperationDifficulty::levelFromMinutes((float) $minutes, $thresholds);
+        }
+
         $reference->operations()->updateExistingPivot($operation->id, [
             'price' => $request->input('price'),
+            'estimated_minutes' => $minutes,
+            'difficulty_level' => $difficultyLevel,
             'is_active' => (bool) $request->input('is_active', true),
         ]);
 

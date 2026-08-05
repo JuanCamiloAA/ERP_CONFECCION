@@ -33,9 +33,11 @@ class DemoDataSeeder extends Seeder
         $this->syncReferenceOperationalFixedCosts($references);
         $employees = $this->seedEmployees($company);
         $this->markSampleFixedDailyEmployees($company);
+        $this->markSampleHourlyLegalEmployees($company);
         $this->seedEmployeeUsers($company, $employees);
         $this->seedProductions($company, $employees, $references, $operations);
         $this->seedWorkDaySessions($company);
+        $this->seedHourlyLegalWorkDaySessions($company);
         $this->seedAdvances($company, $employees);
         $this->call(PayrollConceptSeeder::class);
     }
@@ -164,6 +166,30 @@ class DemoDataSeeder extends Seeder
         }
     }
 
+    /**
+     * Empleado de ejemplo con la modalidad hourly_legal (jornada, recargos y horas extra, ver
+     * context/PROMPT_NOMINA_LEGAL_HORAS_RECARGOS.md). Usa update() sobre el modelo (no query builder)
+     * para que scheduled_work_days pase por el cast de array y quede bien serializado a JSON.
+     */
+    protected function markSampleHourlyLegalEmployees(Company $company): void
+    {
+        foreach (['1020304051'] as $doc) {
+            $employee = Employee::withoutGlobalScopes()
+                ->where('company_id', $company->id)
+                ->where('document_number', $doc)
+                ->first();
+
+            $employee?->update([
+                'payroll_mode' => Employee::PAYROLL_MODE_HOURLY_LEGAL,
+                'base_salary' => 2_200_000,
+                'ordinary_hours_per_day' => 8,
+                'is_exempt_from_overtime' => false,
+                'scheduled_work_days' => Employee::DEFAULT_SCHEDULED_WORK_DAYS,
+                'minutes_per_full_workday' => 480,
+            ]);
+        }
+    }
+
     protected function seedEmployeeUsers(Company $company, $employees): void
     {
         $operatorRole = Role::where('name', 'operario_produccion')->where('company_id', $company->id)->first();
@@ -201,7 +227,7 @@ class DemoDataSeeder extends Seeder
     {
         $fixedDailyIds = Employee::withoutGlobalScopes()
             ->where('company_id', $company->id)
-            ->where('payroll_mode', Employee::PAYROLL_MODE_FIXED_DAILY)
+            ->whereIn('payroll_mode', [Employee::PAYROLL_MODE_FIXED_DAILY, Employee::PAYROLL_MODE_HOURLY_LEGAL])
             ->pluck('id')
             ->all();
 
@@ -272,6 +298,71 @@ class DemoDataSeeder extends Seeder
             foreach ($employees as $employee) {
                 $in = $day->copy()->setTime(7, 30, 0);
                 $out = $day->copy()->setTime(16, 30, 0);
+                $minutes = (int) round($in->diffInMinutes($out));
+
+                WorkDaySession::withoutGlobalScopes()->updateOrCreate(
+                    [
+                        'company_id' => $company->id,
+                        'employee_id' => $employee->id,
+                        'work_date' => $day->format('Y-m-d'),
+                    ],
+                    [
+                        'clock_in_at' => $in,
+                        'clock_out_at' => $out,
+                        'duration_minutes' => $minutes,
+                        'status' => WorkDaySession::STATUS_CLOSED,
+                        'source' => WorkDaySession::SOURCE_EMPLOYEE,
+                    ]
+                );
+            }
+        }
+    }
+
+    /**
+     * Jornadas de ejemplo para el empleado hourly_legal: al menos un dia con hora extra, uno que
+     * cruza a la franja nocturna y el domingo del mes (recargo dominical) - para que el desglose
+     * legal de Payrolls/Show.tsx tenga datos de cada tipo desde el primer calculo (§7 del prompt).
+     */
+    protected function seedHourlyLegalWorkDaySessions(Company $company): void
+    {
+        $employees = Employee::withoutGlobalScopes()
+            ->where('company_id', $company->id)
+            ->where('payroll_mode', Employee::PAYROLL_MODE_HOURLY_LEGAL)
+            ->get();
+
+        if ($employees->isEmpty()) {
+            return;
+        }
+
+        $start = now()->startOfMonth();
+        $end = now();
+        $period = CarbonPeriod::create($start, $end);
+
+        $usedNight = false;
+        $usedExtra = false;
+
+        foreach ($period as $day) {
+            if ($day->isSaturday()) {
+                continue; // demuestra el bloque "dias sin marcacion" (informativo, no descuenta por defecto)
+            }
+
+            foreach ($employees as $employee) {
+                if ($day->isSunday()) {
+                    $in = $day->copy()->setTime(8, 0, 0);
+                    $out = $day->copy()->setTime(16, 0, 0);
+                } elseif (! $usedNight) {
+                    $in = $day->copy()->setTime(15, 0, 0);
+                    $out = $day->copy()->setTime(23, 0, 0);
+                    $usedNight = true;
+                } elseif (! $usedExtra) {
+                    $in = $day->copy()->setTime(7, 30, 0);
+                    $out = $day->copy()->setTime(18, 0, 0);
+                    $usedExtra = true;
+                } else {
+                    $in = $day->copy()->setTime(7, 30, 0);
+                    $out = $day->copy()->setTime(15, 30, 0);
+                }
+
                 $minutes = (int) round($in->diffInMinutes($out));
 
                 WorkDaySession::withoutGlobalScopes()->updateOrCreate(

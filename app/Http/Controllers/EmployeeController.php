@@ -117,6 +117,9 @@ class EmployeeController extends Controller
                 'payroll_mode' => $payrollMode,
                 'daily_salary' => $payrollMode === Employee::PAYROLL_MODE_FIXED_DAILY ? ($data['daily_salary'] ?? 0) : null,
                 'minutes_per_full_workday' => (int) ($data['minutes_per_full_workday'] ?? 480),
+                'ordinary_hours_per_day' => $payrollMode === Employee::PAYROLL_MODE_HOURLY_LEGAL ? ($data['ordinary_hours_per_day'] ?? 8) : 8,
+                'is_exempt_from_overtime' => (bool) ($data['is_exempt_from_overtime'] ?? false),
+                'scheduled_work_days' => $data['scheduled_work_days'] ?? Employee::DEFAULT_SCHEDULED_WORK_DAYS,
                 'bank_id' => $data['bank_id'] ?? null,
                 'bank_account_number' => $data['bank_account_number'] ?? null,
                 'bank_key' => $data['bank_key'] ?? null,
@@ -222,6 +225,9 @@ class EmployeeController extends Controller
         $data['payroll_mode'] = $payrollMode;
         $data['daily_salary'] = $payrollMode === Employee::PAYROLL_MODE_FIXED_DAILY ? ($data['daily_salary'] ?? 0) : null;
         $data['minutes_per_full_workday'] = (int) ($data['minutes_per_full_workday'] ?? 480);
+        $data['ordinary_hours_per_day'] = $payrollMode === Employee::PAYROLL_MODE_HOURLY_LEGAL ? ($data['ordinary_hours_per_day'] ?? 8) : 8;
+        $data['is_exempt_from_overtime'] = (bool) ($data['is_exempt_from_overtime'] ?? false);
+        $data['scheduled_work_days'] = $data['scheduled_work_days'] ?? Employee::DEFAULT_SCHEDULED_WORK_DAYS;
 
         if ($request->hasFile('photo')) {
             $this->storedFileDeleter->deleteIfPresent($employee->getAttributes()['photo'] ?? null);

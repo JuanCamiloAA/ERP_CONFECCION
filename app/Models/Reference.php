@@ -52,7 +52,7 @@ class Reference extends Model
     public function operations(): BelongsToMany
     {
         return $this->belongsToMany(Operation::class, 'reference_operations')
-            ->withPivot(['id', 'price', 'is_active'])
+            ->withPivot(['id', 'price', 'estimated_minutes', 'difficulty_level', 'is_active'])
             ->withTimestamps();
     }
 
