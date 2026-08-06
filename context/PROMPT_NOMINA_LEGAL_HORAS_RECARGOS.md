@@ -619,7 +619,7 @@ Actualizar el rol demo de super_admin/admin empresa según lo decidido en §4.6.
 - [ ] Un festivo o un día fuera de `scheduled_work_days` (ej. domingo) **nunca** aparece como candidato a descuento.
 - [ ] Cambiar `absence_discount_percent` (ej. de 100 a 50) y recalcular: el monto descontado cambia proporcionalmente.
 - [ ] Admin de empresa (no `super_admin`) puede crear/editar el tramo de `payroll_legal_parameters` de **su** empresa (incluido activar el descuento por inasistencia) sin poder tocar el tramo global ni el de otra empresa.
-- [ ] `npm run build` y `php artisan test` (si hay tests) sin errores.
+- [ ] `npm run build` y `php artisan test` (si hay tests) sin errores.  
 
 ---
 
