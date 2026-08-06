@@ -12,7 +12,7 @@ import {
     PlusIcon,
     PrinterIcon,
     TrashIcon,
-} from '@heroicons/react/24/outline';
+} from '@heroicons/react/24/outline'; 
 import { Fragment, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';

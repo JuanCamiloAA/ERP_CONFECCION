@@ -36,7 +36,7 @@ import { SuperAdminCompanySwitcher } from '@/Components/SuperAdminCompanySwitche
 import { usePermissions } from '@/contexts/PermissionsContext';
 import { useDarkMode } from '@/hooks/useDarkMode';
 import { mediaUrl } from '@/lib/mediaUrl';
-import { cn } from '@/lib/utils';
+import { cn } from '@/lib/utils'; 
 
 const moduleIcons: Record<string, typeof HomeIcon> = {
     dashboard: HomeIcon,
