@@ -305,8 +305,8 @@ export default function SettingsIndex({ company, settings }: Props) {
                                 <span className="text-sm text-slate-500 dark:text-slate-400">Hasta</span>
                                 <Input
                                     type="number"
-                                    step="0.1"
-                                    min={0.1}
+                                    step="0.01"
+                                    min={0.01}
                                     value={String(value)}
                                     onChange={(e) => updateThreshold(index, parseFloat(e.target.value) || 0)}
                                     suffix="min"

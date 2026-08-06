@@ -83,24 +83,40 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         const inputId = id || `input-${Math.random().toString(36).slice(2)}`;
         const isNumeric = type === 'number';
         const [focused, setFocused] = useState(false);
+        // Mientras se edita, el texto se guarda aparte del valor numerico del padre: si se deriva
+        // del valor ya redondeado/parseado en cada tecla, un separador decimal recien escrito sin
+        // digitos despues (ej. "0,") se pierde de inmediato porque parseFloat("0,") vuelve a dar "0".
+        const [rawText, setRawText] = useState<string | null>(null);
         const decimalScale = decimalScaleFromStep(step);
 
-        const displayValue = isNumeric && !focused ? formatNumericDisplay(value, decimalScale) : (value ?? '');
+        const displayValue = isNumeric
+            ? focused
+                ? (rawText ?? (value === undefined || value === null ? '' : String(value)))
+                : formatNumericDisplay(value, decimalScale)
+            : (value ?? '');
 
         const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
             if (isNumeric) {
-                e.target.value = sanitizeNumericInput(e.target.value);
+                const sanitized = sanitizeNumericInput(e.target.value);
+                setRawText(sanitized);
+                e.target.value = sanitized;
             }
             onChange?.(e);
         };
 
         const handleFocus = (e: FocusEvent<HTMLInputElement>) => {
-            if (isNumeric) setFocused(true);
+            if (isNumeric) {
+                setFocused(true);
+                setRawText(value === undefined || value === null ? '' : String(value));
+            }
             onFocus?.(e);
         };
 
         const handleBlur = (e: FocusEvent<HTMLInputElement>) => {
-            if (isNumeric) setFocused(false);
+            if (isNumeric) {
+                setFocused(false);
+                setRawText(null);
+            }
             onBlur?.(e);
         };
 
