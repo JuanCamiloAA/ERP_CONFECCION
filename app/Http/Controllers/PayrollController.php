@@ -321,13 +321,64 @@ class PayrollController extends Controller
         $this->authorize('view', $payroll);
         $this->ensurePayrollBelongsToActiveCompany($request, $payroll);
 
+        $mode = $request->input('mode') === 'detailed' ? 'detailed' : 'general';
+
         $payroll->load([
-            'company:id,name,nit,address,phone',
+            'company:id,name,nit,address,phone,logo',
             'payrollEmployees.employee:id,first_name,last_name,document_number,payroll_mode',
         ]);
 
+        // Modo detallado: cada empleado se imprime en su propia seccion con el detalle de
+        // operaciones producidas (y las jornadas cuando aplica) que sustentan su liquidacion.
+        $productionsByEmployee = [];
+        $workSessionsByEmployee = [];
+
+        if ($mode === 'detailed') {
+            $employeeIds = $payroll->payrollEmployees->pluck('employee_id')->filter()->values()->all();
+
+            if ($employeeIds !== []) {
+                $productionsByEmployee = Production::query()
+                    ->withoutGlobalScopes()
+                    ->with(['reference:id,code,name', 'operation:id,name'])
+                    ->whereBetween('date', [
+                        $payroll->period_start->format('Y-m-d'),
+                        $payroll->period_end->format('Y-m-d'),
+                    ])
+                    ->whereIn('status', [Production::STATUS_CONFIRMED, Production::STATUS_PENDING])
+                    ->whereIn('employee_id', $employeeIds)
+                    ->where(function ($inner) use ($payroll) {
+                        $inner->where('company_id', $payroll->company_id)
+                            ->orWhereHas('reference', fn ($r) => $r->where('company_id', $payroll->company_id));
+                    })
+                    ->orderBy('date')
+                    ->orderBy('id')
+                    ->get()
+                    ->groupBy(fn ($p) => (string) $p->employee_id)
+                    ->map(fn ($items) => $items->values()->all())
+                    ->all();
+
+                $workSessionsByEmployee = WorkDaySession::query()
+                    ->withoutGlobalScopes()
+                    ->where('company_id', $payroll->company_id)
+                    ->whereBetween('work_date', [
+                        $payroll->period_start->format('Y-m-d'),
+                        $payroll->period_end->format('Y-m-d'),
+                    ])
+                    ->whereIn('employee_id', $employeeIds)
+                    ->orderBy('work_date')
+                    ->orderBy('id')
+                    ->get()
+                    ->groupBy(fn ($s) => (string) $s->employee_id)
+                    ->map(fn ($items) => $items->values()->all())
+                    ->all();
+            }
+        }
+
         return Inertia::render('Payrolls/Print', [
             'payroll' => $payroll,
+            'mode' => $mode,
+            'productionsByEmployee' => $productionsByEmployee,
+            'workSessionsByEmployee' => $workSessionsByEmployee,
         ]);
     }
 

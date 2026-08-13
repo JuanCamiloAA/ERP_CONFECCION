@@ -596,7 +596,16 @@ export default function PayrollShow({
                             </Link>
                             <a href={route('payrolls.export', payroll.id)} target="_blank" rel="noreferrer">
                                 <Button variant="outline" icon={<PrinterIcon className="h-4 w-4" />}>
-                                    Imprimir
+                                    Imprimir general
+                                </Button>
+                            </a>
+                            <a
+                                href={route('payrolls.export', { payroll: payroll.id, mode: 'detailed' })}
+                                target="_blank"
+                                rel="noreferrer"
+                            >
+                                <Button variant="outline" icon={<DocumentTextIcon className="h-4 w-4" />}>
+                                    Imprimir detallado
                                 </Button>
                             </a>
                             {payroll.status === 'borrador' || payroll.status === 'calculado' ? (
