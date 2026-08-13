@@ -52,6 +52,7 @@ class AdvanceController extends Controller
             'company_id' => TenantContext::requireCompanyIdForWrite($user),
             'employee_id' => $data['employee_id'],
             'amount' => $data['amount'],
+            'remaining_amount' => $data['amount'],
             'date' => $data['date'],
             'reason' => $data['reason'],
             'status' => Advance::STATUS_PENDING,
@@ -63,8 +64,8 @@ class AdvanceController extends Controller
 
     public function destroy(Advance $advance): RedirectResponse
     {
-        if ($advance->status === Advance::STATUS_DISCOUNTED) {
-            return back()->with('error', 'No se puede eliminar un anticipo ya descontado en nomina.');
+        if (bccomp((string) $advance->remaining_amount, (string) $advance->amount, 2) !== 0) {
+            return back()->with('error', 'No se puede eliminar un anticipo que ya tiene descuentos aplicados (totales o parciales).');
         }
 
         $advance->delete();

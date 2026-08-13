@@ -430,6 +430,7 @@ export interface PayrollEmployee {
     notes: string | null;
     employee?: Employee;
     adjustments?: PayrollEmployeeAdjustment[];
+    advances?: Advance[];
 }
 
 export interface PayrollConcept {
@@ -459,6 +460,10 @@ export interface Advance {
     company_id: number;
     employee_id: number;
     amount: string | number;
+    /** Saldo aun no descontado (baja con cada nomina que lo aplique parcialmente). */
+    remaining_amount: string | number;
+    /** Monto que se va a descontar en la nomina a la que esta adjunto ahora mismo (null si no esta adjunto). */
+    applied_amount: string | number | null;
     date: string;
     reason: string;
     status: 'pendiente' | 'descontado';

@@ -112,6 +112,46 @@ function buildAbsenceConfirmations(
     }));
 }
 
+function advanceKey(employeeId: number, advanceId: number): string {
+    return `${employeeId}:${advanceId}`;
+}
+
+interface AdvanceEditState {
+    applied_amount: string;
+}
+
+/** Solo se incluyen los anticipos que el admin edito; los demas se descuentan por el saldo completo (default del backend). */
+function buildAdvanceAdjustments(
+    edits: Record<string, AdvanceEditState>,
+    rows: PayrollEmployee[],
+): { employee_id: number; advances: { advance_id: number; applied_amount: number }[] }[] {
+    const byEmp: Record<number, { advance_id: number; applied_amount: number }[]> = {};
+
+    rows.forEach((row) => {
+        const advances = row.advances ?? [];
+        if (!row.employee_id || advances.length === 0) return;
+
+        advances.forEach((adv) => {
+            const k = advanceKey(row.employee_id, adv.id);
+            const state = edits[k];
+            if (!state) return;
+
+            const raw = state.applied_amount.trim().replace(',', '.');
+            if (raw === '') return;
+            const amount = Number(raw);
+            if (Number.isNaN(amount) || amount <= 0) return;
+
+            byEmp[row.employee_id] = byEmp[row.employee_id] ?? [];
+            byEmp[row.employee_id].push({ advance_id: adv.id, applied_amount: amount });
+        });
+    });
+
+    return Object.entries(byEmp).map(([employee_id, advances]) => ({
+        employee_id: Number(employee_id),
+        advances,
+    }));
+}
+
 function buildAdjustments(
     edits: Record<string, { duration_minutes: string; reason: string }>,
     sessionsByEmp: Record<string, WorkDaySession[]>,
@@ -169,6 +209,7 @@ export default function PayrollShow({
     const [adjNotes, setAdjNotes] = useState('');
     const [adjSaving, setAdjSaving] = useState(false);
     const [absenceEdits, setAbsenceEdits] = useState<Record<string, AbsenceEditState>>({});
+    const [advanceEdits, setAdvanceEdits] = useState<Record<string, AdvanceEditState>>({});
 
     const rows = payrollEmployees.data;
     const employeeCount = payrollEmployeeTotals.employee_count;
@@ -440,6 +481,64 @@ export default function PayrollShow({
         );
     };
 
+    const advanceBlock = (row: PayrollEmployee) => {
+        const advances = row.advances ?? [];
+        if (advances.length === 0) return null;
+
+        const canEditAmount = canManageConceptAdjustments;
+
+        return (
+            <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-600 dark:bg-slate-900/60">
+                <p className="text-xs font-semibold uppercase text-slate-500">Anticipos a descontar</p>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+                    Por defecto se descuenta el saldo pendiente completo de cada anticipo. Edita el monto para descontar
+                    solo una parte; el resto queda pendiente para una proxima nomina.
+                </p>
+                <div className="mt-3 space-y-2">
+                    {advances.map((adv) => {
+                        const k = advanceKey(row.employee_id, adv.id);
+                        const remaining = Number(adv.remaining_amount);
+                        const state = advanceEdits[k];
+                        const currentValue = state?.applied_amount ?? String(adv.applied_amount ?? remaining);
+
+                        return (
+                            <div
+                                key={adv.id}
+                                className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 px-3 py-2 dark:border-slate-700"
+                            >
+                                <span className="min-w-40 flex-1 text-sm text-slate-600 dark:text-slate-400">
+                                    {adv.reason} <span className="text-xs">({formatDate(adv.date)})</span>
+                                </span>
+                                <span className="w-32 shrink-0 text-xs text-slate-500 dark:text-slate-400">
+                                    Saldo: {formatCurrency(remaining)}
+                                </span>
+                                {canEditAmount ? (
+                                    <Input
+                                        type="number"
+                                        step="0.01"
+                                        min={0.01}
+                                        containerClassName="!mb-0 w-36"
+                                        value={currentValue}
+                                        onChange={(e) =>
+                                            setAdvanceEdits((prev) => ({
+                                                ...prev,
+                                                [k]: { applied_amount: e.target.value },
+                                            }))
+                                        }
+                                    />
+                                ) : (
+                                    <span className="w-36 text-sm font-medium tabular-nums">
+                                        {formatCurrency(adv.applied_amount ?? remaining)}
+                                    </span>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
+
     const toggleRow = (payrollEmployeeId: number) => {
         setExpanded((prev) => {
             const next = new Set(prev);
@@ -459,9 +558,11 @@ export default function PayrollShow({
         if (action === 'calculate') {
             const adjustments = buildAdjustments(sessionEdits, workSessionsByEmployee);
             const absenceConfirmations = buildAbsenceConfirmations(absenceEdits, rows);
+            const advanceAdjustments = buildAdvanceAdjustments(advanceEdits, rows);
             const payload: Record<string, unknown> = {};
             if (adjustments.length > 0) payload.employee_adjustments = adjustments;
             if (absenceConfirmations.length > 0) payload.absence_confirmations = absenceConfirmations;
+            if (advanceAdjustments.length > 0) payload.advance_adjustments = advanceAdjustments;
             router.post(url, payload as never, { onFinish: () => setConfirmAction(null) });
             return;
         }
@@ -848,6 +949,7 @@ export default function PayrollShow({
                                                                 </div>
                                                             ) : null}
                                                             {absenceBlock(row, false)}
+                                                            {advanceBlock(row)}
                                                             {adjustmentsPanel(row)}
                                                         </div>
                                                     </TableCell>
@@ -973,6 +1075,7 @@ export default function PayrollShow({
                                                             )}
 
                                                             {absenceBlock(row, true)}
+                                                            {advanceBlock(row)}
                                                             {adjustmentsPanel(row)}
                                                         </div>
                                                     </TableCell>
@@ -1024,6 +1127,7 @@ export default function PayrollShow({
                                                             <p className="text-xs text-slate-500 dark:text-slate-400">
                                                                 El calculo de nomina incluye producciones confirmadas y pendientes de confirmar.
                                                             </p>
+                                                            {advanceBlock(row)}
                                                             {adjustmentsPanel(row)}
                                                         </div>
                                                     </TableCell>

@@ -264,6 +264,7 @@ class PayrollController extends Controller
                 $request->input('employee_adjustments'),
                 $request->user(),
                 $request->input('absence_confirmations'),
+                $request->input('advance_adjustments'),
             );
         } catch (\DomainException $e) {
             return back()->with('error', $e->getMessage());

@@ -22,6 +22,8 @@ class Advance extends Model
         'company_id',
         'employee_id',
         'amount',
+        'remaining_amount',
+        'applied_amount',
         'date',
         'reason',
         'status',
@@ -32,6 +34,8 @@ class Advance extends Model
     protected $casts = [
         'date' => 'date',
         'amount' => 'decimal:2',
+        'remaining_amount' => 'decimal:2',
+        'applied_amount' => 'decimal:2',
     ];
 
     public function company(): BelongsTo

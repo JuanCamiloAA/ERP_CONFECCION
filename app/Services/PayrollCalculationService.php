@@ -26,14 +26,16 @@ class PayrollCalculationService
     /**
      * @param  array<int, array{employee_id: int, sessions?: array<int, array<string, mixed>>}>|null  $employeeAdjustments
      * @param  array<int, array{employee_id: int, dates?: array<int, array{date: string, discount?: bool, note?: string|null}>}>|null  $absenceConfirmations
+     * @param  array<int, array{employee_id: int, advances?: array<int, array{advance_id: int, applied_amount: float|string}>}>|null  $advanceAdjustments
      */
     public function calculate(
         Payroll $payroll,
         ?array $employeeAdjustments = null,
         ?User $adjustmentActor = null,
         ?array $absenceConfirmations = null,
+        ?array $advanceAdjustments = null,
     ): Payroll {
-        return DB::transaction(function () use ($payroll, $employeeAdjustments, $adjustmentActor, $absenceConfirmations) {
+        return DB::transaction(function () use ($payroll, $employeeAdjustments, $adjustmentActor, $absenceConfirmations, $advanceAdjustments) {
             $companyId = $payroll->company_id;
 
             if (! empty($employeeAdjustments)) {
@@ -42,6 +44,13 @@ class PayrollCalculationService
 
             $absenceConfirmationsByEmployee = collect($absenceConfirmations ?? [])
                 ->keyBy(fn ($block) => (int) ($block['employee_id'] ?? 0));
+
+            // advance_id => monto aplicado solicitado por el admin (parcial o total); si un anticipo
+            // pendiente no aparece aca, se descuenta por el saldo completo (comportamiento previo).
+            $advanceAppliedAmounts = collect($advanceAdjustments ?? [])
+                ->flatMap(fn ($block) => $block['advances'] ?? [])
+                ->filter(fn ($row) => isset($row['advance_id']))
+                ->mapWithKeys(fn ($row) => [(int) $row['advance_id'] => (float) ($row['applied_amount'] ?? 0)]);
 
             $employees = Employee::query()
                 ->withoutGlobalScopes()
@@ -82,7 +91,7 @@ class PayrollCalculationService
                 Advance::query()
                     ->withoutGlobalScopes()
                     ->where('payroll_employee_id', $stale->id)
-                    ->update(['payroll_employee_id' => null]);
+                    ->update(['payroll_employee_id' => null, 'applied_amount' => null]);
                 $stale->delete();
             }
 
@@ -166,10 +175,18 @@ class PayrollCalculationService
                     ->where('company_id', $companyId)
                     ->where('employee_id', $employee->id)
                     ->where('status', Advance::STATUS_PENDING)
+                    ->where('remaining_amount', '>', 0)
                     ->get();
 
                 foreach ($advances as $advance) {
+                    $remaining = (float) $advance->remaining_amount;
+                    $requested = $advanceAppliedAmounts->get((int) $advance->id);
+                    // Sin override del admin -> se descuenta el saldo completo (comportamiento previo,
+                    // sin cambios para quien no use la opcion de descuento parcial).
+                    $applied = $requested === null ? $remaining : min(max($requested, 0.01), $remaining);
+
                     $advance->payroll_employee_id = $payrollEmployee->id;
+                    $advance->applied_amount = round($applied, 2);
                     $advance->save();
                 }
 
@@ -217,7 +234,7 @@ class PayrollCalculationService
             ->withoutGlobalScopes()
             ->where('payroll_employee_id', $payrollEmployee->id)
             ->where('status', Advance::STATUS_PENDING)
-            ->sum('amount'), 2);
+            ->sum('applied_amount'), 2);
 
         $absenceDiscountTotal = (float) $payrollEmployee->absence_discount_total;
 
@@ -742,10 +759,30 @@ class PayrollCalculationService
                 'paid_at' => now(),
             ]);
 
-            Advance::query()
+            // Cada anticipo puede quedar total o parcialmente descontado; el saldo restante (si
+            // queda) vuelve a estar disponible ("pendiente", sin nomina adjunta) para una nomina
+            // futura, en vez de descontarse siempre por completo como antes.
+            $attachedAdvances = Advance::query()
                 ->withoutGlobalScopes()
                 ->whereIn('payroll_employee_id', $payroll->payrollEmployees()->pluck('id'))
-                ->update(['status' => Advance::STATUS_DISCOUNTED]);
+                ->get();
+
+            foreach ($attachedAdvances as $advance) {
+                $newRemaining = round((float) $advance->remaining_amount - (float) $advance->applied_amount, 2);
+
+                if ($newRemaining <= 0.005) {
+                    $advance->status = Advance::STATUS_DISCOUNTED;
+                    $advance->remaining_amount = 0;
+                    $advance->applied_amount = null;
+                } else {
+                    $advance->status = Advance::STATUS_PENDING;
+                    $advance->remaining_amount = $newRemaining;
+                    $advance->applied_amount = null;
+                    $advance->payroll_employee_id = null;
+                }
+
+                $advance->save();
+            }
 
             return $payroll->fresh();
         });
