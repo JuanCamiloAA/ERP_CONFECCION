@@ -6,6 +6,7 @@ use App\Models\Concerns\ResolvesMediaUrlsInArray;
 use App\Models\Scopes\CompanyScope;
 use Illuminate\Database\Eloquent\Attributes\ScopedBy;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -64,11 +65,72 @@ class Employee extends Model
         'minutes_per_full_workday' => 'integer',
         'ordinary_hours_per_day' => 'decimal:2',
         'is_exempt_from_overtime' => 'boolean',
-        'scheduled_work_days' => 'array',
         'is_active' => 'boolean',
     ];
 
     protected $appends = ['full_name'];
+
+    /**
+     * Dias ISO de la jornada programada, SIEMPRE como enteros.
+     *
+     * El formulario de empleados envia el payload como FormData (forceFormData por la foto),
+     * y FormData convierte todo a texto: sin normalizar, se guardaba ["1","2",...] y cualquier
+     * comparacion estricta contra Carbon::isoWeekday() (int) fallaba silenciosamente, dejando
+     * al empleado sin ningun dia laborable (no se detectaba ninguna inasistencia).
+     * Se normaliza al leer y al escribir para reparar tambien los registros ya guardados asi.
+     *
+     * @return Attribute<list<int>|null, string|null>
+     */
+    protected function scheduledWorkDays(): Attribute
+    {
+        return Attribute::make(
+            get: function (?string $value): ?array {
+                if ($value === null) {
+                    return null;
+                }
+
+                $decoded = json_decode($value, true);
+
+                return is_array($decoded) ? self::normalizeWorkDays($decoded) : null;
+            },
+            set: function (array|string|null $value): ?string {
+                if ($value === null) {
+                    return null;
+                }
+
+                if (is_string($value)) {
+                    $decoded = json_decode($value, true);
+                    $value = is_array($decoded) ? $decoded : [];
+                }
+
+                return json_encode(self::normalizeWorkDays($value));
+            },
+        );
+    }
+
+    /**
+     * @param  array<int|string, mixed>  $days
+     * @return list<int>
+     */
+    protected static function normalizeWorkDays(array $days): array
+    {
+        $normalized = [];
+
+        foreach ($days as $day) {
+            if (! is_scalar($day)) {
+                continue;
+            }
+
+            $int = (int) $day;
+            if ($int >= 1 && $int <= 7 && ! in_array($int, $normalized, true)) {
+                $normalized[] = $int;
+            }
+        }
+
+        sort($normalized);
+
+        return $normalized;
+    }
 
     public function company(): BelongsTo
     {
