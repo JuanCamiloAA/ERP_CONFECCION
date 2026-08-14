@@ -38,9 +38,18 @@ interface Props {
     customWidgets?: CustomWidgetMeta[];
     layoutVariant?: string;
     dashboardLayout?: DashboardLayout;
+    dashboardMobileLayout?: DashboardLayout;
 }
 
-export default function SuperAdminOverview({ stats, customWidgets = [], layoutVariant, dashboardLayout = [] }: Props) {
+const WIDGET_KIND_LABEL: Record<string, string> = {
+    kpi: 'KPI',
+    bar: 'Gráfico',
+    line: 'Gráfico',
+    pie: 'Gráfico',
+    table: 'Tabla',
+};
+
+export default function SuperAdminOverview({ stats, customWidgets = [], layoutVariant, dashboardLayout = [], dashboardMobileLayout = [] }: Props) {
     const focused = stats.focused_company_id != null && stats.focused_company_summary != null;
     const resolvedLayoutVariant = layoutVariant ?? (focused ? 'super_admin_focused' : 'super_admin_consolidated');
 
@@ -48,6 +57,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
         ? [
               {
                   key: 'sys:companies_active',
+                  label: 'Empresas activas',
+                  kind: 'KPI',
                   w: 3,
                   h: 4,
                   minW: 2,
@@ -64,6 +75,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
               },
               {
                   key: 'sys:companies_total',
+                  label: 'Empresas totales',
+                  kind: 'KPI',
                   w: 3,
                   h: 4,
                   minW: 2,
@@ -80,6 +93,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
               },
               {
                   key: 'sys:employees_active',
+                  label: 'Empleados activos',
+                  kind: 'KPI',
                   w: 3,
                   h: 4,
                   minW: 2,
@@ -96,6 +111,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
               },
               {
                   key: 'sys:users_staff',
+                  label: 'Usuarios de staff',
+                  kind: 'KPI',
                   w: 3,
                   h: 4,
                   minW: 2,
@@ -112,6 +129,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
               },
               {
                   key: 'sys:users_linked',
+                  label: 'Usuarios vinculados',
+                  kind: 'KPI',
                   w: 3,
                   h: 4,
                   minW: 2,
@@ -130,6 +149,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
         : [
               {
                   key: 'sys:employees_active_company',
+                  label: 'Empleados activos (empresa)',
+                  kind: 'KPI',
                   w: 4,
                   h: 4,
                   minW: 2,
@@ -146,6 +167,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
               },
               {
                   key: 'sys:users_staff_company',
+                  label: 'Usuarios de staff (empresa)',
+                  kind: 'KPI',
                   w: 4,
                   h: 4,
                   minW: 2,
@@ -161,6 +184,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
               },
               {
                   key: 'sys:users_linked_company',
+                  label: 'Usuarios vinculados (empresa)',
+                  kind: 'KPI',
                   w: 4,
                   h: 4,
                   minW: 2,
@@ -180,6 +205,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
         ...kpiPanels,
         {
             key: 'sys:memberships',
+            label: 'Membresías',
+            kind: 'Tabla',
             w: 12,
             h: 10,
             minW: 5,
@@ -239,6 +266,8 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
         },
         ...customWidgets.map((w): DashboardPanel => ({
             key: `custom:${w.id}`,
+            label: w.title,
+            kind: WIDGET_KIND_LABEL[w.type] ?? 'Panel',
             w: w.type === 'kpi' ? 3 : 6,
             h: w.type === 'kpi' ? 4 : 9,
             minW: w.type === 'kpi' ? 2 : 3,
@@ -260,7 +289,12 @@ export default function SuperAdminOverview({ stats, customWidgets = [], layoutVa
                 </p>
             </div>
 
-            <DashboardGrid variant={resolvedLayoutVariant} panels={panels} initialLayout={dashboardLayout} />
+            <DashboardGrid
+                variant={resolvedLayoutVariant}
+                panels={panels}
+                initialLayout={dashboardLayout}
+                initialMobileLayout={dashboardMobileLayout}
+            />
         </div>
     );
 }

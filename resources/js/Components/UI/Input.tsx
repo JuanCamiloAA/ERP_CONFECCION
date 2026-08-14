@@ -157,7 +157,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
                         onFocus={handleFocus}
                         onBlur={handleBlur}
                         className={cn(
-                            'flex-1 bg-transparent px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400',
+                            // min-w-0: sin esto el ancho intrinseco del input (~20 caracteres) actua
+                            // como minimo y desborda cuando vive en una fila flex angosta (ej. el
+                            // stepper de cantidad entre dos botones en movil).
+                            'min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-slate-900 outline-none placeholder:text-slate-400',
                             'dark:text-slate-100 dark:placeholder:text-slate-500',
                             prefix && 'pl-2',
                             suffix && 'pr-2',

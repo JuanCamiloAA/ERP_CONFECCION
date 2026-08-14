@@ -250,10 +250,13 @@ class DashboardService
                 ->orderByDesc('payrolls.period_end')
                 ->limit(12)
                 ->get()
-                ->sortBy(fn ($row) => $row->period_end?->timestamp ?? 0)
+                // period_end viene del join con payrolls y se hidrata en PayrollEmployee, que no
+                // castea esa columna (pertenece a Payroll): llega como texto plano, por eso hay
+                // que parsearla en vez de tratarla como Carbon.
+                ->sortBy(fn ($row) => $row->period_end ? Carbon::parse($row->period_end)->timestamp : 0)
                 ->values()
                 ->map(fn ($row) => [
-                    'period_end' => $row->period_end?->toDateString(),
+                    'period_end' => $row->period_end ? Carbon::parse($row->period_end)->toDateString() : null,
                     'label' => (string) ($row->payroll_name ?? ''),
                     'net_payment' => (float) $row->net_payment,
                 ])

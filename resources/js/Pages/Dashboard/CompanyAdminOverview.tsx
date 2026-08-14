@@ -7,6 +7,7 @@ import { Card, CardHeader } from '@/Components/UI/Card';
 import { StatCard } from '@/Components/UI/StatCard';
 import { CustomWidgetPanel } from '@/Components/Dashboard/CustomWidgetPanel';
 import { DashboardGrid, type DashboardPanel } from '@/Components/Dashboard/DashboardGrid';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 import type { CompanyAdminStats, CustomWidgetMeta, DashboardLayout } from './dashboard-types';
 
@@ -28,9 +29,19 @@ interface Props {
     customWidgets?: CustomWidgetMeta[];
     layoutVariant?: string;
     dashboardLayout?: DashboardLayout;
+    dashboardMobileLayout?: DashboardLayout;
 }
 
-export default function CompanyAdminOverview({ stats, customWidgets = [], layoutVariant = 'company_admin', dashboardLayout = [] }: Props) {
+const WIDGET_KIND_LABEL: Record<string, string> = {
+    kpi: 'KPI',
+    bar: 'Gráfico',
+    line: 'Gráfico',
+    pie: 'Gráfico',
+    table: 'Tabla',
+};
+
+export default function CompanyAdminOverview({ stats, customWidgets = [], layoutVariant = 'company_admin', dashboardLayout = [], dashboardMobileLayout = [] }: Props) {
+    const isMobile = useIsMobile();
     const page = usePage<App.PageProps>();
     const canPayrollShow = Boolean(page.props.auth.user?.permissions?.includes('payrolls.show.view'));
 
@@ -46,6 +57,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
     const panels: DashboardPanel[] = [
         {
             key: 'sys:producido_pendiente_pago',
+            label: 'Producido pendiente de pago',
+            kind: 'KPI',
             w: 3,
             h: 4,
             minW: 2,
@@ -62,6 +75,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         {
             key: 'sys:nomina_calculado',
+            label: 'Nóminas en calculado',
+            kind: 'KPI',
             w: 3,
             h: 4,
             minW: 2,
@@ -77,6 +92,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         {
             key: 'sys:nomina_aprobado',
+            label: 'Nóminas en aprobado',
+            kind: 'KPI',
             w: 3,
             h: 4,
             minW: 2,
@@ -92,6 +109,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         {
             key: 'sys:nomina_sin_pagar',
+            label: 'Nóminas sin pagar',
+            kind: 'KPI',
             w: 3,
             h: 4,
             minW: 2,
@@ -108,6 +127,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         {
             key: 'sys:empleados_activos',
+            label: 'Empleados activos',
+            kind: 'KPI',
             w: 3,
             h: 4,
             minW: 2,
@@ -123,6 +144,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         {
             key: 'sys:productividad',
+            label: 'Productividad por empleado',
+            kind: 'Gráfico',
             w: 12,
             h: 10,
             minW: 4,
@@ -148,7 +171,12 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
                             </div>
                         }
                     />
-                    <div className="mt-4 min-h-0 w-full flex-1">
+                    {/* En movil el panel no vive dentro del grid, asi que flex-1 no da altura
+                        medible y Recharts no puede dibujar: se calcula una altura por fila. */}
+                    <div
+                        className="mt-4 min-h-0 w-full flex-1"
+                        style={isMobile ? { height: Math.max(200, productivityData.length * 34 + 48) } : undefined}
+                    >
                         {productivityData.length === 0 ? (
                             <p className="flex h-full items-center justify-center text-sm text-slate-400">
                                 Sin producción en el período seleccionado.
@@ -158,7 +186,7 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
                                 <BarChart data={productivityData} layout="vertical" margin={{ left: 8, right: 16 }}>
                                     <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
                                     <XAxis type="number" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                                    <YAxis type="category" dataKey="displayName" width={120} tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                                    <YAxis type="category" dataKey="displayName" width={isMobile ? 78 : 120} tick={{ fontSize: 11 }} stroke="#94a3b8" />
                                     <Tooltip
                                         contentStyle={{ borderRadius: 8, border: '1px solid #e2e8f0' }}
                                         content={({ active, payload }) => {
@@ -185,6 +213,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         {
             key: 'sys:latest_productions',
+            label: 'Últimas producciones',
+            kind: 'Tabla',
             w: 6,
             h: 9,
             minW: 3,
@@ -241,6 +271,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         {
             key: 'sys:recent_payrolls',
+            label: 'Nóminas recientes',
+            kind: 'Tabla',
             w: 6,
             h: 9,
             minW: 3,
@@ -301,6 +333,8 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
         },
         ...customWidgets.map((w): DashboardPanel => ({
             key: `custom:${w.id}`,
+            label: w.title,
+            kind: WIDGET_KIND_LABEL[w.type] ?? 'Panel',
             w: w.type === 'kpi' ? 3 : 6,
             h: w.type === 'kpi' ? 4 : 9,
             minW: w.type === 'kpi' ? 2 : 3,
@@ -320,7 +354,12 @@ export default function CompanyAdminOverview({ stats, customWidgets = [], layout
                 </p>
             </div>
 
-            <DashboardGrid variant={layoutVariant} panels={panels} initialLayout={dashboardLayout} />
+            <DashboardGrid
+                variant={layoutVariant}
+                panels={panels}
+                initialLayout={dashboardLayout}
+                initialMobileLayout={dashboardMobileLayout}
+            />
 
             <p className="text-xs text-slate-400 dark:text-slate-500">
                 <strong>Producido pendiente de pago</strong>: suma de montos confirmados por operaciones cuya fecha sigue abierta —

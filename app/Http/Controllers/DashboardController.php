@@ -37,6 +37,7 @@ class DashboardController extends Controller
                 'customWidgets' => $this->customWidgetsFor($user, $focusedCompanyId),
                 'layoutVariant' => $layoutVariant,
                 'dashboardLayout' => $this->layoutFor($user, $layoutVariant),
+                'dashboardMobileLayout' => $this->mobileLayoutFor($user, $layoutVariant),
             ]);
         }
 
@@ -50,6 +51,7 @@ class DashboardController extends Controller
                 'customWidgets' => [],
                 'layoutVariant' => null,
                 'dashboardLayout' => [],
+                'dashboardMobileLayout' => [],
             ]);
         }
 
@@ -71,6 +73,7 @@ class DashboardController extends Controller
                     'customWidgets' => $this->customWidgetsFor($user, $effectiveCompanyId),
                     'layoutVariant' => 'employee',
                     'dashboardLayout' => $this->layoutFor($user, 'employee'),
+                    'dashboardMobileLayout' => $this->mobileLayoutFor($user, 'employee'),
                 ]);
             }
         }
@@ -85,6 +88,7 @@ class DashboardController extends Controller
             'customWidgets' => $this->customWidgetsFor($user, $effectiveCompanyId),
             'layoutVariant' => 'company_admin',
             'dashboardLayout' => $this->layoutFor($user, 'company_admin'),
+            'dashboardMobileLayout' => $this->mobileLayoutFor($user, 'company_admin'),
         ]);
     }
 
@@ -106,6 +110,15 @@ class DashboardController extends Controller
                 && isset($item['i'], $item['x'], $item['y'], $item['w'], $item['h'])
                 && is_string($item['i']);
         }));
+    }
+
+    /**
+     * Layout propio de movil (orden, ancho y paneles ocultos). Se guarda con la variante
+     * sufijada ":mobile" para que reordenar en el telefono no altere el tablero de escritorio.
+     */
+    protected function mobileLayoutFor(User $user, string $variant): array
+    {
+        return $this->layoutFor($user, $variant.DashboardLayoutController::MOBILE_SUFFIX);
     }
 
     /**

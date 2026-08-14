@@ -30,15 +30,18 @@ export function StatCard({ title, value, icon, color = 'indigo', trend, subtitle
         <div
             onClick={onClick}
             className={cn(
-                'rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all',
+                // p-4 en movil (caben dos por fila a 390px), p-5 desde sm.
+                'rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition-all sm:p-5',
                 'dark:border-slate-700 dark:bg-slate-800',
                 onClick && 'cursor-pointer hover:shadow-md hover:border-indigo-300 dark:hover:border-indigo-600',
             )}
         >
-            <div className="flex items-start justify-between">
-                <div className="flex-1">
-                    <p className="text-sm font-medium text-slate-500 dark:text-slate-400">{title}</p>
-                    <p className="mt-2 text-2xl font-bold text-slate-900 dark:text-slate-100">{value}</p>
+            <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                    <p className="text-xs font-medium text-slate-500 sm:text-sm dark:text-slate-400">{title}</p>
+                    <p className="mt-1.5 text-[22px] font-bold leading-tight text-slate-900 sm:mt-2 sm:text-2xl dark:text-slate-100">
+                        {value}
+                    </p>
                     {subtitle && (
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{subtitle}</p>
                     )}
@@ -66,9 +69,11 @@ export function StatCard({ title, value, icon, color = 'indigo', trend, subtitle
                     )}
                 </div>
                 {icon && (
+                    // Oculto en movil: el cuadro de 48px robaba el ancho que necesita la cifra
+                    // para que quepan dos tarjetas por fila.
                     <div
                         className={cn(
-                            'flex h-12 w-12 shrink-0 items-center justify-center rounded-xl',
+                            'hidden h-12 w-12 shrink-0 items-center justify-center rounded-xl sm:flex',
                             palette.bg,
                             palette.text,
                         )}

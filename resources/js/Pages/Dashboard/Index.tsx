@@ -15,6 +15,7 @@ interface Props {
     customWidgets?: CustomWidgetMeta[];
     layoutVariant?: string;
     dashboardLayout?: DashboardLayout;
+    dashboardMobileLayout?: DashboardLayout;
 }
 
 export default function Dashboard({
@@ -24,6 +25,7 @@ export default function Dashboard({
     customWidgets = [],
     layoutVariant,
     dashboardLayout = [],
+    dashboardMobileLayout = [],
 }: Props) {
     if (requireCompany || stats == null) {
         return (
@@ -47,6 +49,7 @@ export default function Dashboard({
                     customWidgets={customWidgets}
                     layoutVariant={layoutVariant}
                     dashboardLayout={dashboardLayout}
+                    dashboardMobileLayout={dashboardMobileLayout}
                 />
             );
             break;
@@ -57,6 +60,7 @@ export default function Dashboard({
                     customWidgets={customWidgets}
                     layoutVariant={layoutVariant}
                     dashboardLayout={dashboardLayout}
+                    dashboardMobileLayout={dashboardMobileLayout}
                 />
             );
             break;
@@ -67,6 +71,7 @@ export default function Dashboard({
                     customWidgets={customWidgets}
                     layoutVariant={layoutVariant}
                     dashboardLayout={dashboardLayout}
+                    dashboardMobileLayout={dashboardMobileLayout}
                 />
             );
             break;

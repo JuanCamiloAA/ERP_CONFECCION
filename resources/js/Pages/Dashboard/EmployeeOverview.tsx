@@ -19,9 +19,18 @@ interface Props {
     customWidgets?: CustomWidgetMeta[];
     layoutVariant?: string;
     dashboardLayout?: DashboardLayout;
+    dashboardMobileLayout?: DashboardLayout;
 }
 
-export default function EmployeeOverview({ stats, customWidgets = [], layoutVariant = 'employee', dashboardLayout = [] }: Props) {
+const WIDGET_KIND_LABEL: Record<string, string> = {
+    kpi: 'KPI',
+    bar: 'Gráfico',
+    line: 'Gráfico',
+    pie: 'Gráfico',
+    table: 'Tabla',
+};
+
+export default function EmployeeOverview({ stats, customWidgets = [], layoutVariant = 'employee', dashboardLayout = [], dashboardMobileLayout = [] }: Props) {
     const page = usePage<App.PageProps>();
     const canPayrollsIndex = Boolean(page.props.auth.user?.permissions?.includes('payrolls.index.view'));
 
@@ -36,6 +45,8 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
     const panels: DashboardPanel[] = [
         {
             key: 'sys:unidades_pendientes',
+            label: 'Unidades pendientes',
+            kind: 'KPI',
             w: 4,
             h: 4,
             minW: 2,
@@ -58,6 +69,8 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
         },
         {
             key: 'sys:anticipos_pendientes',
+            label: 'Anticipos pendientes',
+            kind: 'KPI',
             w: 4,
             h: 4,
             minW: 2,
@@ -74,6 +87,8 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
         },
         {
             key: 'sys:nomina_incluye',
+            label: 'Nómina que me incluye',
+            kind: 'KPI',
             w: 4,
             h: 4,
             minW: 2,
@@ -98,6 +113,8 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
             ? [
                   {
                       key: 'sys:anticipos_preview',
+                      label: 'Anticipos por descontar',
+                      kind: 'Tabla',
                       w: 6,
                       h: 8,
                       minW: 3,
@@ -121,6 +138,8 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
             : []),
         {
             key: 'sys:payroll_history',
+            label: 'Historial de nómina',
+            kind: 'Tabla',
             w: 6,
             h: 9,
             minW: 3,
@@ -166,6 +185,8 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
         },
         {
             key: 'sys:latest_productions',
+            label: 'Mis últimas producciones',
+            kind: 'Tabla',
             w: 12,
             h: 9,
             minW: 4,
@@ -224,6 +245,8 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
         },
         ...customWidgets.map((w): DashboardPanel => ({
             key: `custom:${w.id}`,
+            label: w.title,
+            kind: WIDGET_KIND_LABEL[w.type] ?? 'Panel',
             w: w.type === 'kpi' ? 4 : 6,
             h: w.type === 'kpi' ? 4 : 9,
             minW: w.type === 'kpi' ? 2 : 3,
@@ -241,7 +264,12 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
                 </p>
             </div>
 
-            <DashboardGrid variant={layoutVariant} panels={panels} initialLayout={dashboardLayout} />
+            <DashboardGrid
+                variant={layoutVariant}
+                panels={panels}
+                initialLayout={dashboardLayout}
+                initialMobileLayout={dashboardMobileLayout}
+            />
         </div>
     );
 }
