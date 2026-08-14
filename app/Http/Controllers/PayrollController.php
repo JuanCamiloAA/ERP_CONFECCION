@@ -326,6 +326,9 @@ class PayrollController extends Controller
         $payroll->load([
             'company:id,name,nit,address,phone,logo',
             'payrollEmployees.employee:id,first_name,last_name,document_number,payroll_mode',
+            // Permite mostrar en el documento el saldo entregado, lo aplicado en este periodo y
+            // lo que queda pendiente para el siguiente (descuento parcial de anticipos).
+            'payrollEmployees.advances',
         ]);
 
         // Modo detallado: cada empleado se imprime en su propia seccion con el detalle de
