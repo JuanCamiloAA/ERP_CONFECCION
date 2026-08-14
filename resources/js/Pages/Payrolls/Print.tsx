@@ -53,7 +53,11 @@ export default function PayrollPrint({
 
     const logoSrc = payroll.company?.logo ? mediaUrl(payroll.company.logo) : undefined;
 
-    const header = (
+    /**
+     * En el informe detallado se repite al inicio de cada hoja (una hoja por empleado), por eso
+     * es una funcion y no un bloque unico: cada seccion lo renderiza para su propia pagina.
+     */
+    const companyHeader = () => (
         <div className="mb-6 flex items-start justify-between border-b pb-4">
             <div className="flex items-center gap-3">
                 {logoSrc ? (
@@ -112,7 +116,8 @@ export default function PayrollPrint({
                 }
             `}</style>
             <div className="mx-auto max-w-5xl bg-white p-8 text-slate-900">
-                {header}
+                {/* En detallado el encabezado va dentro de cada seccion, para que se repita por hoja. */}
+                {isDetailed ? null : companyHeader()}
 
                 {isDetailed ? (
                     <>
@@ -124,8 +129,11 @@ export default function PayrollPrint({
                             const hasLegal = Number(row.legal_hourly_subtotal ?? 0) > 0;
                             const hasDaily = Number(row.daily_work_subtotal ?? 0) > 0;
 
+                            // El margen superior es solo para la vista en pantalla: al imprimir,
+                            // la seccion ya arranca en una hoja nueva por el salto de pagina.
                             return (
-                                <section key={row.id} className={index > 0 ? 'page-break mt-8' : 'mt-2'}>
+                                <section key={row.id} className={index > 0 ? 'page-break mt-12 print:mt-0' : ''}>
+                                    {companyHeader()}
                                     <div className="mb-3 flex items-baseline justify-between border-b border-slate-300 pb-1">
                                         <h3 className="text-base font-bold">{employeeName(row)}</h3>
                                         <p className="text-xs text-slate-600">
@@ -320,7 +328,8 @@ export default function PayrollPrint({
                         {rows.length === 0 ? (
                             <p className="text-sm text-slate-600">Esta nomina no tiene empleados calculados.</p>
                         ) : (
-                            <section className="page-break mt-8">
+                            <section className="page-break mt-12 print:mt-0">
+                                {companyHeader()}
                                 <h3 className="mb-2 text-sm font-semibold uppercase text-slate-600">Resumen general</h3>
                                 <table className="w-full text-xs">
                                     <thead>

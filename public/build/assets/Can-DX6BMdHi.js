@@ -1,0 +1,1 @@
+import{i as f,j as o}from"./app-soc1ctd0.js";function u({permission:i,role:r,any:t,all:s,fallback:a=null,children:c}){const e=f();let n=!0;return i&&(n=n&&e.can(i)),r&&(n=n&&e.hasRole(r)),t&&t.length>0&&(n=n&&e.canAny(t)),s&&s.length>0&&(n=n&&e.canAll(s)),o.jsx(o.Fragment,{children:n?c:a})}export{u as C};
