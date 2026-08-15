@@ -216,14 +216,18 @@ export function ProductionRegisterForm({
     };
 
     const referenceItems: SearchSheetItem[] = references.map((r) => {
-        const registered = Object.values(r.productions_quantity_by_operation ?? {}).reduce((m, v) => Math.max(m, Number(v)), 0);
-        const remaining = r.lot_total_quantity != null ? Math.max(0, Number(r.lot_total_quantity) - registered) : null;
+        // Cuantas operaciones de la referencia siguen teniendo unidades por producir.
+        const byOp = r.productions_quantity_by_operation ?? {};
+        const pendingOps =
+            r.lot_total_quantity != null
+                ? r.operations.filter((o) => Number(byOp[String(o.id)] ?? 0) < Number(r.lot_total_quantity)).length
+                : null;
         return {
             id: r.id,
             title: `${r.code} · ${r.name}`,
             subtitle: [
                 `${r.operations.length} ${r.operations.length === 1 ? 'operacion' : 'operaciones'}`,
-                remaining != null ? `disponibles ${remaining}` : null,
+                pendingOps != null ? `${pendingOps} pendientes` : null,
             ]
                 .filter(Boolean)
                 .join(' · '),
@@ -238,15 +242,35 @@ export function ProductionRegisterForm({
         };
     });
 
-    const operationItems: SearchSheetItem[] = availableOperations.map((o) => {
+    /**
+     * Solo las operaciones que aun tienen unidades por producir: una operacion se considera
+     * completa cuando su produccion acumulada cubre el lote de la referencia. Se filtra aqui
+     * (no en `availableOperations`) para que una operacion ya elegida siga resolviendo su
+     * precio automatico aunque quede fuera de la lista.
+     */
+    const pendingOperations = availableOperations.filter((o) => {
+        const lot = selectedReference?.lot_total_quantity;
+        if (lot == null) {
+            return true;
+        }
         const registered = Number((selectedReference?.productions_quantity_by_operation ?? {})[String(o.id)] ?? 0);
+        return registered < Number(lot);
+    });
+
+    const operationItems: SearchSheetItem[] = pendingOperations.map((o) => {
+        const registered = Number((selectedReference?.productions_quantity_by_operation ?? {})[String(o.id)] ?? 0);
+        const lot = selectedReference?.lot_total_quantity;
+        const pending = lot != null ? Math.max(0, Number(lot) - registered) : null;
+
         return {
             id: o.id,
             title: o.name,
-            subtitle: `registradas ${registered}`,
+            subtitle: pending != null ? `faltan ${pending} · registradas ${registered}` : `registradas ${registered}`,
             trailing: <span className="text-slate-700 dark:text-slate-300">{formatCurrency(o.pivot.price)}</span>,
         };
     });
+
+    const allOperationsDone = availableOperations.length > 0 && pendingOperations.length === 0;
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
@@ -310,8 +334,14 @@ export function ProductionRegisterForm({
                             label="Operacion"
                             required
                             error={errors.operation_id}
-                            disabled={!data.reference_id}
-                            placeholder={data.reference_id ? 'Buscar operacion…' : 'Primero elige referencia'}
+                            disabled={!data.reference_id || allOperationsDone}
+                            placeholder={
+                                !data.reference_id
+                                    ? 'Primero elige referencia'
+                                    : allOperationsDone
+                                      ? 'Todas las operaciones completaron el lote'
+                                      : 'Buscar operacion…'
+                            }
                             primary={selectedOperation?.name}
                             secondary={selectedOperation ? `${formatCurrency(selectedOperation.pivot.price)} / und` : undefined}
                             onOpen={() => setOperationSheetOpen(true)}
@@ -557,7 +587,8 @@ export function ProductionRegisterForm({
                 items={operationItems}
                 selectedId={data.operation_id || null}
                 searchPlaceholder="Buscar operacion…"
-                countLabel={(shown, total) => `${shown} de ${total} operaciones de la referencia`}
+                emptyMessage="No quedan operaciones con unidades pendientes en esta referencia."
+                countLabel={(shown, total) => `${shown} de ${total} operaciones con unidades pendientes`}
                 onSelect={(id) => setData('operation_id', Number(id))}
             />
         </>
