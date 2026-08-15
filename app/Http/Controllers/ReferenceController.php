@@ -46,21 +46,29 @@ class ReferenceController extends Controller
 
         $ids = $references->getCollection()->pluck('id');
         if ($ids->isNotEmpty()) {
-            $maxByRef = Production::query()
+            // Produccion acumulada por operacion (una fila por referencia+operacion).
+            $perOperation = Production::query()
                 ->withoutGlobalScopes()
-                ->selectRaw('reference_id, MAX(op_sum) as productions_max_per_operation')
-                ->fromSub(
-                    Production::query()
-                        ->withoutGlobalScopes()
-                        ->selectRaw('reference_id, operation_id, SUM(quantity) as op_sum')
-                        ->whereIn('reference_id', $ids)
-                        ->groupBy('reference_id', 'operation_id'),
-                    'per_op'
-                )
-                ->groupBy('reference_id')
-                ->pluck('productions_max_per_operation', 'reference_id');
-            $references->getCollection()->each(function (Reference $ref) use ($maxByRef) {
-                $ref->setAttribute('productions_max_per_operation', (int) ($maxByRef[$ref->id] ?? 0));
+                ->selectRaw('reference_id, operation_id, SUM(quantity) as op_sum')
+                ->whereIn('reference_id', $ids)
+                ->groupBy('reference_id', 'operation_id')
+                ->get()
+                ->groupBy('reference_id');
+
+            $references->getCollection()->each(function (Reference $ref) use ($perOperation) {
+                $sums = $perOperation->get($ref->id) ?? collect();
+                $lot = $ref->lot_total_quantity !== null ? (int) $ref->lot_total_quantity : null;
+
+                $ref->setAttribute('productions_max_per_operation', (int) $sums->max('op_sum'));
+
+                // Una operacion se considera completa cuando su produccion acumulada cubre
+                // el lote. Sin lote definido no hay meta contra la cual compararla.
+                $ref->setAttribute(
+                    'operations_completed_count',
+                    $lot !== null && $lot > 0
+                        ? $sums->filter(fn ($row) => (int) $row->op_sum >= $lot)->count()
+                        : 0
+                );
             });
         }
 

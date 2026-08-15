@@ -210,8 +210,20 @@ export default function PayrollShow({
     const [adjSaving, setAdjSaving] = useState(false);
     const [absenceEdits, setAbsenceEdits] = useState<Record<string, AbsenceEditState>>({});
     const [advanceEdits, setAdvanceEdits] = useState<Record<string, AdvanceEditState>>({});
+    /** Filtro por nombre solo en cliente (movil): la paginacion sigue siendo del servidor. */
+    const [employeeSearch, setEmployeeSearch] = useState('');
+    /** Empleados con el editor de jornadas desplegado en movil. */
+    const [sessionsOpen, setSessionsOpen] = useState<Set<number>>(new Set());
 
     const rows = payrollEmployees.data;
+    // Filtro en cliente solo para la vista movil; no altera la paginacion del servidor.
+    const visibleRows = employeeSearch.trim()
+        ? rows.filter((r) =>
+              `${r.employee?.first_name ?? ''} ${r.employee?.last_name ?? ''} ${r.employee?.document_number ?? ''}`
+                  .toLowerCase()
+                  .includes(employeeSearch.trim().toLowerCase()),
+          )
+        : rows;
     const employeeCount = payrollEmployeeTotals.employee_count;
     const canAdjustBeforeCalc = payroll.status === 'calculado' && perms.can('payrolls.show.edit_time');
     const canManageConceptAdjustments =
@@ -335,7 +347,7 @@ export default function PayrollShow({
                         </Link>
                     ) : null}
                     {canManageConceptAdjustments && payrollConcepts.length > 0 ? (
-                        <Button size="sm" icon={<PlusIcon className="h-4 w-4" />} onClick={() => setAdjModal({ payrollEmployee: row })}>
+                        <Button size="sm" className="min-h-11 lg:min-h-8" icon={<PlusIcon className="h-4 w-4" />} onClick={() => setAdjModal({ payrollEmployee: row })}>
                             Agregar concepto
                         </Button>
                     ) : null}
@@ -434,7 +446,11 @@ export default function PayrollShow({
                                     className="flex flex-wrap items-center gap-3 rounded-md border border-slate-100 px-3 py-2 dark:border-slate-700"
                                 >
                                     {isHourlyLegalRow ? (
+                                        // <label> (no <span>) para que toda el area de 44px alterne
+                                        // la casilla: el componente Checkbox no envuelve el input.
+                                        <label className="-my-1 flex min-h-11 cursor-pointer items-center px-2 lg:my-0 lg:min-h-0 lg:px-0">
                                         <Checkbox
+                                            className="h-5 w-5 lg:h-4 lg:w-4"
                                             checked={state.discount}
                                             disabled={!canEdit}
                                             onChange={(e) =>
@@ -444,6 +460,7 @@ export default function PayrollShow({
                                                 }))
                                             }
                                         />
+                                        </label>
                                     ) : null}
                                     <span className="w-28 shrink-0 text-sm">{formatDate(item.work_date)}</span>
                                     {isHourlyLegalRow && (
@@ -454,6 +471,7 @@ export default function PayrollShow({
                                     {canEdit ? (
                                         <Input
                                             containerClassName="!mb-0 flex-1 min-w-[180px]"
+                                            className="h-11 lg:h-10"
                                             placeholder="Motivo si se justifica (opcional)"
                                             value={state.note}
                                             onChange={(e) =>
@@ -518,6 +536,7 @@ export default function PayrollShow({
                                         step="0.01"
                                         min={0.01}
                                         containerClassName="!mb-0 w-36"
+                                        className="h-11 lg:h-10"
                                         value={currentValue}
                                         onChange={(e) =>
                                             setAdvanceEdits((prev) => ({
@@ -546,6 +565,103 @@ export default function PayrollShow({
             else next.add(payrollEmployeeId);
             return next;
         });
+    };
+
+    const toggleSessions = (payrollEmployeeId: number) => {
+        setSessionsOpen((prev) => {
+            const next = new Set(prev);
+            if (next.has(payrollEmployeeId)) next.delete(payrollEmployeeId);
+            else next.add(payrollEmployeeId);
+            return next;
+        });
+    };
+
+    /** Etiqueta corta de modalidad, compartida por la fila movil y el resumen. */
+    const modeLabel = (mode?: string): string =>
+        mode === 'fixed_daily' ? 'Salario diario' : mode === 'hourly_legal' ? 'Por horas (legal)' : 'Por operaciones';
+
+    /**
+     * Editor de jornadas para movil: misma clave (`editKey`) y mismo estado `sessionEdits`
+     * que la tabla de escritorio, por lo que `buildAdjustments()` recoge los cambios desde
+     * cualquiera de las dos vistas. Solo cambia la presentacion (tarjetas en vez de tabla).
+     */
+    const mobileSessionsEditor = (row: PayrollEmployee, empSessions: WorkDaySession[]) => {
+        if (empSessions.length === 0) {
+            return <p className="text-sm text-slate-600 dark:text-slate-400">No hay sesiones registradas.</p>;
+        }
+
+        return (
+            <div className="space-y-2">
+                {empSessions.map((s) => {
+                    const k = editKey(row.employee_id, s.id);
+                    const canEditRow =
+                        canAdjustBeforeCalc && (s.status === 'closed' || s.status === 'adjusted') && !!s.clock_out_at;
+                    const edit = sessionEdits[k] ?? {
+                        duration_minutes: String(s.duration_minutes ?? ''),
+                        reason: '',
+                    };
+
+                    return (
+                        <div
+                            key={s.id}
+                            className="rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-600 dark:bg-slate-800"
+                        >
+                            <div className="flex items-baseline justify-between gap-2">
+                                <span className="text-sm font-medium text-slate-900 dark:text-slate-100">
+                                    {formatDate(s.work_date)}
+                                </span>
+                                <span className="text-xs capitalize text-slate-500 dark:text-slate-400">
+                                    {s.status} · {s.duration_minutes ?? '—'} min
+                                </span>
+                            </div>
+                            <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
+                                {s.clock_in_at ? new Date(s.clock_in_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                                {' – '}
+                                {s.clock_out_at ? new Date(s.clock_out_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
+                            </p>
+                            {canEditRow ? (
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                    <Input
+                                        containerClassName="!mb-0"
+                                        label="Ajuste min."
+                                        type="number"
+                                        min={0}
+                                        className="h-11"
+                                        value={edit.duration_minutes}
+                                        onChange={(e) =>
+                                            setSessionEdits((prev) => ({
+                                                ...prev,
+                                                [k]: {
+                                                    duration_minutes: e.target.value,
+                                                    reason: prev[k]?.reason ?? '',
+                                                },
+                                            }))
+                                        }
+                                    />
+                                    <Input
+                                        containerClassName="!mb-0"
+                                        label="Motivo"
+                                        placeholder="Opcional"
+                                        className="h-11"
+                                        value={edit.reason}
+                                        onChange={(e) =>
+                                            setSessionEdits((prev) => ({
+                                                ...prev,
+                                                [k]: {
+                                                    duration_minutes:
+                                                        prev[k]?.duration_minutes ?? String(s.duration_minutes ?? ''),
+                                                    reason: e.target.value,
+                                                },
+                                            }))
+                                        }
+                                    />
+                                </div>
+                            ) : null}
+                        </div>
+                    );
+                })}
+            </div>
+        );
     };
 
     const handleAction = (action: 'calculate' | 'approve' | 'pay') => {
@@ -583,12 +699,12 @@ export default function PayrollShow({
     return (
         <AppLayout title={payroll.name}>
             <Head title={payroll.name} />
-            <div className="space-y-6">
+            <div className="space-y-6 pb-28 lg:pb-0">
                 <PageHeader
                     title={payroll.name}
                     breadcrumbs={[{ label: 'Nominas', href: route('payrolls.index') }, { label: payroll.name }]}
                     action={
-                        <div className="flex flex-wrap gap-2">
+                        <div className="hidden flex-wrap gap-2 lg:flex">
                             <Link href={route('payrolls.index')}>
                                 <Button variant="ghost" icon={<ArrowLeftIcon className="h-4 w-4" />}>
                                     Volver
@@ -641,7 +757,66 @@ export default function PayrollShow({
                     }
                 />
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+                {/* Movil: un solo resumen en vez de siete tarjetas. */}
+                <Card className="lg:hidden">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">Periodo</p>
+                            <p className="mt-0.5 text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                {formatDate(payroll.period_start)} – {formatDate(payroll.period_end)}
+                            </p>
+                            <p className="text-xs capitalize text-slate-500 dark:text-slate-400">{payroll.type}</p>
+                        </div>
+                        <Badge variant={statusVariant[payroll.status]}>{payroll.status}</Badge>
+                    </div>
+
+                    <dl className="mt-3 space-y-1.5 border-t border-slate-100 pt-3 text-sm dark:border-slate-700">
+                        <div className="flex justify-between gap-3">
+                            <dt className="text-slate-600 dark:text-slate-400">Bruto producido</dt>
+                            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                                {formatCurrency(totalProduction)}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <dt className="text-slate-600 dark:text-slate-400">Jornada y recargos</dt>
+                            <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">
+                                {formatCurrency(Number(totalDaily) + Number(totalLegalHourly))}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <dt className="text-slate-600 dark:text-slate-400">Ajustes manuales</dt>
+                            <dd className="font-medium tabular-nums text-amber-700 dark:text-amber-400">
+                                {formatCurrency(totalAdjustments)}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <dt className="text-slate-600 dark:text-slate-400">Anticipos</dt>
+                            <dd className="font-medium tabular-nums text-rose-600 dark:text-rose-400">
+                                – {formatCurrency(totalAdvances)}
+                            </dd>
+                        </div>
+                        <div className="flex justify-between gap-3">
+                            <dt className="text-slate-600 dark:text-slate-400">Deducciones</dt>
+                            <dd className="font-medium tabular-nums text-rose-600 dark:text-rose-400">
+                                – {formatCurrency(totalDeductions)}
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <div className="mt-3 flex items-end justify-between gap-3 border-t border-slate-200 pt-3 dark:border-slate-700">
+                        <div>
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                Neto a pagar
+                            </p>
+                            <p className="text-[22px] font-bold leading-tight tabular-nums text-indigo-600 dark:text-indigo-400">
+                                {formatCurrency(payroll.total_amount)}
+                            </p>
+                        </div>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{formatNumber(employeeCount)} empleados</p>
+                    </div>
+                </Card>
+
+                <div className="hidden grid-cols-1 gap-4 sm:grid-cols-2 lg:grid lg:grid-cols-4 xl:grid-cols-7">
                     <Card padding="sm">
                         <p className="text-xs uppercase text-slate-500">Periodo</p>
                         <p className="mt-1 text-sm font-semibold">
@@ -686,6 +861,157 @@ export default function PayrollShow({
                             </p>
                         </div>
                     ) : null}
+                    {/* Movil: buscador + una fila por empleado; comparte `expanded` con escritorio. */}
+                    <div className="px-4 pb-4 lg:hidden">
+                        {rows.length > 0 ? (
+                            <Input
+                                containerClassName="!mb-0"
+                                className="h-11"
+                                placeholder="Buscar empleado..."
+                                value={employeeSearch}
+                                onChange={(e) => setEmployeeSearch(e.target.value)}
+                            />
+                        ) : null}
+
+                        <div className="mt-3 space-y-2">
+                            {visibleRows.length === 0 ? (
+                                <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">
+                                    {rows.length === 0
+                                        ? 'Aun no hay empleados calculados.'
+                                        : 'Ningun empleado coincide con la busqueda.'}
+                                </p>
+                            ) : (
+                                visibleRows.map((row) => {
+                                    const dedTotal = ((row.deductions as Array<{ amount: number }>) ?? []).reduce(
+                                        (s, d) => s + Number(d.amount ?? 0),
+                                        0,
+                                    );
+                                    const isHourlyLegal = row.employee?.payroll_mode === 'hourly_legal';
+                                    const isFixed = row.employee?.payroll_mode === 'fixed_daily';
+                                    const isOpen = expanded.has(row.id);
+                                    const empSessions = row.employee_id
+                                        ? workSessionsByEmployee[String(row.employee_id)] ?? []
+                                        : [];
+                                    const overtimeAlerts = row.overtime_limit_alerts ?? [];
+
+                                    return (
+                                        <div
+                                            key={row.id}
+                                            className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-700"
+                                        >
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleRow(row.id)}
+                                                className="flex w-full items-center gap-3 bg-white p-3 text-left dark:bg-slate-800"
+                                                aria-expanded={isOpen}
+                                            >
+                                                <span className="min-w-0 flex-1">
+                                                    <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                                                        {row.employee?.first_name} {row.employee?.last_name}
+                                                    </span>
+                                                    <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">
+                                                        {modeLabel(row.employee?.payroll_mode)}
+                                                        {isFixed || isHourlyLegal
+                                                            ? ' \u00b7 ' + formatNumber(empSessions.length) + ' jornadas'
+                                                            : ''}
+                                                    </span>
+                                                    {overtimeAlerts.length > 0 ? (
+                                                        <Badge variant="warning" className="mt-1">
+                                                            <ExclamationTriangleIcon className="mr-1 h-3 w-3" />
+                                                            Tope excedido
+                                                        </Badge>
+                                                    ) : null}
+                                                </span>
+                                                <span className="shrink-0 text-right">
+                                                    <span className="block text-sm font-semibold tabular-nums text-indigo-600 dark:text-indigo-400">
+                                                        {formatCurrency(row.net_payment)}
+                                                    </span>
+                                                    <span className="block text-[11px] tabular-nums text-slate-400 dark:text-slate-500">
+                                                        bruto {formatCurrency(rowGross(row))}
+                                                    </span>
+                                                </span>
+                                                {isOpen ? (
+                                                    <ChevronDownIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                                                ) : (
+                                                    <ChevronRightIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                                                )}
+                                            </button>
+
+                                            {isOpen ? (
+                                                <div className="space-y-3 border-t border-slate-200 bg-slate-50 p-3 dark:border-slate-700 dark:bg-slate-900/40">
+                                                    <dl className="space-y-1.5 text-sm">
+                                                        <div className="flex justify-between gap-3">
+                                                            <dt className="text-slate-600 dark:text-slate-400">Producido</dt>
+                                                            <dd className="tabular-nums">{formatCurrency(row.production_total)}</dd>
+                                                        </div>
+                                                        <div className="flex justify-between gap-3">
+                                                            <dt className="text-slate-600 dark:text-slate-400">Jornada · recargos</dt>
+                                                            <dd className="tabular-nums">
+                                                                {formatCurrency(
+                                                                    Number(row.daily_work_subtotal ?? 0) +
+                                                                        Number(row.legal_hourly_subtotal ?? 0),
+                                                                )}
+                                                            </dd>
+                                                        </div>
+                                                        <div className="flex justify-between gap-3">
+                                                            <dt className="text-slate-600 dark:text-slate-400">Ajustes manuales</dt>
+                                                            <dd className="tabular-nums text-amber-700 dark:text-amber-400">
+                                                                {formatCurrency(row.adjustments_subtotal ?? 0)}
+                                                            </dd>
+                                                        </div>
+                                                        <div className="flex justify-between gap-3">
+                                                            <dt className="text-slate-600 dark:text-slate-400">Anticipos</dt>
+                                                            <dd className="tabular-nums text-rose-600 dark:text-rose-400">
+                                                                – {formatCurrency(row.advances_discount)}
+                                                            </dd>
+                                                        </div>
+                                                        <div className="flex justify-between gap-3">
+                                                            <dt className="text-slate-600 dark:text-slate-400">
+                                                                Ausencias · deducciones
+                                                            </dt>
+                                                            <dd className="tabular-nums text-rose-600 dark:text-rose-400">
+                                                                – {formatCurrency(Number(row.absence_discount_total ?? 0) + dedTotal)}
+                                                            </dd>
+                                                        </div>
+                                                    </dl>
+
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {canManageConceptAdjustments ? (
+                                                            <Button
+                                                                variant="outline"
+                                                                icon={<PlusIcon className="h-4 w-4" />}
+                                                                className="min-h-10"
+                                                                onClick={() => setAdjModal({ payrollEmployee: row })}
+                                                            >
+                                                                Ajuste
+                                                            </Button>
+                                                        ) : null}
+                                                        {(isFixed || isHourlyLegal) && empSessions.length > 0 ? (
+                                                            <Button
+                                                                variant="outline"
+                                                                className="min-h-10"
+                                                                onClick={() => toggleSessions(row.id)}
+                                                            >
+                                                                Jornadas
+                                                            </Button>
+                                                        ) : null}
+                                                    </div>
+
+                                                    {sessionsOpen.has(row.id) ? mobileSessionsEditor(row, empSessions) : null}
+
+                                                    {advanceBlock(row)}
+                                                    {isFixed || isHourlyLegal ? absenceBlock(row, isHourlyLegal) : null}
+                                                    {adjustmentsPanel(row)}
+                                                </div>
+                                            ) : null}
+                                        </div>
+                                    );
+                                })
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="hidden lg:block">
                     <Table>
                         <TableHead>
                             <TableRow>
@@ -1173,7 +1499,70 @@ export default function PayrollShow({
                             </TableFoot>
                         )}
                     </Table>
+                    </div>
                 </Card>
+            </div>
+
+            {/* Movil: imprimir + la accion del estado, al alcance del pulgar. */}
+            <div className="fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 border-t border-slate-200 bg-white px-4 pb-5 pt-3 lg:hidden dark:border-slate-700 dark:bg-slate-800">
+                <a
+                    href={route('payrolls.export', payroll.id)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg border border-slate-300 text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                    aria-label="Imprimir nomina"
+                >
+                    <PrinterIcon className="h-5 w-5" />
+                </a>
+                {payroll.status === 'borrador' || payroll.status === 'calculado' ? (
+                    <Can permission="payrolls.show.calculate">
+                        <Button
+                            icon={<CalculatorIcon className="h-5 w-5" />}
+                            fullWidth
+                            className="min-h-12 text-base"
+                            onClick={() => setConfirmAction('calculate')}
+                        >
+                            Calcular
+                        </Button>
+                    </Can>
+                ) : null}
+                {payroll.status === 'calculado' ? (
+                    <Can permission="payrolls.show.approve">
+                        <Button
+                            variant="success"
+                            icon={<CheckCircleIcon className="h-5 w-5" />}
+                            fullWidth
+                            className="min-h-12 text-base"
+                            onClick={() => setConfirmAction('approve')}
+                        >
+                            Aprobar
+                        </Button>
+                    </Can>
+                ) : null}
+                {payroll.status === 'aprobado' ? (
+                    <Can permission="payrolls.show.pay">
+                        <Button
+                            variant="success"
+                            icon={<BanknotesIcon className="h-5 w-5" />}
+                            fullWidth
+                            className="min-h-12 text-base"
+                            onClick={() => setConfirmAction('pay')}
+                        >
+                            Marcar pagada
+                        </Button>
+                    </Can>
+                ) : null}
+                {payroll.status === 'pagado' ? (
+                    <a
+                        href={route('payrolls.export', { payroll: payroll.id, mode: 'detailed' })}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex h-12 flex-1 items-center justify-center gap-2 rounded-lg border border-indigo-600 text-sm font-semibold text-indigo-700 dark:border-indigo-400 dark:text-indigo-300"
+                    >
+                        <DocumentTextIcon className="h-5 w-5" />
+                        Comprobantes
+                    </a>
+                ) : null}
             </div>
 
             <ConfirmDialog
