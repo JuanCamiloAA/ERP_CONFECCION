@@ -27,6 +27,7 @@ use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SuperAdmin\ActiveCompanyController;
 use App\Http\Controllers\SuperAdmin\DashboardWidgetController;
 use App\Http\Controllers\SuperAdmin\DataImportController;
+use App\Http\Controllers\SuperAdmin\LandingAdminController;
 use App\Http\Controllers\SuperAdmin\LandingCmsController;
 use App\Http\Controllers\SuperAdmin\MembershipPlanController;
 use App\Http\Controllers\UserController;
@@ -89,7 +90,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Referencias
     Route::middleware('permission:references.index.view')->group(function () {
+        // Antes del resource: un segmento literal no puede quedar detras de {reference}.
+        Route::post('/references/recalculate-difficulty', [ReferenceController::class, 'recalculateAllDifficulties'])->name('references.recalculate-difficulty');
         Route::resource('references', ReferenceController::class);
+        Route::post('/references/{reference}/recalculate-difficulty', [ReferenceController::class, 'recalculateDifficulties'])->name('references.operations.recalculate');
         Route::post('/references/{reference}/operations', [ReferenceController::class, 'attachOperation'])->name('references.operations.attach');
         Route::put('/references/{reference}/operations/{operation}', [ReferenceController::class, 'updateOperationPrice'])->name('references.operations.update');
         Route::delete('/references/{reference}/operations/{operation}', [ReferenceController::class, 'detachOperation'])->name('references.operations.detach');
@@ -201,7 +205,22 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::post('data-imports', [DataImportController::class, 'store'])
             ->name('data-imports.store');
 
-        Route::get('landing', [LandingCmsController::class, 'index'])->name('landing.index');
+        // CMS anterior: secciones heredadas (planes, clientes) y ajustes globales / SEO.
+        Route::get('landing-legacy', [LandingCmsController::class, 'index'])->name('landing-legacy.index');
+        // Debe ir ANTES de sections/{landingSection}: si no, el parametro capturaria "reorder".
+        // Editor de la landing por bloques (modelo landing_blocks).
+        // 'reorder' va antes que '{block}' para que el parametro no lo capture.
+        Route::get('landing', [LandingAdminController::class, 'index'])->name('landing.index');
+        Route::post('landing/blocks', [LandingAdminController::class, 'store'])->name('landing.blocks.store');
+        Route::put('landing/blocks/reorder', [LandingAdminController::class, 'reorder'])->name('landing.blocks.reorder');
+        Route::put('landing/blocks/{block}', [LandingAdminController::class, 'update'])->name('landing.blocks.update');
+        Route::post('landing/blocks/{block}/duplicate', [LandingAdminController::class, 'duplicate'])->name('landing.blocks.duplicate');
+        Route::delete('landing/blocks/{block}', [LandingAdminController::class, 'destroy'])->name('landing.blocks.destroy');
+        Route::post('landing/publish-blocks', [LandingAdminController::class, 'publish'])->name('landing.publish-blocks');
+        Route::get('landing/versions', [LandingAdminController::class, 'versions'])->name('landing.versions');
+        Route::post('landing/versions/{version}/restore', [LandingAdminController::class, 'restore'])->name('landing.versions.restore');
+        Route::post('landing/block-media', [LandingAdminController::class, 'media'])->name('landing.block-media');
+        Route::put('landing/sections/reorder', [LandingCmsController::class, 'reorderSections'])->name('landing.sections.reorder');
         Route::put('landing/sections/{landingSection}', [LandingCmsController::class, 'updateSection'])->name('landing.sections.update');
         Route::post('landing/sections/{landingSection}/publish', [LandingCmsController::class, 'publishSection'])->name('landing.sections.publish');
         Route::post('landing/sections/{landingSection}/discard', [LandingCmsController::class, 'discardDraft'])->name('landing.sections.discard');

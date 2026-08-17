@@ -53,15 +53,20 @@ class LandingSection extends Model
 
             $payload = $payloads[$slug] ?? [];
 
+            // Una seccion nueva puede nacer en borrador (initial_status) para que no aparezca
+            // en la landing publicada hasta que el super usuario la revise y la publique.
+            $status = $def['initial_status'] ?? self::STATUS_LIVE;
+            $isLive = $status === self::STATUS_LIVE;
+
             self::query()->create([
                 'slug' => $slug,
                 'title_internal' => $def['title_internal'],
                 'sort_order' => $def['sort_order'],
-                'status' => self::STATUS_LIVE,
+                'status' => $status,
                 'is_system' => $def['is_system'],
-                'published_at' => now(),
+                'published_at' => $isLive ? now() : null,
                 'draft_payload' => $payload,
-                'live_payload' => $payload,
+                'live_payload' => $isLive ? $payload : null,
             ]);
         }
     }

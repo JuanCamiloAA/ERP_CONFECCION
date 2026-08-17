@@ -10,6 +10,7 @@ use App\Models\Operation;
 use App\Models\Production;
 use App\Models\Reference;
 use App\Services\Files\StoredFileDeleter;
+use App\Services\References\ReferenceDifficultySync;
 use App\Support\OperationDifficulty;
 use App\Support\ReferenceLotCompletion;
 use App\Support\TenantContext;
@@ -283,5 +284,47 @@ class ReferenceController extends Controller
         $reference->operations()->detach($operation->id);
 
         return back()->with('success', 'Operacion desasociada.');
+    }
+
+    /**
+     * Reaplica los rangos de dificultad de Mi empresa a las lineas de una referencia.
+     */
+    public function recalculateDifficulties(Reference $reference, ReferenceDifficultySync $sync): RedirectResponse
+    {
+        return back()->with('success', $this->difficultyMessage($sync->forReference($reference)));
+    }
+
+    /**
+     * Lo mismo, pero para todas las referencias de la empresa activa.
+     */
+    public function recalculateAllDifficulties(ReferenceDifficultySync $sync): RedirectResponse
+    {
+        $result = $sync->forAllReferences();
+
+        return back()->with('success', sprintf(
+            '%s (%d referencias)',
+            $this->difficultyMessage($result),
+            $result['references']
+        ));
+    }
+
+    /**
+     * @param  array{lines: int, changed: int, without_minutes: int}  $result
+     */
+    private function difficultyMessage(array $result): string
+    {
+        if ($result['lines'] === 0) {
+            return 'No hay operaciones asociadas para recalcular.';
+        }
+
+        $message = $result['changed'] === 0
+            ? sprintf('Las %d lineas ya estaban al dia.', $result['lines'])
+            : sprintf('%d de %d lineas actualizaron su dificultad.', $result['changed'], $result['lines']);
+
+        if ($result['without_minutes'] > 0) {
+            $message .= sprintf(' %d sin minutos definidos quedaron sin grado.', $result['without_minutes']);
+        }
+
+        return $message;
     }
 }

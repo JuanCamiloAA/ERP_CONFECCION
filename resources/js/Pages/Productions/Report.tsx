@@ -9,8 +9,10 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { StatCard } from '@/Components/UI/StatCard';
 import { Tabs } from '@/Components/UI/Tabs';
 import AppLayout from '@/Layouts/AppLayout';
+import { Pagination } from '@/Components/UI/Pagination';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { formatCurrency, formatNumber } from '@/lib/utils';
+import type { PaginatedResponse } from '@/types';
 
 interface Summary {
     total_quantity: number;
@@ -38,18 +40,36 @@ interface DailyRow {
     total_value: number;
 }
 
+/**
+ * Este componente lo renderizan DOS rutas con formatos distintos:
+ *  - `productions.report` (ProductionController@report) envia colecciones planas.
+ *  - `reports.production` (ReportController@production) las envia paginadas.
+ * Por eso cada bloque se acepta en ambas formas y se normaliza antes de usarlo.
+ */
+type AggregateBlock = AggregateRow[] | PaginatedResponse<AggregateRow>;
+
 interface Props {
     filters: { start: string; end: string };
     summary: Summary;
-    /**
-     * ProductionReportService devuelve colecciones completas (no paginadores): llegan como
-     * arreglos planos. El tipo anterior decia PaginatedResponse y el codigo leia `.data`,
-     * que no existe: por eso la pagina reventaba al abrirse.
-     */
-    byEmployee: AggregateRow[];
-    byReference: AggregateRow[];
-    byOperation: AggregateRow[];
+    byEmployee: AggregateBlock;
+    byReference: AggregateBlock;
+    byOperation: AggregateBlock;
     dailySeries: DailyRow[];
+}
+
+/** Devuelve las filas y, si el bloque venia paginado, el propio paginador. */
+function normalizeBlock(block: AggregateBlock | undefined): {
+    rows: AggregateRow[];
+    paginated: PaginatedResponse<AggregateRow> | null;
+} {
+    if (Array.isArray(block)) {
+        return { rows: block, paginated: null };
+    }
+    if (block && Array.isArray(block.data)) {
+        return { rows: block.data, paginated: block };
+    }
+
+    return { rows: [], paginated: null };
 }
 
 /** Fecha local en formato YYYY-MM-DD (evita el corrimiento de zona de toISOString). */
@@ -120,9 +140,9 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
     const mobileSeries = daily.map((r) => ({ ...r, shortLabel: weekdayShort(r.date) }));
 
     const blocks = {
-        employee: { rows: byEmployee ?? [], label: 'Empleado' },
-        reference: { rows: byReference ?? [], label: 'Referencia' },
-        operation: { rows: byOperation ?? [], label: 'Operacion' },
+        employee: normalizeBlock(byEmployee),
+        reference: normalizeBlock(byReference),
+        operation: normalizeBlock(byOperation),
     } as const;
 
     const rowName = (row: AggregateRow, key: keyof typeof blocks): string => {
@@ -136,7 +156,7 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
 
     /** Ranking movil: nombre, valor y barra de participacion contra el mayor del bloque. */
     const rankingList = (key: keyof typeof blocks) => {
-        const items = blocks[key].rows;
+        const { rows: items, paginated } = blocks[key];
         const max = items.reduce((m, r) => Math.max(m, Number(r.total_value ?? 0)), 0);
 
         return (
@@ -170,13 +190,21 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                         })}
                     </div>
                 )}
+                {paginated ? (
+                    <Pagination
+                        links={paginated.links}
+                        from={paginated.from}
+                        to={paginated.to}
+                        total={paginated.total}
+                    />
+                ) : null}
             </div>
         );
     };
 
     /** Tabla de agregados usada en escritorio (sin cambios respecto al diseno anterior). */
     const aggregateTable = (key: keyof typeof blocks, header: string) => {
-        const items = blocks[key].rows;
+        const { rows: items, paginated } = blocks[key];
         return (
             <>
                 <table className="responsive-table mt-4 w-full text-sm">
@@ -211,6 +239,14 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                         )}
                     </tbody>
                 </table>
+                {paginated ? (
+                    <Pagination
+                        links={paginated.links}
+                        from={paginated.from}
+                        to={paginated.to}
+                        total={paginated.total}
+                    />
+                ) : null}
             </>
         );
     };

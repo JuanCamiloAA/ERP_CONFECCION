@@ -1,13 +1,16 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowLeftIcon, PencilSquareIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowLeftIcon, ArrowPathIcon, PencilSquareIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { ReferenceUnitEconomicsCard } from '@/Components/References/ReferenceUnitEconomicsCard';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
+import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { Input } from '@/Components/UI/Input';
+import { Modal } from '@/Components/UI/Modal';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
+import { Switch } from '@/Components/UI/Switch';
 import AppLayout from '@/Layouts/AppLayout';
 import { DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS, difficultyLabel, levelFromMinutes } from '@/lib/difficulty';
 import { formatCurrency } from '@/lib/utils';
@@ -26,13 +29,60 @@ interface Props {
     comparison: ReferenceEconomicsComparison;
 }
 
+/**
+ * Minutos que rigen la linea: los suyos y, si no los tiene, los estandar de la operacion.
+ * Cero es "sin medir", no un tiempo real, asi que se trata como ausencia de dato.
+ */
+function lineMinutes(op: ReferenceOperationPivot): number | null {
+    const raw = op.pivot.estimated_minutes ?? op.estimated_minutes;
+    const value = raw != null && raw !== '' ? Number(raw) : NaN;
+
+    return Number.isFinite(value) && value > 0 ? value : null;
+}
+
 export default function ReferenceShow({ reference, allOperations, comparison }: Props) {
     const thresholds = usePage<App.PageProps>().props.difficultyMinuteThresholds ?? DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS;
     const [selectedOpId, setSelectedOpId] = useState<number | ''>('');
     const [opPrice, setOpPrice] = useState<string>('');
     const [opMinutes, setOpMinutes] = useState<string>('');
 
+    // Linea en edicion: se actualiza en sitio, sin desasociar y volver a asociar la operacion.
+    const [editing, setEditing] = useState<ReferenceOperationPivot | null>(null);
+    const [editPrice, setEditPrice] = useState<string>('');
+    const [editMinutes, setEditMinutes] = useState<string>('');
+    const [editActive, setEditActive] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [confirmRecalc, setConfirmRecalc] = useState(false);
+
     const attached = reference.operations ?? [];
+
+    const openEdit = (op: ReferenceOperationPivot) => {
+        setEditing(op);
+        setEditPrice(String(op.pivot.price ?? ''));
+        setEditMinutes(op.pivot.estimated_minutes != null ? String(op.pivot.estimated_minutes) : '');
+        setEditActive(Boolean(op.pivot.is_active));
+    };
+
+    const handleSaveLine = () => {
+        if (!editing) return;
+        setSaving(true);
+        router.put(route('references.operations.update', [reference.id, editing.id]), {
+            price: Number(editPrice || 0),
+            estimated_minutes: editMinutes !== '' ? Number(editMinutes) : null,
+            is_active: editActive,
+        }, {
+            preserveScroll: true,
+            onSuccess: () => setEditing(null),
+            onFinish: () => setSaving(false),
+        });
+    };
+
+    const handleRecalculate = () => {
+        router.post(route('references.operations.recalculate', reference.id), {}, {
+            preserveScroll: true,
+            onFinish: () => setConfirmRecalc(false),
+        });
+    };
 
     const handleAttach = () => {
         if (!selectedOpId) return;
@@ -108,7 +158,18 @@ export default function ReferenceShow({ reference, allOperations, comparison }: 
                 />
 
                 <Card>
-                    <CardHeader title="Operaciones" description="Operaciones disponibles con su precio especifico" />
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                        <CardHeader title="Operaciones" description="Operaciones disponibles con su precio especifico" />
+                        <Button
+                            variant="outline"
+                            className="min-h-11 shrink-0"
+                            icon={<ArrowPathIcon className="h-4 w-4" />}
+                            onClick={() => setConfirmRecalc(true)}
+                            disabled={attached.length === 0}
+                        >
+                            Recalcular dificultades
+                        </Button>
+                    </div>
                     <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_160px_160px_auto]">
                         <Select
                             label="Agregar operacion"
@@ -167,16 +228,37 @@ export default function ReferenceShow({ reference, allOperations, comparison }: 
                                             <td className="px-4 py-2" data-label="Operacion">{op.name}</td>
                                             <td className="px-4 py-2 text-right font-medium" data-label="Precio">{formatCurrency(op.pivot.price)}</td>
                                             <td className="px-4 py-2 text-right" data-label="Minutos">
-                                                {op.pivot.estimated_minutes ?? op.estimated_minutes} min
+                                                {lineMinutes(op) !== null ? `${lineMinutes(op)} min` : '—'}
                                             </td>
                                             <td className="px-4 py-2 text-center" data-label="Dificultad">
-                                                <Badge variant="info">{difficultyLabel(op.pivot.difficulty_level ?? op.difficulty_level)}</Badge>
+                                                {op.pivot.difficulty_level ? (
+                                                    <Badge variant="info">{difficultyLabel(op.pivot.difficulty_level)}</Badge>
+                                                ) : (
+                                                    <Badge variant="neutral">Sin medir</Badge>
+                                                )}
                                             </td>
                                             <td className="px-4 py-2 text-center" data-label="Estado">
                                                 <Badge variant={op.pivot.is_active ? 'success' : 'danger'}>{op.pivot.is_active ? 'Activa' : 'Inactiva'}</Badge>
                                             </td>
                                             <td className="px-4 py-2 text-right" data-label="">
-                                                <Button variant="ghost" size="sm" icon={<TrashIcon className="h-4 w-4 text-rose-500" />} onClick={() => handleDetach(op.id)} />
+                                                <div className="flex items-center justify-end">
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="min-h-11 min-w-11"
+                                                        icon={<PencilSquareIcon className="h-4 w-4" />}
+                                                        onClick={() => openEdit(op)}
+                                                        aria-label={`Editar ${op.name}`}
+                                                    />
+                                                    <Button
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="min-h-11 min-w-11"
+                                                        icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
+                                                        onClick={() => handleDetach(op.id)}
+                                                        aria-label={`Quitar ${op.name}`}
+                                                    />
+                                                </div>
                                             </td>
                                         </tr>
                                     ))
@@ -186,6 +268,62 @@ export default function ReferenceShow({ reference, allOperations, comparison }: 
                     </div>
                 </Card>
             </div>
+
+            <Modal
+                open={!!editing}
+                onClose={() => setEditing(null)}
+                title={editing ? `Editar ${editing.name}` : ''}
+                description="Cambia el precio, los minutos o el estado de la linea sin quitarla de la referencia."
+                footer={
+                    <div className="flex justify-end gap-2">
+                        <Button variant="ghost" className="min-h-11" onClick={() => setEditing(null)}>Cancelar</Button>
+                        <Button className="min-h-11" onClick={handleSaveLine} disabled={saving}>
+                            {saving ? 'Guardando…' : 'Guardar cambios'}
+                        </Button>
+                    </div>
+                }
+            >
+                <div className="space-y-4">
+                    <Input
+                        label="Precio"
+                        type="number"
+                        step="0.01"
+                        min={0}
+                        value={editPrice}
+                        onChange={(e) => setEditPrice(e.target.value)}
+                        prefix="$"
+                    />
+                    <Input
+                        label="Minutos"
+                        type="number"
+                        step="0.1"
+                        min={0.1}
+                        value={editMinutes}
+                        onChange={(e) => setEditMinutes(e.target.value)}
+                        suffix="min"
+                        description={
+                            editMinutes && Number(editMinutes) > 0
+                                ? `Dificultad: ${difficultyLabel(levelFromMinutes(Number(editMinutes), thresholds))}`
+                                : 'Sin minutos la linea queda sin grado de dificultad.'
+                        }
+                    />
+                    <Switch
+                        checked={editActive}
+                        onChange={setEditActive}
+                        label="Linea activa"
+                        description="Una linea inactiva deja de ofrecerse al registrar produccion."
+                    />
+                </div>
+            </Modal>
+
+            <ConfirmDialog
+                open={confirmRecalc}
+                onClose={() => setConfirmRecalc(false)}
+                onConfirm={handleRecalculate}
+                title="Recalcular dificultades"
+                message="Se vuelve a calcular el grado de cada linea con los rangos de Mi empresa > Dificultad por minutos. Los precios y los minutos no cambian."
+                confirmText="Recalcular"
+            />
         </AppLayout>
     );
 }

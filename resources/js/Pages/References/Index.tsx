@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowRightIcon, PencilSquareIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowPathIcon, ArrowRightIcon, PencilSquareIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useState } from 'react';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
@@ -54,6 +54,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
     const perms = usePermissions();
     const [search, setSearch] = useState(filters.search ?? '');
     const [confirmDelete, setConfirmDelete] = useState<Reference | null>(null);
+    const [confirmRecalc, setConfirmRecalc] = useState(false);
 
     const updateFilters = (s: string) => {
         const params: Record<string, string> = {};
@@ -97,11 +98,24 @@ export default function ReferencesIndex({ references, filters }: Props) {
                     title="Referencias"
                     description="Catalogo de prendas con sus operaciones y precios."
                     action={
-                        <Can permission="references.index.create">
-                            <Link href={route('references.create')} className="hidden lg:block">
-                                <Button icon={<PlusIcon className="h-4 w-4" />}>Nueva referencia</Button>
-                            </Link>
-                        </Can>
+                        <div className="flex items-center gap-2">
+                            <Can permission="references.index.edit">
+                                <Button
+                                    variant="outline"
+                                    className="min-h-11"
+                                    icon={<ArrowPathIcon className="h-4 w-4" />}
+                                    onClick={() => setConfirmRecalc(true)}
+                                >
+                                    <span className="hidden sm:inline">Recalcular dificultades</span>
+                                    <span className="sm:hidden">Dificultades</span>
+                                </Button>
+                            </Can>
+                            <Can permission="references.index.create">
+                                <Link href={route('references.create')} className="hidden lg:block">
+                                    <Button icon={<PlusIcon className="h-4 w-4" />}>Nueva referencia</Button>
+                                </Link>
+                            </Can>
+                        </div>
                     }
                 />
 
@@ -337,6 +351,20 @@ export default function ReferencesIndex({ references, filters }: Props) {
                 title="Eliminar referencia"
                 message={`Eliminar la referencia ${confirmDelete?.code}?`}
                 variant="danger"
+            />
+
+            <ConfirmDialog
+                open={confirmRecalc}
+                onClose={() => setConfirmRecalc(false)}
+                onConfirm={() => {
+                    router.post(route('references.recalculate-difficulty'), {}, {
+                        preserveScroll: true,
+                        onFinish: () => setConfirmRecalc(false),
+                    });
+                }}
+                title="Recalcular dificultades"
+                message="Se vuelve a calcular el grado de dificultad de las lineas de todas las referencias con los rangos de Mi empresa > Dificultad por minutos. Los precios y los minutos no cambian."
+                confirmText="Recalcular"
             />
         </AppLayout>
     );

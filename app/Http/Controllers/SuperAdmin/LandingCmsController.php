@@ -14,6 +14,7 @@ use App\Services\Files\MediaUrlResolver;
 use App\Support\LandingDefaultPayloads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -84,6 +85,24 @@ class LandingCmsController extends Controller
         ]);
 
         return back()->with('success', 'Borrador guardado.');
+    }
+
+    /**
+     * Reordena las secciones segun el arreglo de slugs recibido. El orden es una preferencia
+     * del sitio, no contenido, por eso no pasa por el flujo de borrador/publicado.
+     */
+    public function reorderSections(Request $request): RedirectResponse
+    {
+        $slugs = $request->validate([
+            'slugs' => ['required', 'array'],
+            'slugs.*' => ['required', 'string'],
+        ])['slugs'];
+
+        foreach (array_values($slugs) as $index => $slug) {
+            LandingSection::query()->where('slug', $slug)->update(['sort_order' => ($index + 1) * 10]);
+        }
+
+        return back()->with('success', 'Orden actualizado.');
     }
 
     public function publishSection(LandingSection $landingSection): RedirectResponse

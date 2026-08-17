@@ -52,8 +52,20 @@ class RolesPermissionsSeeder extends Seeder
             });
     }
 
+    /**
+     * Permisos que no siguen el patron modulo.pagina.accion de la matriz.
+     *  protege el editor de la landing publica.
+     *
+     * @var list<string>
+     */
+    protected const STANDALONE_PERMISSIONS = ['landing.manage'];
+
     protected function seedPermissions(): void
     {
+        foreach (self::STANDALONE_PERMISSIONS as $standalone) {
+            Permission::firstOrCreate(['name' => $standalone, 'guard_name' => 'web']);
+        }
+
         foreach (PermissionHelper::flatPermissions() as $permissionName) {
             Permission::firstOrCreate([
                 'name' => $permissionName,

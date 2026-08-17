@@ -3,6 +3,17 @@ import { Head, Link, usePage } from '@inertiajs/react';
 import * as HeroIcons from '@heroicons/react/24/outline';
 import { toast } from 'sonner';
 import { PlanInquiryModal, type PlanInquirySelection } from '@/Components/Landing/PlanInquiryModal';
+import {
+    AudienceBlock,
+    BandBlock,
+    ClosingBlock,
+    FlowBlock,
+    HeroBlock,
+    QuoteBlock,
+    StepsMediaBlock,
+    VirtuesBlock,
+} from '@/Components/Public/Blocks';
+import '../../../css/public.css';
 import { cn } from '@/lib/utils';
 
 interface Globals {
@@ -400,7 +411,7 @@ export default function LandingPublic({ globals, sections, appName }: Props) {
     }, [flash]);
 
     return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100">
+        <div className="public-scope min-h-screen">
             <Head title={metaTitle}>
                 <meta name="description" content={metaDesc} />
                 {globals.favicon_url ? <link rel="icon" href={globals.favicon_url} /> : null}
@@ -715,6 +726,16 @@ function SectionBlock({
     onOpenPlanInquiry: (plan?: PlanInquirySelection | null) => void;
 }) {
     if (!payload) return null;
+
+    // Bloques del rediseno publico. Se resuelven antes que los slugs heredados; si un
+    // bloque nuevo no esta publicado, simplemente no llega hasta aca.
+    if (slug === 'flow') return <FlowBlock data={payload} />;
+    if (slug === 'band') return <BandBlock data={payload} />;
+    if (slug === 'virtues') return <VirtuesBlock data={payload} />;
+    if (slug === 'audience') return <AudienceBlock data={payload} />;
+    if (slug === 'steps_media') return <StepsMediaBlock data={payload} />;
+    if (slug === 'quote') return <QuoteBlock data={payload} />;
+    if (slug === 'closing') return <ClosingBlock data={payload} />;
 
     if (slug === 'hero') {
         const p = payload as {

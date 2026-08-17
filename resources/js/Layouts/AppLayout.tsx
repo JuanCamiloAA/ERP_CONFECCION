@@ -425,15 +425,17 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         <Bars3Icon className="h-5 w-5" />
                     </button>
 
-                    <div className="flex-1">
+                    <div className="min-w-0 flex-1">
                         {title && (
-                            <h1 className="text-base font-semibold text-slate-900 lg:hidden dark:text-slate-100">
+                            <h1 className="truncate text-base font-semibold text-slate-900 lg:hidden dark:text-slate-100">
                                 {title}
                             </h1>
                         )}
                     </div>
 
-                    <div className="flex shrink-0 items-center gap-2 sm:gap-3">
+                    {/* min-w-0 para que el selector de empresa del super admin pueda encogerse
+                        en pantallas angostas en vez de desbordar el encabezado. */}
+                    <div className="flex min-w-0 shrink items-center gap-2 sm:gap-3">
                         <SuperAdminCompanySwitcher />
                         <button
                             type="button"

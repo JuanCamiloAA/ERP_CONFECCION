@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\LandingBlock;
 use App\Models\LandingGlobal;
 use App\Models\LandingSection;
 use App\Models\MembershipPlan;
@@ -22,6 +23,14 @@ class LandingController extends Controller
         }
 
         LandingSection::ensureSystemSectionsExist();
+
+        // Vista previa del borrador: solo para quien administra la landing (super usuario).
+        $preview = $request->boolean('preview') && $user?->isSuperAdmin();
+
+        // La landing por bloques manda en cuanto haya contenido publicado en landing_blocks.
+        if (LandingBlock::query()->whereNotNull('published_data')->exists() || $preview) {
+            return $this->renderBlocks($preview);
+        }
 
         $sections = LandingSection::query()
             ->where('status', LandingSection::STATUS_LIVE)
@@ -72,6 +81,40 @@ class LandingController extends Controller
             'globals' => $presentedGlobals,
             'sections' => $presentedSections,
             'appName' => config('app.name'),
+        ]);
+    }
+
+    /**
+     * Landing publica desde landing_blocks. En produccion sirve solo `published_data`;
+     * con ?preview=1 (super usuario) sirve el borrador `data`.
+     */
+    private function renderBlocks(bool $preview): Response
+    {
+        $query = LandingBlock::query()->ordered();
+
+        if (! $preview) {
+            $query->where('is_visible', true)->whereNotNull('published_data');
+        }
+
+        $blocks = $query->get()
+            ->filter(fn (LandingBlock $b) => $preview ? $b->is_visible : true)
+            ->map(fn (LandingBlock $b) => [
+                'type' => $b->type,
+                'data' => ($preview ? $b->data : $b->published_data) ?? [],
+            ])
+            ->values()
+            ->all();
+
+        $global = LandingGlobal::instance();
+
+        return Inertia::render('Public/Landing', [
+            'blocks' => $blocks,
+            'preview' => $preview,
+            'meta' => [
+                'title' => $global->meta_title ?: config('app.name'),
+                'description' => $global->meta_description ?: '',
+                'favicon_url' => null,
+            ],
         ]);
     }
 }

@@ -1,8 +1,7 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { EnvelopeIcon } from '@heroicons/react/24/outline';
+import { Envelope } from '@phosphor-icons/react';
 import { FormEvent } from 'react';
-import { Button } from '@/Components/UI/Button';
-import { Input } from '@/Components/UI/Input';
+import { PublicButton, PublicField } from '@/Components/Public/PublicField';
 import AuthLayout from '@/Layouts/AuthLayout';
 
 export default function ForgotPassword() {
@@ -17,33 +16,36 @@ export default function ForgotPassword() {
 
     return (
         <AuthLayout
-            title="Recuperar contrasena"
-            description="Te enviaremos un enlace para restablecer tu contrasena."
+            title="Recuperar contraseña"
+            description="Te enviaremos un enlace para restablecer tu contraseña."
+            heading="Recupera el acceso a tu taller."
+            subheading="Te llega un enlace al correo con el que entras al sistema."
         >
             <Head title="Recuperar contrasena" />
 
             <form onSubmit={submit} className="space-y-4">
-                <Input
-                    label="Correo electronico"
+                <PublicField
+                    label="Correo electrónico"
                     type="email"
                     value={data.email}
                     onChange={(e) => setData('email', e.target.value)}
                     error={errors.email}
-                    prefix={<EnvelopeIcon className="h-4 w-4" />}
+                    icon={<Envelope size={18} />}
+                    placeholder="tucorreo@empresa.com"
                     required
                     autoFocus
                 />
 
-                <Button type="submit" loading={processing} fullWidth size="lg">
-                    Enviar enlace
-                </Button>
+                <PublicButton type="submit" disabled={processing}>
+                    {processing ? 'Enviando…' : 'Enviar enlace'}
+                </PublicButton>
             </form>
 
-            <div className="mt-6 text-center text-sm text-slate-600 dark:text-slate-400">
-                <Link href={route('login')} className="font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400">
-                    Volver al login
+            <p className="mt-6 text-sm">
+                <Link href={route('login')} style={{ color: 'var(--pub-accent)' }}>
+                    Volver al acceso
                 </Link>
-            </div>
+            </p>
         </AuthLayout>
     );
 }

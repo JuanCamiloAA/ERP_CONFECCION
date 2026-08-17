@@ -8,12 +8,12 @@ use Tests\TestCase;
 class ExampleTest extends TestCase
 {
     /**
-     * La raiz redirige a login o dashboard segun sesión (Inertia / ERP).
+     * La raiz es la landing publica: el visitante sin sesion la ve.
      */
-    public function test_the_root_redirects_for_guests(): void
+    public function test_the_root_shows_the_public_landing_for_guests(): void
     {
         $response = $this->get('/');
 
-        $response->assertRedirect(route('login', [], false));
+        $response->assertOk();
     }
 }
