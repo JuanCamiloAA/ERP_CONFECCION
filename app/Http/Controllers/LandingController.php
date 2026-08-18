@@ -6,6 +6,7 @@ use App\Models\LandingBlock;
 use App\Models\LandingGlobal;
 use App\Models\LandingSection;
 use App\Models\MembershipPlan;
+use App\Services\Landing\LandingDataSources;
 use App\Services\Landing\LandingPayloadPresenter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -96,12 +97,26 @@ class LandingController extends Controller
             $query->where('is_visible', true)->whereNotNull('published_data');
         }
 
+        $sources = app(LandingDataSources::class);
+
         $blocks = $query->get()
             ->filter(fn (LandingBlock $b) => $preview ? $b->is_visible : true)
-            ->map(fn (LandingBlock $b) => [
-                'type' => $b->type,
-                'data' => ($preview ? $b->data : $b->published_data) ?? [],
-            ])
+            ->map(function (LandingBlock $b) use ($preview, $sources) {
+                $data = ($preview ? $b->data : $b->published_data) ?? [];
+
+                $entry = ['type' => $b->type, 'data' => $data];
+
+                // Los bloques de datos se resuelven aqui: la pagina publica recibe filas
+                // ya presentadas, nunca la definicion del origen ni la consulta.
+                if ($b->type === 'data') {
+                    $resolved = $sources->resolve($data);
+                    $entry['rows'] = $resolved['rows'];
+                    $entry['error'] = $preview ? $resolved['error'] : null;
+                    unset($entry['data']['query']);
+                }
+
+                return $entry;
+            })
             ->values()
             ->all();
 
@@ -110,6 +125,11 @@ class LandingController extends Controller
         return Inertia::render('Public/Landing', [
             'blocks' => $blocks,
             'preview' => $preview,
+            // Apariencia por defecto de cada tipo: lo que ve el visitante cuando el bloque
+            // nunca paso por la pestana «Diseno» del editor.
+            'appearanceDefaults' => collect(config('landing_blocks'))
+                ->map(fn ($entry) => is_array($entry['appearance'] ?? null) ? $entry['appearance'] : [])
+                ->all(),
             'meta' => [
                 'title' => $global->meta_title ?: config('app.name'),
                 'description' => $global->meta_description ?: '',

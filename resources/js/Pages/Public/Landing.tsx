@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { List, Needle, X } from '@phosphor-icons/react';
 import { useState } from 'react';
+import { PlanInquiryModal } from '@/Components/Public/PlanInquiryModal';
 import {
     AudienceBlock,
     BandBlock,
@@ -11,6 +12,8 @@ import {
     StepsMediaBlock,
     VirtuesBlock,
 } from '@/Components/Public/Blocks';
+import { BlockShell } from '@/Components/Public/BlockShell';
+import { DataBlock } from '@/Components/Public/DataBlock';
 import '../../../css/public.css';
 
 type Dict = Record<string, unknown>;
@@ -18,12 +21,17 @@ type Dict = Record<string, unknown>;
 interface Block {
     type: string;
     data: Dict;
+    /** Solo en bloques de datos: filas ya resueltas en el servidor. */
+    rows?: Dict[];
+    error?: string | null;
 }
 
 interface Props {
     blocks: Block[];
     meta?: { title?: string; description?: string; favicon_url?: string | null };
     preview?: boolean;
+    /** Apariencia por defecto de cada tipo de bloque (config/landing_blocks.php). */
+    appearanceDefaults?: Record<string, Dict | false>;
 }
 
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
@@ -148,7 +156,9 @@ function PublicFooter({ data }: { data: Dict }) {
  * Landing publica: recorre los bloques publicados y despacha por tipo. Un tipo que no
  * reconozca se ignora en silencio. Todo el texto sale del contenido editable.
  */
-export default function PublicLanding({ blocks, meta = {}, preview = false }: Props) {
+export default function PublicLanding({ blocks, meta = {}, preview = false, appearanceDefaults = {} }: Props) {
+    // Plan elegido en una tarjeta de precio; abre el formulario de solicitud.
+    const [planSolicitado, setPlanSolicitado] = useState<{ id: number; name: string } | null>(null);
     const header = blocks.find((b) => b.type === 'header');
     const footer = blocks.find((b) => b.type === 'footer');
 
@@ -156,11 +166,19 @@ export default function PublicLanding({ blocks, meta = {}, preview = false }: Pr
     const flow = blocks.find((b) => b.type === 'flow');
     const body = blocks.filter((b) => !['header', 'footer', 'flow'].includes(b.type));
 
+    /** El bloque dibuja su marco con la apariencia por defecto de su tipo. */
+    const defaultsFor = (type: string): Dict | undefined => {
+        const d = appearanceDefaults[type];
+
+        return d && typeof d === 'object' ? d : undefined;
+    };
+
     const render = (block: Block) => {
         switch (block.type) {
             case 'hero_public':
             case 'hero':
-                return <HeroBlock data={block.data} aside={flow ? <FlowBlock data={flow.data} /> : undefined} />;
+                // El flujo entra despues del texto del hero: por eso arranca en el turno 5.
+                return <HeroBlock data={block.data} aside={flow ? <FlowBlock data={flow.data} offset={5} /> : undefined} />;
             case 'band':
                 return <BandBlock data={block.data} />;
             case 'virtues':
@@ -173,6 +191,18 @@ export default function PublicLanding({ blocks, meta = {}, preview = false }: Pr
                 return <QuoteBlock data={block.data} />;
             case 'closing':
                 return <ClosingBlock data={block.data} />;
+            case 'data':
+                // Un origen vacio o con error no debe dejar una seccion en blanco.
+                if (block.error || (block.rows ?? []).length === 0) return null;
+
+                return (
+                    <DataBlock
+                        data={block.data}
+                        rows={block.rows ?? []}
+                        error={block.error}
+                        onPlanClick={(id, name) => setPlanSolicitado({ id, name })}
+                    />
+                );
             default:
                 return null;
         }
@@ -201,14 +231,21 @@ export default function PublicLanding({ blocks, meta = {}, preview = false }: Pr
                     const ocurrencia = body.slice(0, i).filter((b) => b.type === block.type).length;
 
                     return (
-                        <div key={`${block.type}-${i}`} id={anchorFor(block.type, ocurrencia)}>
+                        <BlockShell
+                            key={`${block.type}-${i}`}
+                            id={anchorFor(block.type, ocurrencia)}
+                            defaults={defaultsFor(block.type)}
+                            appearance={block.data?.appearance}
+                        >
                             {node}
-                        </div>
+                        </BlockShell>
                     );
                 })}
             </main>
 
             {footer ? <PublicFooter data={footer.data} /> : null}
+
+            <PlanInquiryModal plan={planSolicitado} onClose={() => setPlanSolicitado(null)} />
         </div>
     );
 }

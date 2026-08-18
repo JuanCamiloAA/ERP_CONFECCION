@@ -174,3 +174,173 @@
 .pub-field-shell input::placeholder {
     color: var(--pub-gray-4);
 }
+
+/* ==========================================================================
+ * Envoltura de sección (BlockShell)
+ *
+ * Toda sección de la landing se dibuja dentro de `.pub-block`. El editor
+ * parametriza tamaño, fondo y animación por bloque, y el componente solo
+ * escribe variables sobre este contenedor: aquí viven los valores por defecto
+ * y las piezas (capas de fondo, texturas, revelado al hacer scroll).
+ * ========================================================================== */
+
+.pub-block {
+    position: relative;
+    /* Aísla el apilado: las capas de fondo van detrás del contenido del bloque
+       pero nunca detrás del fondo de la página. */
+    isolation: isolate;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    justify-content: var(--pub-block-align, flex-start);
+    min-height: var(--pub-block-min, 0);
+    padding-block: var(--pub-block-pt, clamp(3.5rem, 6vw, 5rem)) var(--pub-block-pb, clamp(3.5rem, 6vw, 5rem));
+    padding-inline: clamp(1.25rem, 4vw, 2.5rem);
+}
+
+/* Contenedor del contenido: el ancho es lo único que cambia entre bloques. */
+.pub-block-inner {
+    width: 100%;
+    margin-inline: auto;
+    max-width: var(--pub-block-max, 72rem);
+}
+
+/* Capa de fondo (color, imagen, degradado o textura). Nunca intercepta clics. */
+.pub-block-layer {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+}
+
+/* Con paralaje la capa sobresale arriba y abajo: el desplazamiento máximo es la
+   mitad del factor más fuerte (65px), así que 80px de margen nunca deja hueco. */
+.pub-block-layer[data-parallax='on'] {
+    inset: -80px 0;
+    will-change: transform;
+}
+
+/* ------------------------------------------------------------- texturas */
+
+.pub-texture[data-texture='dots'] {
+    background-image: radial-gradient(circle at center, var(--pub-gray-6) 1px, transparent 1px);
+    background-size: 22px 22px;
+}
+
+.pub-texture[data-texture='grid'] {
+    background-image:
+        linear-gradient(to right, var(--pub-divider) 1px, transparent 1px),
+        linear-gradient(to bottom, var(--pub-divider) 1px, transparent 1px);
+    background-size: 48px 48px;
+}
+
+.pub-texture[data-texture='lines'] {
+    background-image: repeating-linear-gradient(135deg, var(--pub-divider) 0 1px, transparent 1px 12px);
+}
+
+/* Ruido generado en el propio SVG: no hay que servir ninguna imagen. */
+.pub-texture[data-texture='noise'] {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='.35'/%3E%3C/svg%3E");
+    opacity: 0.5;
+}
+
+.pub-texture[data-texture='glow'] {
+    background-image: radial-gradient(
+        58% 62% at 50% 0%,
+        color-mix(in srgb, var(--pub-accent) 22%, transparent),
+        transparent 70%
+    );
+}
+
+.pub-texture[data-texture='mesh'] {
+    background-image:
+        radial-gradient(40% 50% at 12% 18%, color-mix(in srgb, var(--pub-accent) 26%, transparent), transparent 70%),
+        radial-gradient(45% 55% at 88% 12%, color-mix(in srgb, var(--pub-band) 55%, transparent), transparent 72%),
+        radial-gradient(50% 60% at 62% 100%, color-mix(in srgb, var(--pub-accent-fill) 45%, transparent), transparent 75%);
+}
+
+.pub-texture[data-texture='rays'] {
+    background-image: repeating-conic-gradient(
+        from 0deg at 50% 0%,
+        color-mix(in srgb, var(--pub-accent) 9%, transparent) 0deg 4deg,
+        transparent 4deg 12deg
+    );
+}
+
+/* ------------------------------------------------------------ degradados */
+
+.pub-gradient[data-gradient='accent'] {
+    background-image: linear-gradient(160deg, var(--pub-bg), var(--pub-accent-fill));
+}
+
+.pub-gradient[data-gradient='band'] {
+    background-image: linear-gradient(160deg, var(--pub-band), var(--pub-bg));
+}
+
+.pub-gradient[data-gradient='dusk'] {
+    background-image: linear-gradient(180deg, var(--pub-surface), var(--pub-bg));
+}
+
+.pub-gradient[data-gradient='deep'] {
+    background-image: linear-gradient(
+        135deg,
+        color-mix(in srgb, var(--pub-bg) 72%, black),
+        var(--pub-bg) 58%,
+        var(--pub-surface)
+    );
+}
+
+.pub-gradient[data-gradient='halo'] {
+    background-image: radial-gradient(70% 90% at 50% 50%, var(--pub-surface), var(--pub-bg) 72%);
+}
+
+/* ------------------------------------------------- revelado al hacer scroll */
+
+/*
+ * El bloque marca `data-visible` cuando entra en pantalla y cada pieza marcada
+ * con `.pub-part` entra escalonada según su `--pub-part` (su orden dentro del
+ * bloque). Las piezas no se anidan: una parte nunca contiene otra.
+ */
+.pub-reveal {
+    --pub-rev-dur: 0.6s;
+    --pub-rev-delay: 0s;
+    --pub-rev-step: 0.09s;
+    --pub-rev-from: none;
+    --pub-rev-blur: 0px;
+    --pub-rev-ease: cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+/*
+ * Ocultar depende de `.pub-js`, la clase que pone BlockShell al cargarse: sin
+ * JavaScript no hay quien revele el bloque y el contenido tiene que verse igual.
+ */
+.pub-js .pub-reveal .pub-part {
+    opacity: 0;
+    transform: var(--pub-rev-from);
+    filter: blur(var(--pub-rev-blur));
+    transition:
+        opacity var(--pub-rev-dur) var(--pub-rev-ease),
+        transform var(--pub-rev-dur) var(--pub-rev-ease),
+        filter var(--pub-rev-dur) var(--pub-rev-ease);
+    transition-delay: calc(var(--pub-rev-delay) + var(--pub-part, 0) * var(--pub-rev-step));
+}
+
+.pub-js .pub-reveal[data-visible='true'] .pub-part {
+    opacity: 1;
+    transform: none;
+    filter: none;
+}
+
+/* Quien pide menos movimiento ve la página quieta y completa. */
+@media (prefers-reduced-motion: reduce) {
+    .pub-js .pub-reveal .pub-part {
+        opacity: 1;
+        transform: none;
+        filter: none;
+        transition: none;
+    }
+
+    .pub-block-layer[data-parallax='on'] {
+        transform: none !important;
+    }
+}

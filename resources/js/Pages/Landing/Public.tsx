@@ -13,6 +13,7 @@ import {
     StepsMediaBlock,
     VirtuesBlock,
 } from '@/Components/Public/Blocks';
+import { BlockShell } from '@/Components/Public/BlockShell';
 import '../../../css/public.css';
 import { cn } from '@/lib/utils';
 
@@ -716,6 +717,21 @@ function formatPlanMonthlyPrice(price: unknown): string {
     return `${new Intl.NumberFormat('es-CO', { maximumFractionDigits: p % 1 !== 0 ? 2 : 0 }).format(p)} / mes`;
 }
 
+/**
+ * Apariencia por defecto de los bloques del rediseno cuando se sirven desde el CMS
+ * heredado (que no manda el catalogo). Refleja la clave `appearance` de
+ * config/landing_blocks.php.
+ */
+const LEGACY_APPEARANCE: Record<string, Record<string, unknown>> = {
+    flow: { pad_top: 'md', pad_bottom: 'md', anim: 'up' },
+    band: { pad_top: 'xs', pad_bottom: 'xs', bg_type: 'color', bg_color: 'band', anim: 'fade', anim_stagger: 'subtle' },
+    virtues: { pad_top: 'md', pad_bottom: 'md', anim: 'up' },
+    audience: { pad_top: 'md', pad_bottom: 'md', anim: 'up' },
+    steps_media: { pad_top: 'md', pad_bottom: 'md', anim: 'up' },
+    quote: { pad_top: 'md', pad_bottom: 'md', width: 'narrow', anim: 'fade' },
+    closing: { pad_top: 'none', pad_bottom: 'md', anim: 'up' },
+};
+
 function SectionBlock({
     slug,
     payload,
@@ -728,14 +744,21 @@ function SectionBlock({
     if (!payload) return null;
 
     // Bloques del rediseno publico. Se resuelven antes que los slugs heredados; si un
-    // bloque nuevo no esta publicado, simplemente no llega hasta aca.
-    if (slug === 'flow') return <FlowBlock data={payload} />;
-    if (slug === 'band') return <BandBlock data={payload} />;
-    if (slug === 'virtues') return <VirtuesBlock data={payload} />;
-    if (slug === 'audience') return <AudienceBlock data={payload} />;
-    if (slug === 'steps_media') return <StepsMediaBlock data={payload} />;
-    if (slug === 'quote') return <QuoteBlock data={payload} />;
-    if (slug === 'closing') return <ClosingBlock data={payload} />;
+    // bloque nuevo no esta publicado, simplemente no llega hasta aca. Aqui no hay editor
+    // de apariencia: BlockShell les da el marco con los valores por defecto.
+    const nuevos: Record<string, React.ReactNode> = {
+        flow: <FlowBlock data={payload} />,
+        band: <BandBlock data={payload} />,
+        virtues: <VirtuesBlock data={payload} />,
+        audience: <AudienceBlock data={payload} />,
+        steps_media: <StepsMediaBlock data={payload} />,
+        quote: <QuoteBlock data={payload} />,
+        closing: <ClosingBlock data={payload} />,
+    };
+
+    if (nuevos[slug]) {
+        return <BlockShell defaults={LEGACY_APPEARANCE[slug]}>{nuevos[slug]}</BlockShell>;
+    }
 
     if (slug === 'hero') {
         const p = payload as {

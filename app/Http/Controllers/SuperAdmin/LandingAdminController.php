@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\Landing\UpdateLandingBlockRequest;
 use App\Models\LandingBlock;
 use App\Models\LandingVersion;
+use App\Services\Landing\LandingDataSources;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -24,19 +25,35 @@ class LandingAdminController extends Controller
     public function index(): Response
     {
         $blocks = LandingBlock::ordered()->get();
+        $sources = app(LandingDataSources::class);
 
         return Inertia::render('SuperAdmin/Landing/Index', [
-            'blocks' => $blocks->map(fn (LandingBlock $b) => [
-                'id' => $b->id,
-                'type' => $b->type,
-                'position' => $b->position,
-                'is_visible' => $b->is_visible,
-                'data' => $b->data,
-                'is_dirty' => $b->is_dirty,
-            ])->values()->all(),
+            'blocks' => $blocks->map(function (LandingBlock $b) use ($sources) {
+                $row = [
+                    'id' => $b->id,
+                    'type' => $b->type,
+                    'position' => $b->position,
+                    'is_visible' => $b->is_visible,
+                    'data' => $b->data,
+                    'is_dirty' => $b->is_dirty,
+                ];
+
+                // La vista previa necesita las filas ya resueltas; el error se muestra
+                // aqui para que el super usuario lo vea antes de publicar.
+                if ($b->type === 'data') {
+                    $resolved = $sources->resolve($b->data ?? []);
+                    $row['rows'] = $resolved['rows'];
+                    $row['error'] = $resolved['error'];
+                }
+
+                return $row;
+            })->values()->all(),
             'catalog' => config('landing_blocks'),
+            // Tamano, fondo y animacion: comunes a todos los tipos de bloque.
+            'appearanceSchema' => config('landing_appearance'),
             'icons' => config('landing_icons'),
             'linkTargets' => $this->linkTargets(),
+            'fieldOptions' => app(LandingDataSources::class)->editorOptions(),
             'dirtyCount' => $blocks->filter(fn (LandingBlock $b) => $b->is_dirty)->count(),
             'lastPublished' => LandingVersion::query()
                 ->with('publisher:id,name')
@@ -75,7 +92,7 @@ class LandingAdminController extends Controller
             'type' => $type,
             'position' => (int) LandingBlock::query()->max('position') + 10,
             'is_visible' => true,
-            'data' => [],
+            'data' => $this->blankDataFor($type),
         ]);
 
         return back()->with('success', 'Bloque añadido.');
@@ -210,6 +227,30 @@ class LandingAdminController extends Controller
         $path = $request->file('image')->store('landing', 'public');
 
         return response()->json(['path' => $path, 'url' => asset('storage/'.$path)]);
+    }
+
+    /**
+     * Contenido inicial de un bloque: las claves de su esquema en blanco.
+     *
+     * Importa que sea un objeto y no una lista vacia: `[]` viaja a JavaScript como arreglo,
+     * y ahi las claves de texto que escriba el editor se pierden al serializar de vuelta.
+     *
+     * @return array<string, mixed>
+     */
+    private function blankDataFor(string $type): array
+    {
+        $fields = config("landing_blocks.$type.fields", []);
+        $blank = [];
+
+        foreach ($fields as $key => $field) {
+            $blank[$key] = match ($field['type'] ?? 'text') {
+                'repeater', 'multiselect' => [],
+                'link' => ['label' => '', 'url' => ''],
+                default => '',
+            };
+        }
+
+        return $blank;
     }
 
     private function normalizePositions(): void

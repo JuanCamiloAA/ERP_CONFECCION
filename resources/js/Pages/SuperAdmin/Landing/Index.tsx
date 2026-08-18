@@ -1,5 +1,6 @@
 import { Head, router } from '@inertiajs/react';
 import {
+    ArrowCounterClockwise,
     ArrowDown,
     ArrowUp,
     ClockCounterClockwise,
@@ -27,6 +28,9 @@ import {
     StepsMediaBlock,
     VirtuesBlock,
 } from '@/Components/Public/Blocks';
+import { BlockShell } from '@/Components/Public/BlockShell';
+import { PALETTE_SWATCHES, resolveAppearance } from '@/Components/Public/appearance';
+import { DataBlock } from '@/Components/Public/DataBlock';
 import { phosphorIcon } from '@/Components/Public/phosphorIcon';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
@@ -48,15 +52,34 @@ interface BlockRow {
     is_visible: boolean;
     data: Dict;
     is_dirty: boolean;
+    /** Solo en bloques de datos: filas ya resueltas por el servidor y su posible error. */
+    rows?: Dict[];
+    error?: string | null;
+}
+
+interface Option {
+    value: string | number;
+    label: string;
 }
 
 interface FieldSchema {
     type: string;
     label: string;
     max?: number;
+    /** Solo en campos `range`: extremos y salto del control. */
+    min?: number;
+    step?: number;
+    unit?: string;
     rows?: number;
     max_items?: number;
     singular?: string;
+    help?: string;
+    /** Opciones fijas del catalogo. */
+    options?: Option[];
+    /** Nombre de una lista que sirve el servidor (empresas, origenes de datos…). */
+    options_from?: string;
+    /** El campo solo se pinta si otro campo tiene cierto valor (o uno de una lista). */
+    show_if?: { field: string; value: string | string[] };
     item?: Record<string, FieldSchema>;
 }
 
@@ -65,13 +88,27 @@ interface CatalogEntry {
     icon: string;
     singleton: boolean;
     fields: Record<string, FieldSchema>;
+    /** Apariencia por defecto del tipo; `false` en los que dibujan su propio marco. */
+    appearance?: Record<string, unknown> | false;
+}
+
+/** Grupo de la pestaña «Diseño» (config/landing_appearance.php). */
+interface AppearanceGroup {
+    label: string;
+    icon: string;
+    help?: string;
+    fields: Record<string, FieldSchema>;
 }
 
 interface Props {
     blocks: BlockRow[];
     catalog: Record<string, CatalogEntry>;
+    /** Tamaño, fondo y animación: mismos ajustes para todos los tipos de bloque. */
+    appearanceSchema: Record<string, AppearanceGroup>;
     icons: string[];
     linkTargets: { label: string; url: string }[];
+    /** Listas para los selectores que dependen de datos: empresas, origenes… */
+    fieldOptions: Record<string, Option[]>;
     dirtyCount: number;
     lastPublished: { id: number; published_at: string } | null;
 }
@@ -85,11 +122,28 @@ interface VersionRow {
 
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
 
-export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets, dirtyCount }: Props) {
-    const [rows, setRows] = useState<BlockRow[]>(blocks);
+/**
+ * Un bloque sin contenido llega como `[]` (arreglo) y no como `{}`. Si se deja asi, las
+ * claves que escriba el editor se pierden al serializar. Se normaliza al entrar.
+ */
+const normalizeBlocks = (rows: BlockRow[]): BlockRow[] =>
+    rows.map((r) => (Array.isArray(r.data) ? { ...r, data: {} } : r));
+
+export default function LandingAdminIndex({
+    blocks,
+    catalog,
+    appearanceSchema,
+    icons,
+    linkTargets,
+    fieldOptions,
+    dirtyCount,
+}: Props) {
+    const [rows, setRows] = useState<BlockRow[]>(normalizeBlocks(blocks));
     const [activeId, setActiveId] = useState<number | null>(blocks[0]?.id ?? null);
     const [device, setDevice] = useState<'desktop' | 'mobile'>('desktop');
     const [tab, setTab] = useState<'blocks' | 'preview' | 'fields'>('blocks');
+    // El panel derecho separa lo que dice el bloque de cómo se ve.
+    const [panel, setPanel] = useState<'content' | 'design'>('content');
     const [saving, setSaving] = useState(false);
     const [savedAt, setSavedAt] = useState<number | null>(null);
     const [versionsOpen, setVersionsOpen] = useState(false);
@@ -102,7 +156,31 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
     const timer = useRef<number | null>(null);
     const dragFrom = useRef<number | null>(null);
 
-    useEffect(() => setRows(blocks), [blocks]);
+    /**
+     * Sincroniza con el servidor sin pisar lo que se esta escribiendo.
+     *
+     * El autoguardado responde con las props recargadas; si se repusiera el estado local
+     * tal cual, una respuesta en vuelo borraria el campo recien tecleado. Por eso, cuando
+     * la lista de bloques es la misma, se conserva el contenido local y solo se toman del
+     * servidor los datos derivados: si esta sucio y las filas ya resueltas del origen.
+     */
+    useEffect(() => {
+        setRows((prev) => {
+            const mismaLista =
+                prev.length === blocks.length && prev.every((r, i) => r.id === blocks[i].id);
+
+            if (! mismaLista) {
+                return normalizeBlocks(blocks);
+            }
+
+            return prev.map((r, i) => ({
+                ...r,
+                is_dirty: blocks[i].is_dirty,
+                rows: blocks[i].rows,
+                error: blocks[i].error,
+            }));
+        });
+    }, [blocks]);
 
     const active = rows.find((r) => r.id === activeId) ?? null;
     const schema = active ? catalog[active.type] : null;
@@ -177,6 +255,40 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
     /* ------------------------------------------------------- controles */
 
     const errorFor = (path: string) => errors[path];
+
+    /** Un campo con `show_if` solo se pinta cuando aquel del que depende coincide. */
+    const cumpleCondicion = (field: FieldSchema, values: Dict): boolean => {
+        if (!field.show_if) return true;
+
+        const actual = str(values[field.show_if.field]);
+        const esperado = field.show_if.value;
+
+        return Array.isArray(esperado) ? esperado.includes(actual) : actual === esperado;
+    };
+
+    /** Apariencia por defecto del tipo; los que traen `false` dibujan su propio marco. */
+    const appearanceDefaults = (type: string): Dict | undefined => {
+        const d = catalog[type]?.appearance;
+
+        return d && typeof d === 'object' ? (d as Dict) : undefined;
+    };
+
+    /**
+     * Apariencia efectiva: lo guardado sobre los valores por defecto del tipo. Los
+     * controles muestran siempre lo que se aplica, no solo lo que se tocó.
+     */
+    const appearanceOf = (row: BlockRow): Dict =>
+        resolveAppearance(appearanceDefaults(row.type), (row.data ?? {}).appearance) as unknown as Dict;
+
+    /**
+     * Firma de los ajustes de animación. Al cambiar cualquiera, la vista previa vuelve
+     * a montar la sección y el revelado se ve otra vez sin tener que desplazarse.
+     */
+    const animSignature = (row: BlockRow): string => {
+        const a = appearanceOf(row);
+
+        return [a.anim, a.anim_speed, a.anim_stagger, a.anim_delay, a.anim_once].join('|');
+    };
 
     const IconPicker = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
         const [q, setQ] = useState('');
@@ -397,6 +509,185 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
                     </div>
                 );
             }
+            case 'select': {
+                const opciones = field.options ?? fieldOptions[field.options_from ?? ''] ?? [];
+
+                return (
+                    <div>
+                        <Select
+                            label={field.label}
+                            value={str(value)}
+                            onChange={(e) => setValue(e.target.value)}
+                            options={opciones}
+                            placeholder="—"
+                            error={errorFor(`${path}.${key}`)}
+                        />
+                        {field.help ? <p className="mt-1 text-[11px] text-slate-500">{field.help}</p> : null}
+                    </div>
+                );
+            }
+            case 'multiselect': {
+                const opciones = field.options ?? fieldOptions[field.options_from ?? ''] ?? [];
+                const marcados = Array.isArray(value) ? (value as (string | number)[]).map(String) : [];
+
+                return (
+                    <div>
+                        <p className="mb-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">{field.label}</p>
+                        <div className="max-h-48 space-y-1 overflow-y-auto rounded-lg border border-slate-200 p-2 dark:border-slate-700">
+                            {opciones.length === 0 ? (
+                                <p className="p-2 text-xs text-slate-500">No hay opciones disponibles.</p>
+                            ) : (
+                                opciones.map((o) => {
+                                    const activo = marcados.includes(String(o.value));
+
+                                    return (
+                                        <label
+                                            key={o.value}
+                                            className="flex min-h-11 cursor-pointer items-center gap-2.5 rounded-md px-2 text-sm text-slate-700 hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-700/50"
+                                        >
+                                            <input
+                                                type="checkbox"
+                                                className="h-4 w-4 rounded"
+                                                checked={activo}
+                                                onChange={() =>
+                                                    setValue(
+                                                        activo
+                                                            ? marcados.filter((v) => v !== String(o.value))
+                                                            : [...marcados, String(o.value)],
+                                                    )
+                                                }
+                                            />
+                                            {o.label}
+                                        </label>
+                                    );
+                                })
+                            )}
+                        </div>
+                        {field.help ? <p className="mt-1 text-[11px] text-slate-500">{field.help}</p> : null}
+                        {errorFor(`${path}.${key}`) ? (
+                            <p className="mt-1 text-xs text-rose-500">{errorFor(`${path}.${key}`)}</p>
+                        ) : null}
+                    </div>
+                );
+            }
+            case 'sql':
+                return (
+                    <div>
+                        <Textarea
+                            label={field.label}
+                            rows={4}
+                            value={str(value)}
+                            onChange={(e) => setValue(e.target.value)}
+                            error={errorFor(`${path}.${key}`)}
+                            className="font-mono text-[12px]"
+                            placeholder="SELECT name FROM companies WHERE is_active = 1"
+                        />
+                        <p className="mt-1 text-[11px] text-amber-600 dark:text-amber-400">
+                            {field.help}
+                        </p>
+                    </div>
+                );
+            case 'toggle': {
+                const activo = value === true;
+
+                return (
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                            <p className="text-xs font-medium text-slate-700 dark:text-slate-300">{field.label}</p>
+                            {field.help ? <p className="mt-0.5 text-[11px] text-slate-500">{field.help}</p> : null}
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setValue(!activo)}
+                            className={`relative h-6 w-[42px] shrink-0 rounded-full transition-colors ${
+                                activo ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600'
+                            }`}
+                            aria-pressed={activo}
+                            aria-label={field.label}
+                        >
+                            <span
+                                className="absolute top-[3px] h-[18px] w-[18px] rounded-full bg-white transition-all"
+                                style={{ left: activo ? 21 : 3 }}
+                            />
+                        </button>
+                    </div>
+                );
+            }
+            case 'range': {
+                const min = field.min ?? 0;
+                const max = field.max ?? 100;
+                const actual = typeof value === 'number' ? value : Number(value) || min;
+
+                return (
+                    <div>
+                        <div className="mb-1 flex items-baseline justify-between">
+                            <p className="text-xs font-medium text-slate-700 dark:text-slate-300">{field.label}</p>
+                            <span className="text-[11px] tabular-nums text-slate-500">
+                                {actual}
+                                {field.unit ?? ''}
+                            </span>
+                        </div>
+                        <input
+                            type="range"
+                            min={min}
+                            max={max}
+                            step={field.step ?? 1}
+                            value={actual}
+                            onChange={(e) => setValue(Number(e.target.value))}
+                            className="h-11 w-full accent-indigo-600"
+                            aria-label={field.label}
+                        />
+                        {field.help ? <p className="text-[11px] text-slate-500">{field.help}</p> : null}
+                    </div>
+                );
+            }
+            case 'color': {
+                const actual = str(value);
+                const esToken = PALETTE_SWATCHES.some((s) => s.value === actual);
+
+                return (
+                    <div>
+                        <p className="mb-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">{field.label}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                            {PALETTE_SWATCHES.map((s) => (
+                                <button
+                                    key={s.value}
+                                    type="button"
+                                    title={s.label}
+                                    onClick={() => setValue(s.value)}
+                                    className={`h-9 w-9 rounded-lg border-2 ${
+                                        actual === s.value ? 'border-indigo-500' : 'border-slate-200 dark:border-slate-700'
+                                    }`}
+                                    style={{ backgroundColor: s.preview }}
+                                    aria-label={s.label}
+                                />
+                            ))}
+                            {/* Color propio: el cuadro punteado abre el selector del sistema. */}
+                            <label
+                                title="Color propio"
+                                className={`flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg border-2 ${
+                                    !esToken && actual
+                                        ? 'border-indigo-500'
+                                        : 'border-dashed border-slate-300 dark:border-slate-600'
+                                }`}
+                                style={!esToken && actual ? { backgroundColor: actual } : undefined}
+                            >
+                                <input
+                                    type="color"
+                                    className="h-0 w-0 opacity-0"
+                                    value={!esToken && actual ? actual : '#161826'}
+                                    onChange={(e) => setValue(e.target.value)}
+                                />
+                                {esToken || !actual ? <span className="text-[11px] text-slate-400">+</span> : null}
+                            </label>
+                        </div>
+                        {field.help ? <p className="mt-1 text-[11px] text-slate-500">{field.help}</p> : null}
+                        {errorFor(`${path}.${key}`) ? (
+                            <p className="mt-1 text-xs text-rose-500">{errorFor(`${path}.${key}`)}</p>
+                        ) : null}
+                    </div>
+                );
+            }
             default:
                 return (
                     <Input
@@ -506,7 +797,7 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
         const flow = rows.find((r) => r.type === 'flow');
         switch (row.type) {
             case 'hero':
-                return <HeroBlock data={d} aside={flow ? <FlowBlock data={flow.data} /> : undefined} />;
+                return <HeroBlock data={d} aside={flow ? <FlowBlock data={flow.data} offset={5} /> : undefined} />;
             case 'band':
                 return <BandBlock data={d} />;
             case 'virtues':
@@ -519,6 +810,8 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
                 return <QuoteBlock data={d} />;
             case 'closing':
                 return <ClosingBlock data={d} />;
+            case 'data':
+                return <DataBlock data={d} rows={row.rows ?? []} error={row.error} />;
             default:
                 return null;
         }
@@ -641,14 +934,25 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
                         const isActive = row.id === activeId;
 
                         return (
-                            <button
+                            // Contenedor seleccionable, no <button>: los bloques traen
+                            // dentro sus propios botones y enlaces, y un boton anidado en
+                            // otro es HTML invalido (React lo reporta como error).
+                            <div
                                 key={row.id}
-                                type="button"
+                                role="button"
+                                tabIndex={0}
                                 onClick={() => {
                                     setActiveId(row.id);
                                     setTab('fields');
                                 }}
-                                className={`relative block w-full text-left ring-1 ring-inset ${
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                        e.preventDefault();
+                                        setActiveId(row.id);
+                                        setTab('fields');
+                                    }
+                                }}
+                                className={`relative block w-full cursor-pointer text-left ring-1 ring-inset ${
                                     isActive ? 'ring-indigo-500' : 'ring-transparent hover:ring-slate-500'
                                 } ${row.is_visible ? '' : 'opacity-40'}`}
                             >
@@ -660,8 +964,14 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
                                     {catalog[row.type]?.label ?? row.type}
                                     {row.is_visible ? '' : ' · Oculto'}
                                 </span>
-                                {node}
-                            </button>
+                                <BlockShell
+                                    defaults={appearanceDefaults(row.type)}
+                                    appearance={(row.data ?? {}).appearance}
+                                    replayKey={animSignature(row)}
+                                >
+                                    {node}
+                                </BlockShell>
+                            </div>
                         );
                     })}
                 </div>
@@ -671,6 +981,49 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
             </div>
         </div>
     );
+
+    /**
+     * Pestaña «Diseño»: los grupos de config/landing_appearance.php, con los mismos
+     * controles genéricos que el contenido. Se guarda en `data.appearance`.
+     */
+    const designFields = (row: BlockRow) => {
+        const values = appearanceOf(row);
+
+        return (
+            <>
+                {Object.entries(appearanceSchema).map(([groupKey, group]) => (
+                    <div key={groupKey} className="rounded-xl border border-slate-200 p-3 dark:border-slate-700">
+                        <p className="flex items-center gap-1.5 text-[11px] uppercase tracking-[.1em] text-slate-500">
+                            <span className="text-indigo-600 dark:text-indigo-400">{phosphorIcon(group.icon, 14)}</span>
+                            {group.label}
+                        </p>
+                        {group.help ? <p className="mt-1 text-[11px] leading-relaxed text-slate-500">{group.help}</p> : null}
+                        <div className="mt-3 space-y-3">
+                            {Object.entries(group.fields)
+                                .filter(([, field]) => cumpleCondicion(field, values))
+                                .map(([key, field]) => (
+                                    <div key={key}>{renderField(key, field, values, 'data.appearance')}</div>
+                                ))}
+                        </div>
+                    </div>
+                ))}
+
+                <button
+                    type="button"
+                    onClick={() =>
+                        patchActive((d) => {
+                            delete d.appearance;
+
+                            return d;
+                        })
+                    }
+                    className="flex h-11 items-center gap-1.5 text-sm text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400"
+                >
+                    <ArrowCounterClockwise size={14} /> Volver al diseño por defecto
+                </button>
+            </>
+        );
+    };
 
     const fieldsPanel = (
         <div className="flex h-full min-h-0 flex-col">
@@ -704,12 +1057,38 @@ export default function LandingAdminIndex({ blocks, catalog, icons, linkTargets,
                 ) : null}
             </div>
 
+            {/* Lo que dice el bloque y cómo se ve son dos formularios distintos. */}
+            {active && catalog[active.type]?.appearance !== false ? (
+                <div className="flex shrink-0 gap-1.5 px-4 pb-2.5">
+                    {(['content', 'design'] as const).map((p) => (
+                        <button
+                            key={p}
+                            type="button"
+                            onClick={() => setPanel(p)}
+                            className={`h-9 flex-1 rounded-lg text-xs ${
+                                panel === p
+                                    ? 'bg-indigo-600 text-white'
+                                    : 'text-slate-600 ring-1 ring-slate-200 dark:text-slate-300 dark:ring-slate-700'
+                            }`}
+                        >
+                            {p === 'content' ? 'Contenido' : 'Diseño'}
+                        </button>
+                    ))}
+                </div>
+            ) : null}
+
             <div className="scrollbar-thin min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 pb-4">
                 {active && schema ? (
                     <>
-                        {Object.entries(schema.fields).map(([key, field]) => (
-                            <div key={key}>{renderField(key, field, active.data ?? {}, 'data')}</div>
-                        ))}
+                        {panel === 'design' && catalog[active.type]?.appearance !== false
+                            ? designFields(active)
+                            : Object.entries(schema.fields)
+                                  // show_if: un campo que depende de otro solo se pinta cuando
+                                  // aplica (la caja SQL solo con «consulta personalizada», etc.).
+                                  .filter(([, field]) => cumpleCondicion(field, active.data ?? {}))
+                                  .map(([key, field]) => (
+                                      <div key={key}>{renderField(key, field, active.data ?? {}, 'data')}</div>
+                                  ))}
 
                         <div className="flex items-center justify-between border-t border-slate-200 pt-3 dark:border-slate-700">
                             <span className="text-sm text-slate-700 dark:text-slate-300">Visible en el sitio</span>
