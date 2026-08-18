@@ -3,6 +3,7 @@
 namespace App\Services\DashboardBuilder;
 
 use App\Models\DashboardWidget;
+use App\Services\Dashboard\OutstandingProductionQuery;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Facades\DB;
 
@@ -30,12 +31,12 @@ class WidgetQueryBuilder
 
     /**
      * @param  array<string, int|string|null>  $sessionVariables  valores ya resueltos del usuario que ve el
-     *  dashboard (ver self::sessionVariables() para las claves permitidas). Nunca confiar en valores que
-     *  vengan del cliente: siempre construidos por el controlador desde $request->user().
+     *                                                            dashboard (ver self::sessionVariables() para las claves permitidas). Nunca confiar en valores que
+     *                                                            vengan del cliente: siempre construidos por el controlador desde $request->user().
      * @return array<string, mixed> forma normalizada segun el tipo del widget:
-     *  - kpi: ['value' => number]
-     *  - bar/line/pie: ['labels' => string[], 'series' => number[]]
-     *  - table: ['columns' => string[], 'rows' => array<int, array<string, mixed>>]
+     *                              - kpi: ['value' => number]
+     *                              - bar/line/pie: ['labels' => string[], 'series' => number[]]
+     *                              - table: ['columns' => string[], 'rows' => array<int, array<string, mixed>>]
      */
     public function execute(DashboardWidget $widget, ?int $companyId, array $sessionVariables = []): array
     {
@@ -93,6 +94,7 @@ class WidgetQueryBuilder
         }
 
         $query = $this->baseQuery($table, $tableConfig, $companyId);
+        $this->applyScopes($query, $table, $tableConfig, (array) ($definition['scopes'] ?? []));
         $this->applyFilters($query, $tableConfig, (array) ($definition['filters'] ?? []), $sessionVariables);
 
         $metricExpr = sprintf('%s(`%s`) as agg_value', strtoupper($aggregation), $metricColumn);
@@ -146,6 +148,7 @@ class WidgetQueryBuilder
         }
 
         $query = $this->baseQuery($table, $tableConfig, $companyId);
+        $this->applyScopes($query, $table, $tableConfig, (array) ($definition['scopes'] ?? []));
         $this->applyFilters($query, $tableConfig, (array) ($definition['filters'] ?? []), $sessionVariables);
 
         $orderBy = $definition['order_by'] ?? null;
@@ -173,6 +176,12 @@ class WidgetQueryBuilder
     {
         $query = DB::table($table);
 
+        // Sin modelos no hay SoftDeletes: si no se descarta aqui, un widget suma
+        // registros que el usuario ya elimino.
+        if ($tableConfig['soft_deletes'] ?? false) {
+            $query->whereNull($table.'.deleted_at');
+        }
+
         if ($tableConfig['has_company_scope'] ?? false) {
             if ($companyId === null) {
                 throw new WidgetQueryException(
@@ -190,6 +199,29 @@ class WidgetQueryBuilder
      * @param  array<int, array<string, mixed>>  $filters
      * @param  array<string, int|string|null>  $sessionVariables
      */
+    /**
+     * Condiciones de negocio predefinidas del catalogo. Cada una traduce a la misma
+     * consulta que ya usa la aplicacion, para que un widget y un indicador del sistema
+     * nunca den cifras distintas de lo mismo.
+     *
+     * @param  list<string>  $scopes
+     */
+    protected function applyScopes(Builder $query, string $table, array $tableConfig, array $scopes): void
+    {
+        foreach ($scopes as $scope) {
+            $scope = (string) $scope;
+
+            if (! array_key_exists($scope, (array) ($tableConfig['scopes'] ?? []))) {
+                throw new WidgetQueryException("Filtro predefinido no permitido: {$scope}");
+            }
+
+            match ("{$table}.{$scope}") {
+                'productions.pending_payment' => OutstandingProductionQuery::applyNotLiquidadedAsPaidToQuery($query),
+                default => throw new WidgetQueryException("Filtro predefinido sin implementacion: {$scope}"),
+            };
+        }
+    }
+
     protected function applyFilters(Builder $query, array $tableConfig, array $filters, array $sessionVariables = []): void
     {
         foreach ($filters as $filter) {
@@ -443,6 +475,13 @@ class WidgetQueryBuilder
                 } elseif (empty($columns[$groupColumn]['groupable'])) {
                     $errors[] = "La columna {$groupColumn} no admite agrupacion.";
                 }
+            }
+        }
+
+        $scopesPermitidos = self::tableConfig($table)['scopes'] ?? [];
+        foreach ((array) ($definition['scopes'] ?? []) as $scope) {
+            if (! array_key_exists((string) $scope, $scopesPermitidos)) {
+                $errors[] = "Filtro predefinido no permitido: {$scope}";
             }
         }
 

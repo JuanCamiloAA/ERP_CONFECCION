@@ -9,10 +9,22 @@ export interface TableColumnMeta {
     groupable: boolean;
 }
 
+/**
+ * Condicion de negocio predefinida de una tabla. Existe porque hay criterios que no se
+ * pueden escribir como filtro de columna: «pendiente de pago» necesita cruzar con los
+ * periodos de nomina pagados.
+ */
+export interface TableScopeMeta {
+    key: string;
+    label: string;
+    help?: string | null;
+}
+
 export interface TableMeta {
     key: string;
     label: string;
     has_company_scope: boolean;
+    scopes?: TableScopeMeta[];
     columns: TableColumnMeta[];
 }
 
@@ -31,6 +43,8 @@ export interface QueryFilter {
 
 export interface QueryDefinition {
     table: string;
+    /** Claves de los filtros predefinidos activos (ver TableScopeMeta). */
+    scopes?: string[];
     metric?: { column: string; aggregation: 'sum' | 'count' | 'avg' | 'min' | 'max' };
     group_by?: { column: string; granularity?: 'day' | 'week' | 'month' } | null;
     columns?: string[];

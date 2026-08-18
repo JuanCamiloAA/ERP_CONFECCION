@@ -45,7 +45,17 @@ export function GuidedQueryForm({ availableTables, availableSessionVariables, ty
     const groupableColumns = columns.filter((c) => c.groupable);
 
     const setTable = (table: string) => {
+        // Los filtros predefinidos pertenecen a la tabla: al cambiarla dejan de aplicar.
         onChange({ table, filters: value.filters ?? [] });
+    };
+
+    const scopes = value.scopes ?? [];
+
+    const toggleScope = (key: string) => {
+        onChange({
+            ...value,
+            scopes: scopes.includes(key) ? scopes.filter((s) => s !== key) : [...scopes, key],
+        });
     };
 
     const setMetric = (column: string, aggregation: string) => {
@@ -171,6 +181,36 @@ export function GuidedQueryForm({ availableTables, availableSessionVariables, ty
                         value={value.limit ?? 50}
                         onChange={(e) => onChange({ ...value, limit: Number(e.target.value) })}
                     />
+                </div>
+            )}
+
+            {/* Condiciones de negocio que no se pueden escribir como filtro de columna. */}
+            {selectedTable && (selectedTable.scopes ?? []).length > 0 && (
+                <div>
+                    <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">Filtros predefinidos</p>
+                    <div className="space-y-2">
+                        {(selectedTable.scopes ?? []).map((scope) => (
+                            <label
+                                key={scope.key}
+                                className="flex cursor-pointer gap-2.5 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                            >
+                                <input
+                                    type="checkbox"
+                                    className="mt-0.5 h-4 w-4 shrink-0 rounded"
+                                    checked={scopes.includes(scope.key)}
+                                    onChange={() => toggleScope(scope.key)}
+                                />
+                                <span className="min-w-0">
+                                    <span className="block text-sm text-slate-800 dark:text-slate-200">{scope.label}</span>
+                                    {scope.help ? (
+                                        <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                                            {scope.help}
+                                        </span>
+                                    ) : null}
+                                </span>
+                            </label>
+                        ))}
+                    </div>
                 </div>
             )}
 

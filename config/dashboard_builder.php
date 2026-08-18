@@ -1,5 +1,11 @@
 <?php
 
+use App\Models\Advance;
+use App\Models\Employee;
+use App\Models\Expense;
+use App\Models\Payroll;
+use App\Models\Production;
+
 return [
 
     /*
@@ -14,13 +20,29 @@ return [
     | has_company_scope: si es true, WidgetQueryBuilder EXIGE filtrar por
     | company_id en cada ejecucion contra empresas/roles especificos.
     |
+    | soft_deletes: si es true, la consulta descarta las filas borradas. El
+    | constructor trabaja con consultas crudas, sin los scopes de Eloquent, asi
+    | que sin esta marca un widget sumaria registros ya eliminados.
+    |
+    | scopes: condiciones de negocio que no se pueden escribir como un filtro de
+    | columna (necesitan subconsulta). Se declaran aqui solo con su etiqueta; el
+    | SQL vive en WidgetQueryBuilder::applyScopes(), porque la configuracion se
+    | cachea y no admite closures.
+    |
     */
     'tables' => [
 
         'productions' => [
             'label' => 'Produccion',
-            'model' => \App\Models\Production::class,
+            'model' => Production::class,
             'has_company_scope' => true,
+            'soft_deletes' => true,
+            'scopes' => [
+                'pending_payment' => [
+                    'label' => 'Solo lo pendiente de pago',
+                    'help' => 'Deja fuera la produccion cuya fecha ya cae dentro de un periodo de nomina marcada como pagada. Es la misma definicion que usa el indicador «Unidades pendientes por pagar».',
+                ],
+            ],
             'columns' => [
                 'id' => ['label' => 'ID', 'type' => 'integer', 'aggregatable' => true],
                 'quantity' => ['label' => 'Cantidad', 'type' => 'number', 'aggregatable' => true],
@@ -38,8 +60,9 @@ return [
 
         'payrolls' => [
             'label' => 'Nomina',
-            'model' => \App\Models\Payroll::class,
+            'model' => Payroll::class,
             'has_company_scope' => true,
+            'soft_deletes' => true,
             'columns' => [
                 'id' => ['label' => 'ID', 'type' => 'integer', 'aggregatable' => true],
                 'name' => ['label' => 'Nombre', 'type' => 'string', 'groupable' => true],
@@ -55,8 +78,9 @@ return [
 
         'employees' => [
             'label' => 'Empleados',
-            'model' => \App\Models\Employee::class,
+            'model' => Employee::class,
             'has_company_scope' => true,
+            'soft_deletes' => true,
             'columns' => [
                 'id' => ['label' => 'ID', 'type' => 'integer', 'aggregatable' => true],
                 'first_name' => ['label' => 'Nombre', 'type' => 'string', 'groupable' => true],
@@ -73,7 +97,7 @@ return [
 
         'advances' => [
             'label' => 'Anticipos',
-            'model' => \App\Models\Advance::class,
+            'model' => Advance::class,
             'has_company_scope' => true,
             'columns' => [
                 'id' => ['label' => 'ID', 'type' => 'integer', 'aggregatable' => true],
@@ -87,8 +111,9 @@ return [
 
         'expenses' => [
             'label' => 'Gastos',
-            'model' => \App\Models\Expense::class,
+            'model' => Expense::class,
             'has_company_scope' => true,
+            'soft_deletes' => true,
             'columns' => [
                 'id' => ['label' => 'ID', 'type' => 'integer', 'aggregatable' => true],
                 'category_id' => ['label' => 'Categoria (ID)', 'type' => 'integer', 'groupable' => true],

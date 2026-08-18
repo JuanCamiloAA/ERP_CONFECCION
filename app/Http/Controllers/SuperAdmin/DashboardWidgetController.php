@@ -188,6 +188,14 @@ class DashboardWidgetController extends Controller
                 'key' => $key,
                 'label' => $config['label'] ?? $key,
                 'has_company_scope' => (bool) ($config['has_company_scope'] ?? false),
+                'scopes' => collect($config['scopes'] ?? [])
+                    ->map(fn ($scope, $scopeKey) => [
+                        'key' => $scopeKey,
+                        'label' => $scope['label'] ?? $scopeKey,
+                        'help' => $scope['help'] ?? null,
+                    ])
+                    ->values()
+                    ->all(),
                 'columns' => collect($config['columns'] ?? [])
                     ->map(fn ($col, $colKey) => [
                         'key' => $colKey,
