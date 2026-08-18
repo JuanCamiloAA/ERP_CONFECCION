@@ -105,6 +105,7 @@ return [
             'bg_image' => [
                 'type' => 'image',
                 'label' => 'Imagen de fondo',
+                'help' => 'Con 1920 px de ancho basta para pantalla completa; mas grande solo hace lenta la pagina.',
                 'show_if' => ['field' => 'bg_type', 'value' => 'image'],
             ],
             'bg_fit' => [

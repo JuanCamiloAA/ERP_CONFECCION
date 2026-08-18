@@ -109,6 +109,8 @@ interface Props {
     linkTargets: { label: string; url: string }[];
     /** Listas para los selectores que dependen de datos: empresas, origenes… */
     fieldOptions: Record<string, Option[]>;
+    /** Límite y formatos que acepta la subida de imágenes. */
+    media: { max_kb: number; accept: string };
     dirtyCount: number;
     lastPublished: { id: number; published_at: string } | null;
 }
@@ -136,6 +138,7 @@ export default function LandingAdminIndex({
     icons,
     linkTargets,
     fieldOptions,
+    media,
     dirtyCount,
 }: Props) {
     const [rows, setRows] = useState<BlockRow[]>(normalizeBlocks(blocks));
@@ -424,28 +427,51 @@ export default function LandingAdminIndex({
                             <label className="flex-1">
                                 <input
                                     type="file"
-                                    accept="image/jpeg,image/png,image/webp"
+                                    accept={media.accept}
                                     className="hidden"
                                     onChange={async (e) => {
                                         const file = e.target.files?.[0];
+                                        // Se limpia para poder reintentar el mismo archivo tras un fallo.
+                                        e.target.value = '';
                                         if (!file) return;
-                                        const body = new FormData();
-                                        body.append('image', file);
-                                        const res = await fetch(route('super-admin.landing.block-media'), {
-                                            method: 'POST',
-                                            body,
-                                            headers: {
-                                                'X-CSRF-TOKEN':
-                                                    document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
-                                                Accept: 'application/json',
-                                            },
-                                        });
-                                        if (!res.ok) {
-                                            toast.error('No se pudo subir la imagen (máx. 2MB, jpg/png/webp).');
+
+                                        // Se avisa del peso antes de subir: no tiene sentido mandar
+                                        // 12 MB para que el servidor los rechace al final.
+                                        if (file.size > media.max_kb * 1024) {
+                                            toast.error(
+                                                `La imagen pesa ${(file.size / 1048576).toFixed(1)} MB y el máximo es ${Math.round(
+                                                    media.max_kb / 1024,
+                                                )} MB.`,
+                                            );
+
                                             return;
                                         }
-                                        const d = await res.json();
-                                        setValue(d.url);
+
+                                        const body = new FormData();
+                                        body.append('image', file);
+
+                                        try {
+                                            const res = await fetch(route('super-admin.landing.block-media'), {
+                                                method: 'POST',
+                                                body,
+                                                headers: {
+                                                    'X-CSRF-TOKEN':
+                                                        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
+                                                    Accept: 'application/json',
+                                                },
+                                            });
+
+                                            if (!res.ok) {
+                                                toast.error(await uploadError(res));
+
+                                                return;
+                                            }
+
+                                            const d = await res.json();
+                                            setValue(d.url);
+                                        } catch {
+                                            toast.error('No se pudo contactar el servidor para subir la imagen.');
+                                        }
                                     }}
                                 />
                                 <span className="flex h-11 cursor-pointer items-center justify-center rounded-lg border border-slate-300 text-sm dark:border-slate-600">
@@ -462,6 +488,10 @@ export default function LandingAdminIndex({
                                 </button>
                             ) : null}
                         </div>
+                        <p className="mt-1.5 text-[11px] text-slate-500">
+                            Máx. {Math.round(media.max_kb / 1024)} MB · jpg, png, webp, avif o gif.
+                            {field.help ? ` ${field.help}` : ''}
+                        </p>
                     </div>
                 );
             case 'repeater': {
@@ -1287,6 +1317,29 @@ export default function LandingAdminIndex({
             />
         </AppLayout>
     );
+}
+
+/**
+ * Motivo real del fallo al subir una imagen. El servidor ya manda un mensaje concreto
+ * (peso, formato); mostrarlo evita que el super usuario adivine por que fue rechazada.
+ */
+async function uploadError(res: Response): Promise<string> {
+    if (res.status === 419) {
+        return 'La sesión expiró. Recarga la página e inténtalo de nuevo.';
+    }
+
+    // 413 lo devuelve el servidor web antes de que Laravel vea la petición.
+    if (res.status === 413) {
+        return 'El archivo supera el tamaño que acepta el servidor (upload_max_filesize en php.ini).';
+    }
+
+    try {
+        const d = await res.json();
+
+        return d?.errors?.image?.[0] ?? d?.message ?? `No se pudo subir la imagen (error ${res.status}).`;
+    } catch {
+        return `No se pudo subir la imagen (error ${res.status}).`;
+    }
 }
 
 /** Escribe un valor en una ruta anidada del payload sin mutar el original. */

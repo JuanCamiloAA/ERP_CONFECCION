@@ -22,6 +22,18 @@ use Inertia\Response;
  */
 class LandingAdminController extends Controller
 {
+    /**
+     * Peso maximo de una imagen del editor, en KB.
+     *
+     * Un fondo a pantalla completa pesa mucho mas que una foto dentro de una tarjeta,
+     * asi que el limite es holgado; el tope duro sigue siendo upload_max_filesize de
+     * php.ini, que aqui esta en 40M.
+     */
+    private const MAX_IMAGE_KB = 8192;
+
+    /** Formatos que acepta el selector de archivos y la validacion. */
+    private const IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/avif,image/gif';
+
     public function index(): Response
     {
         $blocks = LandingBlock::ordered()->get();
@@ -54,6 +66,8 @@ class LandingAdminController extends Controller
             'icons' => config('landing_icons'),
             'linkTargets' => $this->linkTargets(),
             'fieldOptions' => app(LandingDataSources::class)->editorOptions(),
+            // El editor avisa del limite antes de subir, en vez de esperar el rechazo.
+            'media' => ['max_kb' => self::MAX_IMAGE_KB, 'accept' => self::IMAGE_ACCEPT],
             'dirtyCount' => $blocks->filter(fn (LandingBlock $b) => $b->is_dirty)->count(),
             'lastPublished' => LandingVersion::query()
                 ->with('publisher:id,name')
@@ -220,8 +234,15 @@ class LandingAdminController extends Controller
 
     public function media(Request $request): JsonResponse
     {
+        // Los mensajes se escriben aqui porque el editor los muestra tal cual: quien
+        // sube una imagen tiene que saber si fallo por peso, por formato o por sesion.
         $request->validate([
-            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp', 'max:2048'],
+            'image' => ['required', 'image', 'mimes:jpg,jpeg,png,webp,avif,gif', 'max:'.self::MAX_IMAGE_KB],
+        ], [
+            'image.required' => 'No llego ningun archivo.',
+            'image.image' => 'El archivo no es una imagen.',
+            'image.mimes' => 'Formato no admitido: usa jpg, png, webp, avif o gif.',
+            'image.max' => 'La imagen supera los '.(int) (self::MAX_IMAGE_KB / 1024).' MB.',
         ]);
 
         $path = $request->file('image')->store('landing', 'public');
