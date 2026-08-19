@@ -27,7 +27,8 @@ class UpdateProductionRequest extends FormRequest
             'date' => ['required', 'date', 'before_or_equal:today'],
             'shift' => ['required', 'in:manana,tarde,noche'],
             'notes' => ['nullable', 'string', 'max:500'],
-            'status' => ['sometimes', 'nullable', 'in:pendiente,confirmado'],
+            // `pagado` no esta: ese estado lo pone el cierre de nomina, no el formulario.
+            'status' => ['sometimes', 'nullable', 'in:'.implode(',', Production::EDITABLE_STATUSES)],
         ];
     }
 

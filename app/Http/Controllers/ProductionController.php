@@ -62,7 +62,7 @@ class ProductionController extends Controller
         if ($filters['shift']) {
             $query->where('shift', $filters['shift']);
         }
-        if ($filters['status'] && in_array((string) $filters['status'], [Production::STATUS_PENDING, Production::STATUS_CONFIRMED], true)) {
+        if ($filters['status'] && in_array((string) $filters['status'], [Production::STATUS_PENDING, Production::STATUS_CONFIRMED, Production::STATUS_PAID], true)) {
             $query->where('status', $filters['status']);
         }
 
@@ -191,6 +191,14 @@ class ProductionController extends Controller
 
     public function update(UpdateProductionRequest $request, Production $production): RedirectResponse
     {
+        // Igual que al eliminar: lo que ya se pago no se toca, o la nomina cerrada dejaria
+        // de cuadrar con la produccion que la respalda.
+        if ($production->isPaid()) {
+            return redirect()
+                ->route('productions.index')
+                ->with('error', 'Esta produccion ya fue pagada en una nomina y no se puede modificar.');
+        }
+
         $data = $request->validated();
         $user = $request->user();
 

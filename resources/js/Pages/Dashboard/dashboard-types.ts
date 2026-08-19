@@ -38,7 +38,7 @@ export interface ProductionRowBrief {
     date: string;
     quantity: number;
     total_value: number;
-    status?: 'pendiente' | 'confirmado';
+    status?: 'pendiente' | 'confirmado' | 'pagado';
     company?: { id: number; name: string } | null;
     employee?: { first_name: string; last_name: string };
     reference?: { code: string; name: string };

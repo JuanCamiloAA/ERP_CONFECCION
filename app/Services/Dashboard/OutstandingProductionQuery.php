@@ -3,6 +3,7 @@
 namespace App\Services\Dashboard;
 
 use App\Models\Payroll;
+use App\Models\Production;
 use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
@@ -10,13 +11,17 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 final class OutstandingProductionQuery
 {
     /**
-     * Fuente única de verdad: producción pendiente de pago = fecha de producción que no cae
-     * dentro de ningún período de nómina marcada como `pagado` en la misma empresa
-     * (equivale a Payroll::paidPeriodCoversDate a nivel de colección/listado masivo).
+     * Fuente única de verdad de "todavía se debe": producción que no está marcada como
+     * `pagado` y cuya fecha tampoco cae dentro de un período de nómina ya pagada.
+     *
+     * Se conservan las dos condiciones a propósito. El estado cubre lo que cerró el pago
+     * de la nómina; el período cubre lo histórico, anterior a que existiera ese estado.
      */
     public static function applyNotLiquidadedAsPaid(Builder $query): Builder
     {
-        return $query->whereNotExists(self::criterio());
+        return $query
+            ->where('productions.status', '!=', Production::STATUS_PAID)
+            ->whereNotExists(self::criterio());
     }
 
     /**
@@ -26,7 +31,9 @@ final class OutstandingProductionQuery
      */
     public static function applyNotLiquidadedAsPaidToQuery(QueryBuilder $query): QueryBuilder
     {
-        return $query->whereNotExists(self::criterio());
+        return $query
+            ->where('productions.status', '!=', Production::STATUS_PAID)
+            ->whereNotExists(self::criterio());
     }
 
     private static function criterio(): Closure

@@ -53,8 +53,10 @@ class ProductionReportService
 
         $query->whereBetween('productions.date', [$start, $end]);
 
+        // Lo ya pagado sigue siendo produccion confirmada: dejarlo fuera vaciaria los
+        // reportes de todo periodo cuya nomina ya se cerro.
         if ($onlyConfirmed) {
-            $query->where('productions.status', Production::STATUS_CONFIRMED);
+            $query->whereIn('productions.status', Production::COUNTED_STATUSES);
         }
 
         return $query
@@ -133,7 +135,7 @@ class ProductionReportService
         }
 
         if ($onlyConfirmed) {
-            $query->where('status', Production::STATUS_CONFIRMED);
+            $query->whereIn('status', Production::COUNTED_STATUSES);
         }
 
         return $query;

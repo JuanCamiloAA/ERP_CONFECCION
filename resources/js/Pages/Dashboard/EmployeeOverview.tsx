@@ -230,9 +230,13 @@ export default function EmployeeOverview({ stats, customWidgets = [], layoutVari
                                             <td className="py-2 text-right" data-label="Cantidad">{formatNumber(p.quantity)}</td>
                                             <td className="py-2 text-right font-medium" data-label="Valor">{formatCurrency(p.total_value)}</td>
                                             <td className="py-2 text-center" data-label="Estado">
-                                                <Badge variant={(p.status ?? 'confirmado') === 'pendiente' ? 'warning' : 'success'}>
-                                                    {(p.status ?? 'confirmado') === 'pendiente' ? 'Pendiente' : 'Confirmado'}
-                                                </Badge>
+                                                {p.status === 'pagado' ? (
+                                                    <Badge variant="info">Pagado</Badge>
+                                                ) : (
+                                                    <Badge variant={(p.status ?? 'confirmado') === 'pendiente' ? 'warning' : 'success'}>
+                                                        {(p.status ?? 'confirmado') === 'pendiente' ? 'Pendiente' : 'Confirmado'}
+                                                    </Badge>
+                                                )}
                                             </td>
                                         </tr>
                                     ))

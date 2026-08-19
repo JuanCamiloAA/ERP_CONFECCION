@@ -9,11 +9,13 @@ use App\Models\Payroll;
 use App\Models\PayrollEmployee;
 use App\Models\PayrollLegalParameter;
 use App\Models\Production;
+use App\Models\Scopes\CompanyScope;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WorkDaySession;
-use App\Services\HolidayService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class PayrollCalculationService
@@ -53,15 +55,16 @@ class PayrollCalculationService
                 ->mapWithKeys(fn ($row) => [(int) $row['advance_id'] => (float) ($row['applied_amount'] ?? 0)]);
 
             $employees = Employee::query()
-                ->withoutGlobalScopes()
+                // Solo el alcance de empresa: un empleado eliminado no se liquida.
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->where('is_active', true)
                 ->where(function ($outer) use ($payroll) {
                     $outer->where(function ($q) use ($payroll) {
                         $q->where('payroll_mode', Employee::PAYROLL_MODE_OPERATIONS)
                             ->whereHas('productions', function ($pq) use ($payroll) {
-                                $pq->withoutGlobalScopes()
-                                    ->whereIn('status', [Production::STATUS_CONFIRMED, Production::STATUS_PENDING])
+                                $pq->withoutGlobalScope(CompanyScope::class)
+                                    ->whereIn('status', Production::PAYABLE_STATUSES)
                                     ->whereBetween('date', [$payroll->period_start, $payroll->period_end])
                                     ->where(function ($inner) use ($payroll) {
                                         $cid = (int) $payroll->company_id;
@@ -113,9 +116,10 @@ class PayrollCalculationService
 
                 if ($employee->isPayrollByOperations()) {
                     $productionTotal = (float) Production::query()
-                        ->withoutGlobalScopes()
+                        // Solo el alcance de empresa: la produccion eliminada no se paga.
+                        ->withoutGlobalScope(CompanyScope::class)
                         ->where('employee_id', $employee->id)
-                        ->whereIn('status', [Production::STATUS_CONFIRMED, Production::STATUS_PENDING])
+                        ->whereIn('status', Production::PAYABLE_STATUSES)
                         ->whereBetween('date', [$payroll->period_start, $payroll->period_end])
                         ->where(function ($inner) use ($companyId) {
                             $inner->where('company_id', $companyId)
@@ -269,7 +273,7 @@ class PayrollCalculationService
             }
 
             $employee = Employee::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->find($employeeId);
 
@@ -654,13 +658,13 @@ class PayrollCalculationService
      * trazabilidad: el dia ya no genera day_earnings al no existir sesion); para hourly_legal si hay
      * un monto real porque el salario base ya prorratea TODOS los dias calendario del periodo (§3.3).
      *
-     * @param  \Illuminate\Support\Collection<string, array{date: string, discount?: bool, note?: string|null}>  $confirmationsByDate
+     * @param  Collection<string, array{date: string, discount?: bool, note?: string|null}>  $confirmationsByDate
      * @return array{total: float, detail: list<array<string, mixed>>}
      */
     protected function computeAbsenceDiscount(
         Employee $employee,
         Payroll $payroll,
-        \Illuminate\Support\Collection $confirmationsByDate,
+        Collection $confirmationsByDate,
         ?User $actor,
     ): array {
         if ($employee->isPayrollByOperations()) {
@@ -759,6 +763,9 @@ class PayrollCalculationService
                 'paid_at' => now(),
             ]);
 
+            // Cerrar la nomina cierra tambien la produccion que acaba de quedar pagada.
+            $this->markPaidProductions($payroll);
+
             // Cada anticipo puede quedar total o parcialmente descontado; el saldo restante (si
             // queda) vuelve a estar disponible ("pendiente", sin nomina adjunta) para una nomina
             // futura, en vez de descontarse siempre por completo como antes.
@@ -786,6 +793,60 @@ class PayrollCalculationService
 
             return $payroll->fresh();
         });
+    }
+
+    /**
+     * Produccion que esta nomina liquida y que todavia no esta cerrada.
+     *
+     * La prueba de que se pago produccion es que la liquidacion la incluyo
+     * (`production_total > 0`), no la modalidad que el empleado tenga hoy: la modalidad se
+     * puede cambiar despues de calcular, y entonces mirarla dejaria sin cerrar produccion
+     * que si se pago. A quien se liquido por salario diario u hora legal le queda
+     * `production_total` en cero, de modo que su produccion no se toca.
+     *
+     * Dentro de ese conjunto el criterio de fechas y empresa es el mismo con el que se sumo
+     * `production_total` al calcular, asi que se cierra exactamente lo que se pago.
+     *
+     * Devuelve null cuando la nomina no liquido produccion a nadie.
+     *
+     * @return Builder<Production>|null
+     */
+    public function payableProductionsQuery(Payroll $payroll): ?Builder
+    {
+        $companyId = (int) $payroll->company_id;
+
+        $employeeIds = $payroll->payrollEmployees()
+            ->where('production_total', '>', 0)
+            ->pluck('employee_id');
+
+        if ($employeeIds->isEmpty()) {
+            return null;
+        }
+
+        return Production::query()
+            // Se quita solo el alcance de empresa: la nomina puede liquidarse desde el
+            // contexto de otra, pero la produccion borrada nunca debe entrar.
+            ->withoutGlobalScope(CompanyScope::class)
+            ->whereIn('employee_id', $employeeIds)
+            ->whereIn('status', Production::PAYABLE_STATUSES)
+            ->whereBetween('date', [$payroll->period_start, $payroll->period_end])
+            ->where(function ($inner) use ($companyId) {
+                $inner->where('company_id', $companyId)
+                    ->orWhereHas('reference', fn ($r) => $r->where('company_id', $companyId));
+            });
+    }
+
+    /**
+     * Cierra como `pagado` lo que esta nomina acaba de liquidar. Una vez en ese estado el
+     * registro ya no entra en ninguna nomina posterior (ver Production::PAYABLE_STATUSES):
+     * es lo que impide pagar dos veces la misma operacion.
+     *
+     * @return int filas cerradas
+     */
+    public function markPaidProductions(Payroll $payroll): int
+    {
+        return $this->payableProductionsQuery($payroll)
+            ?->update(['status' => Production::STATUS_PAID]) ?? 0;
     }
 
     /**

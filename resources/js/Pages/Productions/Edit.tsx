@@ -43,6 +43,10 @@ export default function ProductionEdit({ production, employees, references, pric
         notes: production.notes ?? '',
     });
 
+    // Lo que ya entro en una nomina pagada esta cerrado: el servidor rechaza el cambio,
+    // asi que aqui se avisa antes en vez de dejar intentarlo.
+    const isPaid = production.status === 'pagado';
+
     const selectedReference = useMemo(() => references.find((r) => r.id === Number(data.reference_id)), [data.reference_id, references]);
     const availableOperations = selectedReference?.operations ?? [];
 
@@ -149,7 +153,7 @@ export default function ProductionEdit({ production, employees, references, pric
                             }
                         />
                         <Select label="Turno" value={data.shift} onChange={(e) => setData('shift', e.target.value as 'manana' | 'tarde' | 'noche')} options={[{ value: 'manana', label: 'Manana' }, { value: 'tarde', label: 'Tarde' }, { value: 'noche', label: 'Noche' }]} required />
-                        {statusEditable ? (
+                        {statusEditable && !isPaid ? (
                             <Select
                                 label="Estado del registro"
                                 value={data.status}
@@ -165,10 +169,19 @@ export default function ProductionEdit({ production, employees, references, pric
                             <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900/40">
                                 <span className="font-medium text-slate-600 dark:text-slate-400">Estado</span>
                                 <div>
-                                    <Badge variant={data.status === 'pendiente' ? 'warning' : 'success'}>
-                                        {data.status === 'pendiente' ? 'Pendiente' : 'Confirmado'}
-                                    </Badge>
-                                    {data.status === 'pendiente' && (
+                                    {isPaid ? (
+                                        <Badge variant="info">Pagado</Badge>
+                                    ) : (
+                                        <Badge variant={data.status === 'pendiente' ? 'warning' : 'success'}>
+                                            {data.status === 'pendiente' ? 'Pendiente' : 'Confirmado'}
+                                        </Badge>
+                                    )}
+                                    {isPaid && (
+                                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
+                                            Ya se liquido en una nomina cerrada; el registro no se puede modificar.
+                                        </p>
+                                    )}
+                                    {!isPaid && data.status === 'pendiente' && (
                                         <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                                             Un administrador debe confirmar el registro para que cuente en la nomina.
                                         </p>

@@ -118,7 +118,8 @@ class Payroll extends Model
         $d = Carbon::parse($date)->toDateString();
 
         return static::query()
-            ->withoutGlobalScopes()
+            // Una nomina eliminada no cierra ningun periodo.
+            ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)
             ->where('status', self::STATUS_PAID)
             ->whereDate('period_start', '<=', $d)

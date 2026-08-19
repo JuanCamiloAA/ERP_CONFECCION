@@ -335,7 +335,7 @@ export interface Production {
     total_value: string | number;
     date: string;
     shift: 'manana' | 'tarde' | 'noche';
-    status: 'pendiente' | 'confirmado';
+    status: 'pendiente' | 'confirmado' | 'pagado';
     notes: string | null;
     employee?: Employee;
     reference?: Reference;

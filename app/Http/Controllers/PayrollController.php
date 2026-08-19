@@ -10,6 +10,7 @@ use App\Models\PayrollConcept;
 use App\Models\PayrollEmployee;
 use App\Models\PayrollPeriodicity;
 use App\Models\Production;
+use App\Models\Scopes\CompanyScope;
 use App\Models\WorkDaySession;
 use App\Services\PayrollCalculationService;
 use App\Support\CompanyContext;
@@ -204,13 +205,13 @@ class PayrollController extends Controller
         $productionsByEmployee = [];
         if ($idsForDetail !== []) {
             $productionsByEmployee = Production::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->with(['reference:id,code,name', 'operation:id,name'])
                 ->whereBetween('date', [
                     $payroll->period_start->format('Y-m-d'),
                     $payroll->period_end->format('Y-m-d'),
                 ])
-                ->whereIn('status', [Production::STATUS_CONFIRMED, Production::STATUS_PENDING])
+                ->whereIn('status', Production::PAYABLE_STATUSES)
                 ->where(function ($q) use ($payroll) {
                     $cid = (int) $payroll->company_id;
                     $q->where('company_id', $cid)
@@ -341,13 +342,13 @@ class PayrollController extends Controller
 
             if ($employeeIds !== []) {
                 $productionsByEmployee = Production::query()
-                    ->withoutGlobalScopes()
+                    ->withoutGlobalScope(CompanyScope::class)
                     ->with(['reference:id,code,name', 'operation:id,name'])
                     ->whereBetween('date', [
                         $payroll->period_start->format('Y-m-d'),
                         $payroll->period_end->format('Y-m-d'),
                     ])
-                    ->whereIn('status', [Production::STATUS_CONFIRMED, Production::STATUS_PENDING])
+                    ->whereIn('status', Production::PAYABLE_STATUSES)
                     ->whereIn('employee_id', $employeeIds)
                     ->where(function ($inner) use ($payroll) {
                         $inner->where('company_id', $payroll->company_id)

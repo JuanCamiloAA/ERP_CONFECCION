@@ -38,7 +38,7 @@ class DashboardService
             $companiesActive = Company::query()->where('is_active', true)->count();
             $companiesTotal = Company::query()->count();
             $employeesActive = Employee::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('is_active', true)
                 ->count();
 
@@ -104,25 +104,25 @@ class DashboardService
             $producidoPendiente = $this->outstandingProductionValueOperationsForCompany($companyId);
 
             $empleadosActivos = Employee::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->where('is_active', true)
                 ->count();
 
             $calculadas = Payroll::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->where('status', Payroll::STATUS_CALCULATED)
                 ->count();
 
             $aprobadas = Payroll::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->where('status', Payroll::STATUS_APPROVED)
                 ->count();
 
             $sinPagar = Payroll::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->whereIn('status', [
                     Payroll::STATUS_DRAFT,
@@ -160,7 +160,7 @@ class DashboardService
             );
 
             $recentPayrolls = Payroll::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->orderByDesc('period_end')
                 ->orderByDesc('id')
@@ -207,7 +207,7 @@ class DashboardService
 
             if ($employee->isPayrollByOperations()) {
                 $agg = Production::query()
-                    ->withoutGlobalScopes()
+                    ->withoutGlobalScope(CompanyScope::class)
                     ->where('company_id', $companyId)
                     ->where('employee_id', $employeeId);
                 OutstandingProductionQuery::applyNotLiquidadedAsPaid($agg);
@@ -234,7 +234,7 @@ class DashboardService
             ])->all();
 
             $nominasPendientesUsuario = Payroll::query()
-                ->withoutGlobalScopes()
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->whereIn('status', [Payroll::STATUS_CALCULATED, Payroll::STATUS_APPROVED])
                 ->whereHas('payrollEmployees', fn ($q) => $q->where('employee_id', $employeeId))
@@ -264,7 +264,7 @@ class DashboardService
 
             $latestProductions = $this->serializeLatestProductionRows(
                 Production::query()
-                    ->withoutGlobalScopes()
+                    ->withoutGlobalScope(CompanyScope::class)
                     ->with(['employee:id,first_name,last_name', 'reference:id,code,name', 'operation:id,name'])
                     ->where('company_id', $companyId)
                     ->where('employee_id', $employeeId)
@@ -295,10 +295,10 @@ class DashboardService
     protected function outstandingProductionValueOperationsForCompany(int $companyId): float
     {
         $q = Production::query()
-            ->withoutGlobalScopes()
+            ->withoutGlobalScope(CompanyScope::class)
             ->where('company_id', $companyId)
             ->whereHas('employee', function ($employeeQuery) use ($companyId) {
-                $employeeQuery->withoutGlobalScopes()
+                $employeeQuery->withoutGlobalScope(CompanyScope::class)
                     ->where('company_id', $companyId)
                     ->where('payroll_mode', Employee::PAYROLL_MODE_OPERATIONS)
                     ->where('is_active', true);
@@ -354,7 +354,7 @@ class DashboardService
         return [
             'company_id' => $companyId,
             'company_name' => $company?->name ?? '—',
-            'employees_active_count' => Employee::query()->withoutGlobalScopes()
+            'employees_active_count' => Employee::query()->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $companyId)
                 ->where('is_active', true)
                 ->count(),

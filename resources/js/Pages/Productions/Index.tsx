@@ -53,7 +53,7 @@ type FilterKey = 'employee_id' | 'reference_id' | 'operation_id' | 'date_start' 
 type FilterState = Record<FilterKey, string>;
 
 const SHIFT_LABEL: Record<string, string> = { manana: 'Manana', tarde: 'Tarde', noche: 'Noche' };
-const STATUS_LABEL: Record<string, string> = { pendiente: 'Pendiente', confirmado: 'Confirmado' };
+const STATUS_LABEL: Record<string, string> = { pendiente: 'Pendiente', confirmado: 'Confirmado', pagado: 'Pagado' };
 
 export default function ProductionsIndex({
     productions,
@@ -182,6 +182,7 @@ export default function ProductionsIndex({
                     options={[
                         { value: 'pendiente', label: 'Pendiente' },
                         { value: 'confirmado', label: 'Confirmado' },
+                        { value: 'pagado', label: 'Pagado' },
                     ]}
                     placeholder="Todos"
                 />
@@ -369,9 +370,13 @@ export default function ProductionsIndex({
                                         <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
                                             {formatCurrency(p.total_value)}
                                         </span>
-                                        <Badge variant={p.status === 'pendiente' ? 'warning' : 'success'}>
-                                            {p.status === 'pendiente' ? 'Pendiente' : 'Confirmado'}
-                                        </Badge>
+                                        {p.status === 'pagado' ? (
+                                            <Badge variant="info">Pagado</Badge>
+                                        ) : (
+                                            <Badge variant={p.status === 'pendiente' ? 'warning' : 'success'}>
+                                                {p.status === 'pendiente' ? 'Pendiente' : 'Confirmado'}
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
                                 <div className="mt-1 flex justify-end gap-1">
@@ -451,9 +456,13 @@ export default function ProductionsIndex({
                                             {p.shift}
                                         </TableCell>
                                         <TableCell align="center">
-                                            <Badge variant={p.status === 'pendiente' ? 'warning' : 'success'}>
-                                                {p.status === 'pendiente' ? 'Pendiente' : 'Confirmado'}
-                                            </Badge>
+                                            {p.status === 'pagado' ? (
+                                                <Badge variant="info">Pagado</Badge>
+                                            ) : (
+                                                <Badge variant={p.status === 'pendiente' ? 'warning' : 'success'}>
+                                                    {p.status === 'pendiente' ? 'Pendiente' : 'Confirmado'}
+                                                </Badge>
+                                            )}
                                         </TableCell>
                                         <TableCell align="right">
                                             <div className="flex justify-end gap-1">

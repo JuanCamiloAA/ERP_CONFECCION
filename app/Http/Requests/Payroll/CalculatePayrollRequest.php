@@ -4,6 +4,7 @@ namespace App\Http\Requests\Payroll;
 
 use App\Models\Advance;
 use App\Models\Employee;
+use App\Models\Scopes\CompanyScope;
 use App\Support\CompanyContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -56,7 +57,7 @@ class CalculatePayrollRequest extends FormRequest
 
             foreach ($this->input('employee_adjustments', []) as $i => $block) {
                 $eid = (int) ($block['employee_id'] ?? 0);
-                $emp = Employee::query()->withoutGlobalScopes()->where('company_id', $companyId)->find($eid);
+                $emp = Employee::query()->withoutGlobalScope(CompanyScope::class)->where('company_id', $companyId)->find($eid);
                 if (! $emp) {
                     $validator->errors()->add("employee_adjustments.{$i}.employee_id", 'Empleado no valido.');
                 }
@@ -64,7 +65,7 @@ class CalculatePayrollRequest extends FormRequest
 
             foreach ($this->input('absence_confirmations', []) as $i => $block) {
                 $eid = (int) ($block['employee_id'] ?? 0);
-                $emp = Employee::query()->withoutGlobalScopes()->where('company_id', $companyId)->find($eid);
+                $emp = Employee::query()->withoutGlobalScope(CompanyScope::class)->where('company_id', $companyId)->find($eid);
                 if (! $emp) {
                     $validator->errors()->add("absence_confirmations.{$i}.employee_id", 'Empleado no valido.');
                 }

@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\Company;
 use App\Models\Payroll;
+use App\Models\Scopes\CompanyScope;
 use App\Services\PayrollCalculationService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -30,7 +31,8 @@ class CalculateMonthlyPayroll extends Command
             $name = "Nomina mensual {$start->format('M Y')}";
 
             $exists = Payroll::query()
-                ->withoutGlobalScopes()
+                // Una nomina eliminada no debe impedir volver a generar la del periodo.
+                ->withoutGlobalScope(CompanyScope::class)
                 ->where('company_id', $company->id)
                 ->where('type', Payroll::TYPE_MENSUAL)
                 ->where('period_start', $start->toDateString())
@@ -39,6 +41,7 @@ class CalculateMonthlyPayroll extends Command
 
             if ($exists) {
                 $this->warn("Ya existe nomina para {$company->name} ({$name}). Saltando.");
+
                 continue;
             }
 

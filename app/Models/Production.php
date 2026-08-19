@@ -19,6 +19,24 @@ class Production extends Model
 
     public const STATUS_CONFIRMED = 'confirmado';
 
+    /**
+     * Cerrada: entro en una nomina que ya se marco como pagada. Lo pone el sistema al
+     * pagar la nomina, nunca el usuario, y saca el registro de las nominas siguientes.
+     */
+    public const STATUS_PAID = 'pagado';
+
+    /** Estados que el usuario puede elegir a mano; `pagado` lo decide el cierre de nomina. */
+    public const EDITABLE_STATUSES = [self::STATUS_PENDING, self::STATUS_CONFIRMED];
+
+    /**
+     * Estados que todavia puede liquidar una nomina. `pagado` queda fuera a proposito: es
+     * lo que impide pagar dos veces la misma operacion.
+     */
+    public const PAYABLE_STATUSES = [self::STATUS_PENDING, self::STATUS_CONFIRMED];
+
+    /** Produccion que ya conto como trabajo hecho: confirmada o ya pagada. */
+    public const COUNTED_STATUSES = [self::STATUS_CONFIRMED, self::STATUS_PAID];
+
     protected $fillable = [
         'company_id',
         'employee_id',
@@ -46,6 +64,11 @@ class Production extends Model
         static::saving(function (Production $production) {
             $production->total_value = round(((float) $production->quantity) * ((float) $production->unit_price), 2);
         });
+    }
+
+    public function isPaid(): bool
+    {
+        return $this->status === self::STATUS_PAID;
     }
 
     public function company(): BelongsTo
