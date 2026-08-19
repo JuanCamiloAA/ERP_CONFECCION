@@ -19,9 +19,24 @@ final class OutstandingProductionQuery
      */
     public static function applyNotLiquidadedAsPaid(Builder $query): Builder
     {
-        return $query
-            ->where('productions.status', '!=', Production::STATUS_PAID)
-            ->whereNotExists(self::criterio());
+        return self::applyOutsidePaidPayrollPeriod(
+            $query->where('productions.status', '!=', Production::STATUS_PAID)
+        );
+    }
+
+    /**
+     * Solo la mitad de periodo del criterio: la fecha no cae dentro de ninguna nomina
+     * pagada. Se usa suelta para detectar produccion marcada como pagada que ya no tiene
+     * detras ninguna nomina que la respalde (por ejemplo, porque se elimino).
+     *
+     * @template TBuilder of Builder|QueryBuilder
+     *
+     * @param  TBuilder  $query
+     * @return TBuilder
+     */
+    public static function applyOutsidePaidPayrollPeriod(Builder|QueryBuilder $query): Builder|QueryBuilder
+    {
+        return $query->whereNotExists(self::criterio());
     }
 
     /**
@@ -31,9 +46,9 @@ final class OutstandingProductionQuery
      */
     public static function applyNotLiquidadedAsPaidToQuery(QueryBuilder $query): QueryBuilder
     {
-        return $query
-            ->where('productions.status', '!=', Production::STATUS_PAID)
-            ->whereNotExists(self::criterio());
+        return self::applyOutsidePaidPayrollPeriod(
+            $query->where('productions.status', '!=', Production::STATUS_PAID)
+        );
     }
 
     private static function criterio(): Closure

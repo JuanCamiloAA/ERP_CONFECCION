@@ -1,0 +1,9 @@
+nomina
+
+5. Normalizar el histórico — primero mira qué va a cambiar, sin escribir nada:
+
+php artisan productions:close-paid --dry-run
+
+Y cuando el resultado te cuadre:
+
+php artisan productions:close-paid

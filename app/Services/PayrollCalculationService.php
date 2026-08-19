@@ -13,6 +13,7 @@ use App\Models\Scopes\CompanyScope;
 use App\Models\Setting;
 use App\Models\User;
 use App\Models\WorkDaySession;
+use App\Services\Dashboard\OutstandingProductionQuery;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
@@ -818,6 +819,15 @@ class PayrollCalculationService
      */
     public function payableProductionsQuery(Payroll $payroll): ?Builder
     {
+        return $this->productionsQuery($payroll, Production::PAYABLE_STATUSES);
+    }
+
+    /**
+     * @param  list<string>  $statuses
+     * @return Builder<Production>|null
+     */
+    private function productionsQuery(Payroll $payroll, array $statuses): ?Builder
+    {
         $companyId = (int) $payroll->company_id;
 
         $employeeIds = $payroll->payrollEmployees()
@@ -833,12 +843,32 @@ class PayrollCalculationService
             // contexto de otra, pero la produccion borrada nunca debe entrar.
             ->withoutGlobalScope(CompanyScope::class)
             ->whereIn('employee_id', $employeeIds)
-            ->whereIn('status', Production::PAYABLE_STATUSES)
+            ->whereIn('status', $statuses)
             ->whereBetween('date', [$payroll->period_start, $payroll->period_end])
             ->where(function ($inner) use ($companyId) {
                 $inner->where('company_id', $companyId)
                     ->orWhereHas('reference', fn ($r) => $r->where('company_id', $companyId));
             });
+    }
+
+    /**
+     * Produccion marcada como `pagado` que ya no tiene detras ninguna nomina pagada que la
+     * respalde. Pasa al eliminar una nomina cerrada antes de que existiera el retrato, y
+     * tambien si algo queda a medias: sin esto el registro se queda cerrado para siempre,
+     * invisible tanto para «pendiente de pago» como para una nomina nueva.
+     *
+     * @return Builder<Production>
+     */
+    public function orphanPaidProductionsQuery(?int $companyId = null, ?string $from = null, ?string $to = null): Builder
+    {
+        $query = Production::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->where('productions.status', Production::STATUS_PAID)
+            ->when($companyId, fn ($q, $id) => $q->where('productions.company_id', $id))
+            ->when($from, fn ($q, $d) => $q->where('productions.date', '>=', $d))
+            ->when($to, fn ($q, $d) => $q->where('productions.date', '<=', $d));
+
+        return OutstandingProductionQuery::applyOutsidePaidPayrollPeriod($query);
     }
 
     /**
@@ -900,7 +930,7 @@ class PayrollCalculationService
      * borrar igual, pero no hay con que reponer anticipos ni produccion; eso lo indica
      * `from_snapshot` para poder avisarlo.
      *
-     * @return array{productions: int, advances: int, from_snapshot: bool}
+     * @return array{productions: int, reopened_without_snapshot: int, advances: int, from_snapshot: bool}
      */
     public function deletePaidPayroll(Payroll $payroll): array
     {
@@ -943,11 +973,23 @@ class PayrollCalculationService
                     ]);
             }
 
+            $companyId = (int) $payroll->company_id;
+            $desde = $payroll->period_start?->toDateString();
+            $hasta = $payroll->period_end?->toDateString();
+
             $payroll->payrollEmployees()->delete();
             $payroll->delete();
 
+            // Barrido final: ya sin la nomina, cualquier produccion del periodo que siga en
+            // `pagado` y que ninguna otra nomina pagada respalde quedaria cerrada para
+            // siempre. Se reabre como confirmada; sin retrato no hay como saber si estaba
+            // pendiente, y por eso `from_snapshot` avisa que la reversion no fue exacta.
+            $reopened = $this->orphanPaidProductionsQuery($companyId, $desde, $hasta)
+                ->update(['status' => Production::STATUS_CONFIRMED]);
+
             return [
-                'productions' => $productions,
+                'productions' => $productions + $reopened,
+                'reopened_without_snapshot' => $reopened,
                 'advances' => $advances,
                 'from_snapshot' => $snapshot !== null,
             ];

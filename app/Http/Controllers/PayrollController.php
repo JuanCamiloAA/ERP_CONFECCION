@@ -347,12 +347,14 @@ class PayrollController extends Controller
             $resultado['advances'],
         );
 
-        // Las nominas cerradas antes de que se guardara el retrato no tienen con que reponer:
-        // se avisa para que nadie de por hecho que quedo todo como estaba.
+        // Una nomina cerrada antes de que se guardara el retrato se puede reabrir igual (la
+        // produccion vuelve a «confirmada» por barrido), pero no hay como saber cual estaba
+        // pendiente ni cuanto se descontó de cada anticipo. Se dice, en vez de dar por hecho
+        // que quedo todo como estaba.
         if (! $resultado['from_snapshot']) {
             return redirect()
                 ->route('payrolls.index')
-                ->with('warning', "Nomina \"{$nombre}\" eliminada, pero se cerro antes de que el sistema guardara el estado previo: revisa a mano los anticipos y la produccion del periodo.");
+                ->with('warning', "Nomina \"{$nombre}\" eliminada. Se reabrieron {$resultado['reopened_without_snapshot']} registro(s) de produccion como «confirmada», pero esta nomina se cerro antes de que el sistema guardara el estado previo: revisa a mano los anticipos del periodo y la produccion que estuviera pendiente por confirmar.");
         }
 
         return redirect()
