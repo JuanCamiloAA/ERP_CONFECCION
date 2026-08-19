@@ -38,6 +38,7 @@ class Payroll extends Model
         'status',
         'total_amount',
         'paid_at',
+        'reversal_snapshot',
         'notes',
         'created_by',
     ];
@@ -46,6 +47,7 @@ class Payroll extends Model
         'period_start' => 'date',
         'period_end' => 'date',
         'paid_at' => 'datetime',
+        'reversal_snapshot' => 'array',
         'total_amount' => 'decimal:2',
     ];
 

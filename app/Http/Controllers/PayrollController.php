@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\Payroll\CalculatePayrollRequest;
 use App\Http\Requests\Payroll\StorePayrollRequest;
+use App\Models\AccessLog;
 use App\Models\Company;
 use App\Models\Payroll;
 use App\Models\PayrollConcept;
@@ -307,14 +308,56 @@ class PayrollController extends Controller
         $this->authorize('delete', $payroll);
         $this->ensurePayrollBelongsToActiveCompany($request, $payroll);
 
+        // Una nomina cerrada (aprobada o pagada) solo la puede eliminar el super usuario, y
+        // deshaciendo antes lo que el cierre cambio. Es la salida cuando la empresa cierra
+        // por error: sin esto el periodo queda bloqueado y no se puede rehacer.
         if (! $payroll->isEditable()) {
-            return back()->with('error', 'Solo se pueden eliminar nominas en borrador o calculadas.');
+            if (! $request->user()?->isSuperAdmin()) {
+                return back()->with('error', 'Solo se pueden eliminar nominas en borrador o calculadas.');
+            }
+
+            return $this->destroyClosedPayroll($request, $payroll);
         }
 
         $payroll->payrollEmployees()->delete();
         $payroll->delete();
 
         return redirect()->route('payrolls.index')->with('success', 'Nomina eliminada.');
+    }
+
+    /**
+     * Borrado de una nomina ya cerrada por parte del super usuario: se revierte el cierre
+     * (produccion y anticipos) y se deja constancia de quien lo hizo.
+     */
+    private function destroyClosedPayroll(Request $request, Payroll $payroll): RedirectResponse
+    {
+        $nombre = $payroll->name;
+        $estado = $payroll->status;
+
+        $resultado = $this->calculator->deletePaidPayroll($payroll);
+
+        AccessLog::log('payroll_closed_deleted', $request->user()?->id, [
+            'company_id' => $payroll->company_id,
+            'permission_checked' => 'super_admin',
+        ]);
+
+        $detalle = sprintf(
+            'Se repusieron %d registro(s) de produccion y %d anticipo(s).',
+            $resultado['productions'],
+            $resultado['advances'],
+        );
+
+        // Las nominas cerradas antes de que se guardara el retrato no tienen con que reponer:
+        // se avisa para que nadie de por hecho que quedo todo como estaba.
+        if (! $resultado['from_snapshot']) {
+            return redirect()
+                ->route('payrolls.index')
+                ->with('warning', "Nomina \"{$nombre}\" eliminada, pero se cerro antes de que el sistema guardara el estado previo: revisa a mano los anticipos y la produccion del periodo.");
+        }
+
+        return redirect()
+            ->route('payrolls.index')
+            ->with('success', "Nomina \"{$nombre}\" ({$estado}) eliminada y revertida. {$detalle} Ya puedes generarla de nuevo.");
     }
 
     public function export(Request $request, Payroll $payroll): Response

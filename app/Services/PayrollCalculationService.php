@@ -753,9 +753,14 @@ class PayrollCalculationService
         }
 
         return DB::transaction(function () use ($payroll) {
+            // El retrato se toma ANTES de tocar nada: es lo unico que permite deshacer el
+            // cierre si la empresa lo hizo por error (ver deletePaidPayroll).
+            $snapshot = $this->buildPaymentSnapshot($payroll);
+
             $payroll->update([
                 'status' => Payroll::STATUS_PAID,
                 'paid_at' => now(),
+                'reversal_snapshot' => $snapshot,
             ]);
 
             $payroll->payrollEmployees()->update([
@@ -847,6 +852,106 @@ class PayrollCalculationService
     {
         return $this->payableProductionsQuery($payroll)
             ?->update(['status' => Production::STATUS_PAID]) ?? 0;
+    }
+
+    /**
+     * Estado previo de todo lo que el pago va a consumir. Ni el saldo de un anticipo ni el
+     * estado de una produccion se pueden deducir hacia atras una vez aplicados, asi que se
+     * guardan aqui.
+     *
+     * @return array{paid_at: string, productions: list<array{id: int, status: string}>, advances: list<array{id: int, status: string, remaining_amount: float, applied_amount: float|null}>}
+     */
+    protected function buildPaymentSnapshot(Payroll $payroll): array
+    {
+        $productions = $this->payableProductionsQuery($payroll)
+            ?->get(['id', 'status'])
+            ->map(fn (Production $p) => ['id' => (int) $p->id, 'status' => (string) $p->status])
+            ->all() ?? [];
+
+        $advances = Advance::query()
+            ->withoutGlobalScopes()
+            ->whereIn('payroll_employee_id', $payroll->payrollEmployees()->pluck('id'))
+            ->get()
+            ->map(fn (Advance $a) => [
+                'id' => (int) $a->id,
+                'status' => (string) $a->status,
+                'remaining_amount' => (float) $a->remaining_amount,
+                'applied_amount' => $a->applied_amount === null ? null : (float) $a->applied_amount,
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'paid_at' => now()->toIso8601String(),
+            'productions' => $productions,
+            'advances' => $advances,
+        ];
+    }
+
+    /**
+     * Elimina una nomina ya cerrada y deshace lo que el cierre cambio: la produccion vuelve
+     * al estado que tenia y los anticipos recuperan su saldo. Queda todo como antes de
+     * calcular, de modo que se pueda rehacer la nomina del mismo periodo desde cero.
+     *
+     * Es una accion de super usuario: existe porque la empresa puede cerrar una nomina por
+     * error, y sin esto el periodo queda bloqueado para siempre.
+     *
+     * Una nomina cerrada antes de que existiera el retrato (`reversal_snapshot`) se puede
+     * borrar igual, pero no hay con que reponer anticipos ni produccion; eso lo indica
+     * `from_snapshot` para poder avisarlo.
+     *
+     * @return array{productions: int, advances: int, from_snapshot: bool}
+     */
+    public function deletePaidPayroll(Payroll $payroll): array
+    {
+        $snapshot = is_array($payroll->reversal_snapshot) ? $payroll->reversal_snapshot : null;
+
+        return DB::transaction(function () use ($payroll, $snapshot) {
+            $productions = 0;
+
+            foreach ((array) ($snapshot['productions'] ?? []) as $row) {
+                if (! isset($row['id'], $row['status'])) {
+                    continue;
+                }
+
+                $productions += Production::query()
+                    ->withoutGlobalScope(CompanyScope::class)
+                    ->whereKey($row['id'])
+                    // Solo se repone lo que sigue cerrado: si alguien ya lo movio a mano,
+                    // manda lo que hizo esa persona.
+                    ->where('status', Production::STATUS_PAID)
+                    ->update(['status' => $row['status']]);
+            }
+
+            $advances = 0;
+
+            foreach ((array) ($snapshot['advances'] ?? []) as $row) {
+                if (! isset($row['id'])) {
+                    continue;
+                }
+
+                $advances += Advance::query()
+                    ->withoutGlobalScopes()
+                    ->whereKey($row['id'])
+                    ->update([
+                        'status' => $row['status'] ?? Advance::STATUS_PENDING,
+                        'remaining_amount' => $row['remaining_amount'] ?? 0,
+                        // El vinculo con la liquidacion se corta: esas filas desaparecen con
+                        // la nomina y el recalculo volvera a engancharlos.
+                        'applied_amount' => null,
+                        'payroll_employee_id' => null,
+                    ]);
+            }
+
+            $payroll->payrollEmployees()->delete();
+            $payroll->delete();
+
+            return [
+                'productions' => $productions,
+                'advances' => $advances,
+                'from_snapshot' => $snapshot !== null,
+            ];
+        });
     }
 
     /**

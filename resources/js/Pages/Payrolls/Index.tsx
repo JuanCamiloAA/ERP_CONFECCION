@@ -48,8 +48,17 @@ const STATUS_OPTIONS = [
     { value: 'pagado', label: 'Pagado' },
 ];
 
+/**
+ * Una nomina aprobada o pagada esta cerrada: eliminarla deshace el cierre (produccion y
+ * anticipos vuelven atras) y solo lo puede hacer el super usuario, como salida cuando la
+ * empresa cierra el periodo por error.
+ */
+const isClosed = (p: Payroll): boolean => p.status === 'pagado' || p.status === 'aprobado';
+
 export default function PayrollsIndex({ payrolls, filters }: Props) {
-    const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
+    const page = usePage<App.PageProps>();
+    const isConsolidatedView = page.props.isConsolidatedView ?? false;
+    const isSuperAdmin = Boolean(page.props.auth.user?.is_super_admin);
     const perms = usePermissions();
     const [confirmDelete, setConfirmDelete] = useState<Payroll | null>(null);
     const [status, setStatus] = useState(filters.status ?? 'all');
@@ -93,10 +102,10 @@ export default function PayrollsIndex({ payrolls, filters }: Props) {
         if (perms.can('payrolls.show.view')) {
             actions.push({ key: 'view', label: 'Ver detalle', icon: <EyeIcon className="h-4 w-4" />, href: route('payrolls.show', p.id) });
         }
-        if (perms.can('payrolls.index.delete') && p.status !== 'pagado' && p.status !== 'aprobado') {
+        if (perms.can('payrolls.index.delete') && (! isClosed(p) || isSuperAdmin)) {
             actions.push({
                 key: 'delete',
-                label: 'Eliminar',
+                label: isClosed(p) ? 'Eliminar y revertir' : 'Eliminar',
                 icon: <TrashIcon className="h-4 w-4" />,
                 danger: true,
                 onClick: () => setConfirmDelete(p),
@@ -312,11 +321,11 @@ export default function PayrollsIndex({ payrolls, filters }: Props) {
                                                     </Link>
                                                 </Can>
                                                 <Can permission="payrolls.index.delete">
-                                                    {p.status !== 'pagado' && p.status !== 'aprobado' ? (
+                                                    {! isClosed(p) || isSuperAdmin ? (
                                                         <Button
                                                             variant="ghost"
                                                             size="sm"
-                                                            title="Eliminar"
+                                                            title={isClosed(p) ? 'Eliminar y revertir el cierre' : 'Eliminar'}
                                                             aria-label={`Eliminar ${p.name}`}
                                                             icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
                                                             onClick={() => setConfirmDelete(p)}
@@ -382,8 +391,14 @@ export default function PayrollsIndex({ payrolls, filters }: Props) {
                     if (!confirmDelete) return;
                     router.delete(route('payrolls.destroy', confirmDelete.id), { onFinish: () => setConfirmDelete(null) });
                 }}
-                title="Eliminar nomina"
-                message={`Eliminar la nomina "${confirmDelete?.name}"?`}
+                title={confirmDelete && isClosed(confirmDelete) ? 'Eliminar y revertir el cierre' : 'Eliminar nomina'}
+                variant={confirmDelete && isClosed(confirmDelete) ? 'danger' : undefined}
+                confirmText={confirmDelete && isClosed(confirmDelete) ? 'Eliminar y revertir' : undefined}
+                message={
+                    confirmDelete && isClosed(confirmDelete)
+                        ? `La nomina "${confirmDelete.name}" esta ${confirmDelete.status}. Al eliminarla se deshace el cierre: la produccion liquidada vuelve al estado que tenia y los anticipos recuperan su saldo, de modo que puedas generar el periodo de nuevo desde cero. Queda registro de quien lo hizo.`
+                        : `Eliminar la nomina "${confirmDelete?.name}"?`
+                }
             />
         </AppLayout>
     );
