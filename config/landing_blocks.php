@@ -24,6 +24,28 @@ return [
         'singleton' => true,
         'appearance' => false,
         'fields' => [
+            // El logo del encabezado es tambien el icono de la pestana del navegador:
+            // se elige una sola vez aqui y vale para toda la pagina publica.
+            'logo_type' => [
+                'type' => 'select',
+                'label' => 'Logo de la marca',
+                'options' => [
+                    ['value' => 'icon', 'label' => 'Ícono'],
+                    ['value' => 'image', 'label' => 'Imagen'],
+                ],
+                'help' => 'Se usa en el encabezado y en la pestaña del navegador.',
+            ],
+            'brand_icon' => [
+                'type' => 'icon',
+                'label' => 'Ícono de la marca',
+                'show_if' => ['field' => 'logo_type', 'value' => 'icon'],
+            ],
+            'brand_image' => [
+                'type' => 'image',
+                'label' => 'Imagen de la marca',
+                'show_if' => ['field' => 'logo_type', 'value' => 'image'],
+                'help' => 'Se dibuja a 28 px de alto: conviene un PNG cuadrado o apaisado con fondo transparente.',
+            ],
             'brand' => ['type' => 'text', 'label' => 'Marca', 'max' => 40],
             'links' => [
                 'type' => 'repeater',

@@ -61,6 +61,9 @@ final class LandingDefaultPayloads
                 'image_path' => 'images/landing/about.svg',
             ],
             'header' => [
+                'logo_type' => 'icon',
+                'brand_icon' => 'ph-needle',
+                'brand_image' => null,
                 'brand' => 'ConfecciónERP',
                 'links' => [
                     ['label' => 'Cómo funciona', 'url' => '#flow'],

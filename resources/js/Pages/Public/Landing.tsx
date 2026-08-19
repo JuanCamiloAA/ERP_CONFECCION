@@ -1,6 +1,7 @@
 import { Head } from '@inertiajs/react';
-import { List, Needle, X } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { List, X } from '@phosphor-icons/react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
+import { phosphorIcon } from '@/Components/Public/phosphorIcon';
 import { PlanInquiryModal } from '@/Components/Public/PlanInquiryModal';
 import {
     AudienceBlock,
@@ -37,6 +38,82 @@ interface Props {
 const str = (v: unknown, fallback = ''): string => (typeof v === 'string' ? v : fallback);
 const list = (v: unknown): Dict[] => (Array.isArray(v) ? (v as Dict[]) : []);
 
+/** Icono elegido en el editor; sin valor guardado se mantiene el de fabrica. */
+const brandIcon = (data: Dict): string => str(data.brand_icon, 'ph-needle');
+
+/** true cuando el administrador eligio imagen y llego a subirla. */
+const usaImagen = (data: Dict): boolean => str(data.logo_type) === 'image' && str(data.brand_image_url) !== '';
+
+/**
+ * Logo de la marca: icono de la lista blanca o imagen subida, segun `logo_type`. Es el
+ * mismo en el encabezado, en el menu movil y en la pestana del navegador.
+ */
+function BrandLogo({ data }: { data: Dict }) {
+    if (usaImagen(data)) {
+        return <img src={str(data.brand_image_url)} alt="" className="h-7 w-auto max-w-[140px] shrink-0 object-contain" />;
+    }
+
+    return (
+        <span
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm"
+            style={{ border: '1px solid var(--pub-accent)', color: 'var(--pub-accent)' }}
+        >
+            {phosphorIcon(brandIcon(data), 15)}
+        </span>
+    );
+}
+
+/** El SVG ya dibujado, como data URI. `fill` se fija porque `currentColor` no significa nada fuera de la pagina. */
+function svgDataUri(nodo: HTMLElement | null): string {
+    const svg = nodo?.querySelector('svg');
+    if (!nodo || !svg) return '';
+
+    const copia = svg.cloneNode(true) as SVGSVGElement;
+    copia.setAttribute('fill', getComputedStyle(nodo).color);
+
+    return `data:image/svg+xml,${encodeURIComponent(new XMLSerializer().serializeToString(copia))}`;
+}
+
+/**
+ * Pone el mismo logo del encabezado como icono de la pestana del navegador.
+ *
+ * Con logo de imagen basta su URL. Con icono no hay archivo que enlazar: se serializa el
+ * SVG de Phosphor, y para eso tiene que existir en el DOM — de ahi el nodo oculto al que
+ * apunta la referencia devuelta.
+ *
+ * El <link> se cambia a mano y no con <Head> porque el de la plantilla (el icono de la
+ * aplicacion) no lo maneja Inertia: convivirian dos y el navegador elegiria uno. Al
+ * desmontar se devuelven los originales, por si se sale de la landing sin recargar.
+ */
+function useBrandFavicon(data: Dict, propio: string): RefObject<HTMLSpanElement | null> {
+    const caja = useRef<HTMLSpanElement>(null);
+    const imagen = str(data.brand_image_url);
+    const esImagen = usaImagen(data);
+    const icono = brandIcon(data);
+
+    useEffect(() => {
+        const href = propio || (esImagen ? imagen : svgDataUri(caja.current));
+        if (!href) return;
+
+        const previos = Array.from(document.head.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]'));
+        // Cambiarle el href a un <link> ya insertado no siempre repinta la pestana: el
+        // navegador vuelve a leer el icono cuando el elemento entra nuevo en el head.
+        previos.forEach((enlace) => enlace.remove());
+
+        const enlace = document.createElement('link');
+        enlace.rel = 'icon';
+        enlace.href = href;
+        document.head.appendChild(enlace);
+
+        return () => {
+            enlace.remove();
+            previos.forEach((anterior) => document.head.appendChild(anterior));
+        };
+    }, [propio, esImagen, imagen, icono]);
+
+    return caja;
+}
+
 /**
  * Ancla de la seccion, para que los enlaces del menu (#flow, #virtues…) funcionen.
  * Un tipo repetido en la pagina numera las apariciones siguientes (#virtues-2) para
@@ -55,12 +132,7 @@ function PublicHeader({ data }: { data: Dict }) {
         <header className="sticky top-0 z-40" style={{ backgroundColor: 'var(--pub-bg)' }}>
             <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-5 lg:px-10">
                 <a href="/" className="flex items-center gap-2.5">
-                    <span
-                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-sm"
-                        style={{ border: '1px solid var(--pub-accent)', color: 'var(--pub-accent)' }}
-                    >
-                        <Needle size={15} />
-                    </span>
+                    <BrandLogo data={data} />
                     <span className="text-[15px]" style={{ color: 'var(--pub-text)' }}>
                         {str(data.brand)}
                     </span>
@@ -95,8 +167,11 @@ function PublicHeader({ data }: { data: Dict }) {
             {open ? (
                 <div className="fixed inset-0 z-50 flex flex-col px-5 py-4 lg:hidden" style={{ backgroundColor: 'var(--pub-bg)' }}>
                     <div className="flex h-16 items-center justify-between">
-                        <span className="text-[15px]" style={{ color: 'var(--pub-text)' }}>
-                            {str(data.brand)}
+                        <span className="flex items-center gap-2.5">
+                            <BrandLogo data={data} />
+                            <span className="text-[15px]" style={{ color: 'var(--pub-text)' }}>
+                                {str(data.brand)}
+                            </span>
                         </span>
                         <button
                             type="button"
@@ -162,6 +237,10 @@ export default function PublicLanding({ blocks, meta = {}, preview = false, appe
     const header = blocks.find((b) => b.type === 'header');
     const footer = blocks.find((b) => b.type === 'footer');
 
+    // El logo del encabezado es tambien el icono de la pestana; un favicon propio del
+    // sitio, si lo hay, manda sobre el.
+    const cajaFavicon = useBrandFavicon(header?.data ?? {}, str(meta.favicon_url));
+
     // El flujo se dibuja al costado del hero, como en el diseno; por eso no se recorre suelto.
     const flow = blocks.find((b) => b.type === 'flow');
     const body = blocks.filter((b) => !['header', 'footer', 'flow'].includes(b.type));
@@ -212,7 +291,6 @@ export default function PublicLanding({ blocks, meta = {}, preview = false, appe
         <div className="public-scope min-h-screen">
             <Head title={meta.title ?? ''}>
                 {meta.description ? <meta name="description" content={meta.description} /> : null}
-                {meta.favicon_url ? <link rel="icon" href={meta.favicon_url} /> : null}
             </Head>
 
             {preview ? (
@@ -220,6 +298,11 @@ export default function PublicLanding({ blocks, meta = {}, preview = false, appe
                     Vista previa del borrador — no es lo que ven los visitantes.
                 </p>
             ) : null}
+
+            {/* Fuente del favicon cuando el logo es un icono: nunca se ve, solo se serializa. */}
+            <span ref={cajaFavicon} hidden aria-hidden style={{ color: 'var(--pub-accent)' }}>
+                {phosphorIcon(brandIcon(header?.data ?? {}), 32)}
+            </span>
 
             {header ? <PublicHeader data={header.data} /> : null}
 
