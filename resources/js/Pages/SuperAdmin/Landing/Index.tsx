@@ -1,4 +1,5 @@
 import { Head, router } from '@inertiajs/react';
+import axios from 'axios';
 import {
     ArrowCounterClockwise,
     ArrowDown,
@@ -374,7 +375,20 @@ export default function LandingAdminIndex({
 
     const renderField = (key: string, field: FieldSchema, data: Dict, path: string): React.ReactNode => {
         const value = data[key];
-        const setValue = (v: unknown) => patchActive((d) => setDeep(d, path.split('.').slice(1).concat(key), v));
+        const base = path.split('.').slice(1);
+        const setValue = (v: unknown) => patchActive((d) => setDeep(d, base.concat(key), v));
+
+        /**
+         * Escribe de una sola vez la ruta guardada y la URL con que se previsualiza. Tienen
+         * que ir juntas: `patchActive` clona el estado del render actual, asi que dos
+         * llamadas seguidas harian que la segunda descarte lo de la primera.
+         */
+        const setImage = (ruta: string, url: string) =>
+            patchActive((d) => {
+                setDeep(d, base.concat(`${key}_url`), url);
+
+                return setDeep(d, base.concat(key), ruta);
+            });
 
         switch (field.type) {
             case 'textarea':
@@ -409,13 +423,22 @@ export default function LandingAdminIndex({
                         />
                     </div>
                 );
-            case 'image':
+            case 'image': {
+                // Se guarda la ruta y se muestra la URL que resuelve el servidor: la de
+                // Firebase va firmada y caduca, guardarla dejaria la landing sin imagenes.
+                const preview = str(data[`${key}_url`]) || str(value);
+
                 return (
                     <div>
                         <p className="mb-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">{field.label}</p>
                         <div className="flex aspect-[4/3] items-center justify-center rounded-lg border border-dashed border-slate-300 dark:border-slate-600">
-                            {str(value) ? (
-                                <img src={str(value)} alt="" className="h-full w-full rounded-lg object-cover" />
+                            {preview ? (
+                                <img
+                                    src={preview}
+                                    alt=""
+                                    className="h-full w-full rounded-lg object-cover"
+                                    onError={() => toast.error('La imagen no se pudo cargar desde el almacenamiento.')}
+                                />
                             ) : (
                                 <div className="text-center text-slate-400">
                                     <ImageIcon size={22} className="mx-auto" />
@@ -450,27 +473,22 @@ export default function LandingAdminIndex({
                                         const body = new FormData();
                                         body.append('image', file);
 
+                                        // Con axios, igual que el resto de la aplicación: toma el token
+                                        // vivo de la cookie XSRF-TOKEN. La etiqueta <meta> queda congelada
+                                        // al cargar la página y, si la sesión se renueva, deja de servir:
+                                        // de ahí el «la sesión expiró» al subir.
                                         try {
-                                            const res = await fetch(route('super-admin.landing.block-media'), {
-                                                method: 'POST',
+                                            const { data: subida } = await axios.post<{ path: string; url: string }>(
+                                                route('super-admin.landing.block-media'),
                                                 body,
-                                                headers: {
-                                                    'X-CSRF-TOKEN':
-                                                        document.querySelector<HTMLMetaElement>('meta[name="csrf-token"]')?.content ?? '',
-                                                    Accept: 'application/json',
-                                                },
-                                            });
+                                                { headers: { Accept: 'application/json' } },
+                                            );
 
-                                            if (!res.ok) {
-                                                toast.error(await uploadError(res));
-
-                                                return;
-                                            }
-
-                                            const d = await res.json();
-                                            setValue(d.url);
-                                        } catch {
-                                            toast.error('No se pudo contactar el servidor para subir la imagen.');
+                                            // La ruta es lo que se guarda; la URL solo alimenta
+                                            // la vista previa hasta la siguiente recarga.
+                                            setImage(subida.path, subida.url);
+                                        } catch (error) {
+                                            toast.error(uploadError(error));
                                         }
                                     }}
                                 />
@@ -478,10 +496,10 @@ export default function LandingAdminIndex({
                                     Subir imagen
                                 </span>
                             </label>
-                            {str(value) ? (
+                            {preview ? (
                                 <button
                                     type="button"
-                                    onClick={() => setValue('')}
+                                    onClick={() => setImage('', '')}
                                     className="h-11 rounded-lg border border-slate-300 px-3 text-sm dark:border-slate-600"
                                 >
                                     Quitar
@@ -494,6 +512,7 @@ export default function LandingAdminIndex({
                         </p>
                     </div>
                 );
+            }
             case 'repeater': {
                 const items = Array.isArray(value) ? (value as Dict[]) : [];
                 const atMax = field.max_items != null && items.length >= field.max_items;
@@ -1323,23 +1342,29 @@ export default function LandingAdminIndex({
  * Motivo real del fallo al subir una imagen. El servidor ya manda un mensaje concreto
  * (peso, formato); mostrarlo evita que el super usuario adivine por que fue rechazada.
  */
-async function uploadError(res: Response): Promise<string> {
-    if (res.status === 419) {
+function uploadError(error: unknown): string {
+    if (!axios.isAxiosError(error)) {
+        return 'No se pudo subir la imagen.';
+    }
+
+    if (!error.response) {
+        return 'No se pudo contactar el servidor para subir la imagen.';
+    }
+
+    const { status, data } = error.response;
+
+    if (status === 419) {
         return 'La sesión expiró. Recarga la página e inténtalo de nuevo.';
     }
 
     // 413 lo devuelve el servidor web antes de que Laravel vea la petición.
-    if (res.status === 413) {
+    if (status === 413) {
         return 'El archivo supera el tamaño que acepta el servidor (upload_max_filesize en php.ini).';
     }
 
-    try {
-        const d = await res.json();
+    const cuerpo = data as { message?: string; errors?: { image?: string[] } } | undefined;
 
-        return d?.errors?.image?.[0] ?? d?.message ?? `No se pudo subir la imagen (error ${res.status}).`;
-    } catch {
-        return `No se pudo subir la imagen (error ${res.status}).`;
-    }
+    return cuerpo?.errors?.image?.[0] ?? cuerpo?.message ?? `No se pudo subir la imagen (error ${status}).`;
 }
 
 /** Escribe un valor en una ruta anidada del payload sin mutar el original. */

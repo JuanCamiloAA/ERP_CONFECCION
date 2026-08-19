@@ -6,6 +6,7 @@ use App\Models\LandingBlock;
 use App\Models\LandingGlobal;
 use App\Models\LandingSection;
 use App\Models\MembershipPlan;
+use App\Services\Landing\LandingBlockMedia;
 use App\Services\Landing\LandingDataSources;
 use App\Services\Landing\LandingPayloadPresenter;
 use Illuminate\Http\RedirectResponse;
@@ -98,13 +99,15 @@ class LandingController extends Controller
         }
 
         $sources = app(LandingDataSources::class);
+        $media = app(LandingBlockMedia::class);
 
         $blocks = $query->get()
             ->filter(fn (LandingBlock $b) => $preview ? $b->is_visible : true)
-            ->map(function (LandingBlock $b) use ($preview, $sources) {
+            ->map(function (LandingBlock $b) use ($preview, $sources, $media) {
                 $data = ($preview ? $b->data : $b->published_data) ?? [];
 
-                $entry = ['type' => $b->type, 'data' => $data];
+                // Las imagenes se firman aqui: la URL caduca, la ruta no.
+                $entry = ['type' => $b->type, 'data' => $media->present($b->type, (array) $data)];
 
                 // Los bloques de datos se resuelven aqui: la pagina publica recibe filas
                 // ya presentadas, nunca la definicion del origen ni la consulta.

@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\SuperAdmin;
 
+use App\Contracts\ObjectStorageInterface;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\SuperAdmin\Landing\UpdateLandingBlockRequest;
 use App\Models\LandingBlock;
 use App\Models\LandingVersion;
+use App\Services\Landing\LandingBlockMedia;
 use App\Services\Landing\LandingDataSources;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -38,15 +40,17 @@ class LandingAdminController extends Controller
     {
         $blocks = LandingBlock::ordered()->get();
         $sources = app(LandingDataSources::class);
+        $media = app(LandingBlockMedia::class);
 
         return Inertia::render('SuperAdmin/Landing/Index', [
-            'blocks' => $blocks->map(function (LandingBlock $b) use ($sources) {
+            'blocks' => $blocks->map(function (LandingBlock $b) use ($sources, $media) {
                 $row = [
                     'id' => $b->id,
                     'type' => $b->type,
                     'position' => $b->position,
                     'is_visible' => $b->is_visible,
-                    'data' => $b->data,
+                    // Con las URL de imagen ya firmadas; lo que se guarda sigue siendo la ruta.
+                    'data' => $media->present($b->type, (array) $b->data),
                     'is_dirty' => $b->is_dirty,
                 ];
 
@@ -115,7 +119,9 @@ class LandingAdminController extends Controller
     public function update(UpdateLandingBlockRequest $request, LandingBlock $block): RedirectResponse
     {
         $block->update([
-            'data' => $request->validated()['data'],
+            // El editor devuelve el bloque tal como lo recibio, con las URL resueltas
+            // incluidas; se descartan para que en la base solo quede la ruta.
+            'data' => app(LandingBlockMedia::class)->strip($block->type, $request->validated()['data']),
             'is_visible' => $request->boolean('is_visible', $block->is_visible),
         ]);
 
@@ -232,7 +238,7 @@ class LandingAdminController extends Controller
         return back()->with('success', 'Versión restaurada en el borrador. Publica para que salga al aire.');
     }
 
-    public function media(Request $request): JsonResponse
+    public function media(Request $request, ObjectStorageInterface $storage): JsonResponse
     {
         // Los mensajes se escriben aqui porque el editor los muestra tal cual: quien
         // sube una imagen tiene que saber si fallo por peso, por formato o por sesion.
@@ -245,9 +251,11 @@ class LandingAdminController extends Controller
             'image.max' => 'La imagen supera los '.(int) (self::MAX_IMAGE_KB / 1024).' MB.',
         ]);
 
-        $path = $request->file('image')->store('landing', 'public');
-
-        return response()->json(['path' => $path, 'url' => asset('storage/'.$path)]);
+        // Se sube por el mismo canal que el resto de la aplicacion (disco local o Firebase
+        // segun FILESYSTEM_DEFAULT_UPLOAD_DRIVER). Antes escribia siempre en el disco local
+        // y armaba la URL con asset(): en los despliegues que usan Firebase el archivo
+        // quedaba guardado donde nadie lo sirve y la imagen nunca cargaba.
+        return response()->json($storage->upload($request->file('image'), 'landing'));
     }
 
     /**

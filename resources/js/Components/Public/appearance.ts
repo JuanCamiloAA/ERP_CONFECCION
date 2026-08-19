@@ -88,7 +88,9 @@ export function resolveAppearance(defaults: Dict | undefined, saved: unknown): A
         pad_bottom: str(pick('pad_bottom'), BASE.pad_bottom),
         bg_type: str(pick('bg_type'), BASE.bg_type),
         bg_color: str(pick('bg_color'), BASE.bg_color),
-        bg_image: str(pick('bg_image'), BASE.bg_image),
+        // El servidor manda la URL ya firmada en `bg_image_url`; `bg_image` es la ruta
+        // guardada, que solo sirve como respaldo del contenido antiguo (URL absolutas).
+        bg_image: str(s.bg_image_url) || str(pick('bg_image'), BASE.bg_image),
         bg_fit: str(pick('bg_fit'), BASE.bg_fit),
         bg_position: str(pick('bg_position'), BASE.bg_position),
         bg_fixed: bool(pick('bg_fixed'), BASE.bg_fixed),

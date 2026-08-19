@@ -337,7 +337,8 @@ export function AudienceBlock({ data }: { data: Dict }) {
 
 export function StepsMediaBlock({ data }: { data: Dict }) {
     const steps = list(data.steps);
-    const image = str(data.image);
+    // `image_url` la resuelve el servidor; `image` es la ruta guardada.
+    const image = str(data.image_url) || str(data.image);
 
     return (
         <div className="grid gap-10 lg:grid-cols-2 lg:items-center lg:gap-14">

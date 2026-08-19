@@ -141,7 +141,8 @@ class UpdateLandingBlockRequest extends FormRequest
             return;
         }
 
-        if (! is_string($value) || mb_strlen($value) > 400) {
+        // Las URL firmadas (Firebase) llevan token y superan holgadamente los 400.
+        if (! is_string($value) || mb_strlen($value) > 1000) {
             $validator->errors()->add($path, 'Ruta de imagen inválida.');
         }
     }
