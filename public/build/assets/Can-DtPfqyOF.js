@@ -1,1 +1,0 @@
-import{f as c,j as f}from"./app-DGEha9DO.js";function u({permission:r,role:i,any:t,all:s,fallback:o=null,children:a}){const e=c();let n=!0;return r&&(n=n&&e.can(r)),i&&(n=n&&e.hasRole(i)),t&&t.length>0&&(n=n&&e.canAny(t)),s&&s.length>0&&(n=n&&e.canAll(s)),f.jsx(f.Fragment,{children:n?a:o})}export{u as C};

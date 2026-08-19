@@ -8,6 +8,7 @@ use App\Models\Employee;
 use App\Models\PayrollPeriodicity;
 use App\Services\Files\MediaUrlResolver;
 use App\Support\BrandIcon;
+use App\Support\LandingBrandLogo;
 use App\Support\OperationDifficulty;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
@@ -31,6 +32,9 @@ class HandleInertiaRequests extends Middleware
         return array_merge(parent::share($request), [
             'appName' => config('app.name'),
             'brandIconUrl' => fn () => BrandIcon::url(),
+            // Marca del producto elegida en el editor de la landing: se usa donde no
+            // hay logo de empresa, para que toda la aplicacion muestre el mismo logo.
+            'brandLogo' => fn () => LandingBrandLogo::resolve(),
             'auth' => [
                 'user' => $user ? $this->buildUserPayload($user) : null,
             ],

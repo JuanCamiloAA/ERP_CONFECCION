@@ -1,7 +1,7 @@
 import { Link, usePage } from '@inertiajs/react';
-import { Needle } from '@phosphor-icons/react';
 import { ReactNode, useEffect } from 'react';
 import { toast } from 'sonner';
+import { BrandMark } from '@/Components/BrandMark';
 import '../../css/public.css';
 
 interface AuthLayoutProps {
@@ -94,6 +94,7 @@ export default function AuthLayout({
     const flash = (page.props as unknown as App.PageProps).flash;
     const appName = (page.props as unknown as App.PageProps).appName;
     const loginCompany = (page.props as unknown as App.PageProps).loginCompany;
+    const brandLogo = (page.props as unknown as App.PageProps).brandLogo;
 
     useEffect(() => {
         if (flash?.success) toast.success(flash.success);
@@ -130,12 +131,10 @@ export default function AuthLayout({
             </span>
         </div>
     ) : (
-        // Marca del producto: el icono del tema, no el PNG de marca, que es oscuro sobre
-        // oscuro y aqui se leeria como un cuadro vacio.
+        // Marca del producto: la que se elige en el editor de la landing. No el PNG de
+        // marca, que es oscuro sobre oscuro y aqui se leeria como un cuadro vacio.
         <Link href="/" className="flex min-h-11 items-center gap-3">
-            <span className={cajaMarca} style={estiloCaja}>
-                <Needle size={18} weight="regular" />
-            </span>
+            <BrandMark logo={brandLogo} className={cajaMarca} imageClassName={`${cajaMarca} p-0.5`} style={estiloCaja} size={18} />
             <span className="text-[15px] font-medium lg:text-base" style={{ color: 'var(--pub-text)' }}>
                 {appName}
             </span>

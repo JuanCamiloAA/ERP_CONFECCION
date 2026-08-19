@@ -14,6 +14,8 @@ declare global {
             appName: string;
             /** URL del icono de marca (Firebase o public/images); favicon y login sin empresa. */
             brandIconUrl: string;
+            /** Logo del producto elegido en el editor de la landing; marca general de la aplicación. */
+            brandLogo?: import('@/Components/BrandMark').BrandLogo | null;
             auth: {
                 user: AuthUser | null;
             };

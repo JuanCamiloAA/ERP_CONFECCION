@@ -31,6 +31,7 @@ import {
 import { Link, router, usePage } from '@inertiajs/react';
 import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { BrandMark } from '@/Components/BrandMark';
 import { Avatar } from '@/Components/UI/Avatar';
 import { SuperAdminCompanySwitcher } from '@/Components/SuperAdminCompanySwitcher';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -239,7 +240,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     const flash = props.flash;
     const appName = props.appName;
     const activeCompany = props.activeCompany;
-    const brandIconUrl = props.brandIconUrl;
+    const brandLogo = props.brandLogo;
 
     const { user, accessiblePages, isSuperAdmin } = usePermissions();
     const { isDark, toggle: toggleTheme } = useDarkMode();
@@ -295,9 +296,8 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
         ];
     }, [accessiblePages, isSuperAdmin]);
 
-    /** Logo de empresa si hay contexto tenant; si no, mismo icono de marca que favicon / login (super admin consolidado). */
+    /** Logo de empresa si hay contexto tenant; si no, la marca del producto (super admin consolidado). */
     const companyLogoUrl = sidebarBrand?.logo ? (mediaUrl(sidebarBrand.logo) ?? null) : null;
-    const sidebarLogoUrl = companyLogoUrl || brandIconUrl || null;
 
     const groupedNav = sectionOrder.reduce<Record<string, NavItem[]>>((acc, section) => {
         const items = navigation.filter((item) => item.section === section);
@@ -335,18 +335,19 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 {/* Sidebar header: logo y nombre de la empresa (o app por defecto) */}
                 <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200 px-4 dark:border-slate-700">
                     <Link href={getRouteUrl('dashboard')} className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden" title={brandTitle}>
-                        {sidebarLogoUrl ? (
+                        {companyLogoUrl ? (
                             <img
-                                src={sidebarLogoUrl}
+                                src={companyLogoUrl}
                                 alt=""
                                 className="h-9 w-9 shrink-0 rounded-lg border border-slate-200/80 bg-white object-contain p-0.5 shadow-sm dark:border-slate-600/80 dark:bg-slate-900/40"
                             />
                         ) : (
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-indigo-600 to-indigo-500 text-white shadow">
-                                <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden>
-                                    <path d="M12 2L2 7v10l10 5 10-5V7L12 2zm0 2.18l7 3.5v8.64l-7 3.5-7-3.5V7.68l7-3.5z" />
-                                </svg>
-                            </div>
+                            <BrandMark
+                                logo={brandLogo}
+                                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200/80 bg-white text-indigo-600 shadow-sm dark:border-slate-600/80 dark:bg-slate-900/40 dark:text-indigo-400"
+                                imageClassName="h-9 w-9 shrink-0 rounded-lg border border-slate-200/80 bg-white p-0.5 shadow-sm dark:border-slate-600/80 dark:bg-slate-900/40"
+                                size={20}
+                            />
                         )}
                         {!collapsed && (
                             <span className="truncate text-sm font-bold text-slate-900 dark:text-slate-100">{brandTitle}</span>

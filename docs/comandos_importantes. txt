@@ -7,3 +7,9 @@ php artisan productions:close-paid --dry-run
 Y cuando el resultado te cuadre:
 
 php artisan productions:close-paid
+
+reabrir operaciones 
+
+php artisan productions:reopen-unpaid --dry-run
+
+php artisan productions:reopen-unpaid --status=pendiente
