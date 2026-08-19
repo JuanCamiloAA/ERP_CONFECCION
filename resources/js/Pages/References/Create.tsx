@@ -1,6 +1,6 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { ArrowLeftIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, KeyboardEvent, useMemo, useState } from 'react';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
@@ -70,6 +70,25 @@ export default function ReferenceCreate({ operations }: Props) {
         router.post(route('references.store'), payload as never, { forceFormData: true });
     };
 
+    /**
+     * Enter no envia el formulario.
+     *
+     * La referencia se arma por partes — datos basicos y operaciones que se agregan de a
+     * una —, asi que el envio implicito del navegador la creaba a medio llenar con solo
+     * pulsar Enter en cualquier campo. Se guarda unicamente desde «Guardar».
+     *
+     * Se deja pasar en el textarea, donde Enter es un salto de linea, y sobre un boton
+     * enfocado, que es pulsarlo: cortarlo ahi dejaria el formulario sin teclado.
+     */
+    const bloquearEnvioConEnter = (e: KeyboardEvent<HTMLFormElement>) => {
+        if (e.key !== 'Enter') return;
+
+        const destino = e.target as HTMLElement | null;
+        if (destino?.tagName === 'TEXTAREA' || destino?.tagName === 'BUTTON') return;
+
+        e.preventDefault();
+    };
+
     const addOperation = () => {
         if (!selectedOpId) return;
         const op = availableOperations.find((o) => o.id === Number(selectedOpId));
@@ -104,7 +123,7 @@ export default function ReferenceCreate({ operations }: Props) {
     return (
         <AppLayout title="Nueva referencia">
             <Head title="Nueva referencia" />
-            <form onSubmit={submit} className="space-y-6">
+            <form onSubmit={submit} onKeyDown={bloquearEnvioConEnter} className="space-y-6">
                 <PageHeader
                     title="Nueva referencia"
                     breadcrumbs={[
