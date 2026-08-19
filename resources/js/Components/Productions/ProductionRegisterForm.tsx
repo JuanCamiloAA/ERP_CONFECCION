@@ -293,7 +293,7 @@ export function ProductionRegisterForm({
 
     return (
         <>
-            <form id="production-register-form" onSubmit={submit} className="grid grid-cols-1 gap-6 pb-36 lg:grid-cols-3 lg:pb-0">
+            <form id="production-register-form" onSubmit={submit} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                 <Card className="lg:col-span-2">
                     <CardHeader
                         title="Registrar produccion"
@@ -543,8 +543,20 @@ export function ProductionRegisterForm({
                 </Card>
             </form>
 
-            {/* Barra inferior fija en movil: total vivo + accion primaria al alcance del pulgar. */}
-            <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-4 pb-5 pt-3.5 lg:hidden dark:border-slate-700 dark:bg-slate-800">
+            {/*
+              * Barra de movil: total vivo + accion primaria al alcance del pulgar.
+              *
+              * Es `sticky`, no `fixed`, y ahi esta la diferencia: al ocupar su lugar en el
+              * flujo, justo despues del formulario, flota sobre el borde inferior mientras
+              * ese lugar queda por debajo de la pantalla —es decir, mientras se esta
+              * llenando el formulario— y aterriza en el en cuanto se llega a el. De ahi en
+              * adelante sube con el resto del contenido y deja la lista de registros
+              * completamente a la vista.
+              *
+              * Los margenes negativos cancelan el relleno de <main> para que llegue a los
+              * bordes de la pantalla, como cuando era fija.
+              */}
+            <div className="sticky bottom-0 z-30 -mx-4 border-t border-slate-200 bg-white px-4 pb-5 pt-3.5 sm:-mx-6 sm:px-6 lg:hidden dark:border-slate-700 dark:bg-slate-800">
                 <div className="mb-3 flex items-center justify-between">
                     <span className="text-[13px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
                         Valor a pagar
