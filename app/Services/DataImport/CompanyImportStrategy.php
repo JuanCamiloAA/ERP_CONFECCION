@@ -3,49 +3,53 @@
 namespace App\Services\DataImport;
 
 use App\Models\Company;
+use App\Models\DataImportBatch;
 use Illuminate\Support\Str;
 
 class CompanyImportStrategy implements ImportStrategyInterface
 {
+    public function __construct(private readonly ImportFieldCatalog $catalog) {}
+
     public function processRow(array $row, int $lineNumber, DataImportContext $ctx): void
     {
         $name = trim((string) ($row['name'] ?? ''));
         $nit = trim((string) ($row['nit'] ?? ''));
 
         if ($name === '') {
-            throw new RowImportException('Falta name.', $lineNumber);
+            throw new RowImportException('Falta name.', $lineNumber, 'name');
         }
         if ($nit === '') {
-            throw new RowImportException('Falta nit.', $lineNumber);
+            throw new RowImportException('Falta nit.', $lineNumber, 'nit');
         }
 
         $existing = Company::query()->withoutGlobalScopes()->where('nit', $nit)->first();
 
         if ($existing) {
             if ($ctx->companyImportMode === 'update') {
-                $existing->update([
-                    'name' => $name,
-                    'address' => $this->nullableString($row['address'] ?? null),
-                    'phone' => $this->nullableString($row['phone'] ?? null),
-                    'email' => $this->nullableString($row['email'] ?? null),
-                    'is_active' => $this->parseBool($row['is_active'] ?? null, true),
-                ]);
+                // Solo se pisan las columnas que traiga el archivo: una plantilla con
+                // pocos campos actualiza esos y deja el resto de la empresa como estaba.
+                $existing->update(array_merge(
+                    $this->catalog->attributesFromRow(DataImportBatch::TYPE_COMPANIES, $row, except: ['name', 'nit']),
+                    ['name' => $name],
+                ));
                 $ctx->rememberCompany($nit, (int) $existing->id);
 
                 return;
             }
 
-            throw new RowImportException('Empresa con NIT ya existe (modo omitir).', $lineNumber);
+            throw new RowImportException('Empresa con NIT ya existe (modo omitir).', $lineNumber, 'nit', $nit);
         }
 
-        $company = Company::create([
-            'name' => $name,
-            'nit' => $nit,
-            'address' => $this->nullableString($row['address'] ?? null),
-            'phone' => $this->nullableString($row['phone'] ?? null),
-            'email' => $this->nullableEmail($row['email'] ?? null),
-            'is_active' => $this->parseBool($row['is_active'] ?? null, true),
-        ]);
+        $company = Company::create(array_merge(
+            $this->catalog->attributesFromRow(DataImportBatch::TYPE_COMPANIES, $row, except: ['name', 'nit', 'email']),
+            [
+                'name' => $name,
+                'nit' => $nit,
+                // El correo pasa por su propia comprobacion: uno invalido entra como nulo
+                // en vez de tumbar la fila.
+                'email' => $this->nullableEmail($row['email'] ?? null),
+            ],
+        ));
 
         $ctx->rememberCompany($nit, (int) $company->id);
     }
@@ -73,24 +77,5 @@ class CompanyImportStrategy implements ImportStrategyInterface
         }
 
         return Str::limit($s, 120);
-    }
-
-    protected function parseBool(mixed $v, bool $default): bool
-    {
-        if ($v === null || $v === '') {
-            return $default;
-        }
-
-        $s = strtolower(trim((string) $v));
-
-        if (in_array($s, ['1', 'true', 'yes', 'si', 'sí'], true)) {
-            return true;
-        }
-
-        if (in_array($s, ['0', 'false', 'no'], true)) {
-            return false;
-        }
-
-        return $default;
     }
 }

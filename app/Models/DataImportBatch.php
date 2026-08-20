@@ -23,6 +23,9 @@ class DataImportBatch extends Model
 
     public const TYPE_REFERENCES = 'references';
 
+    /** Detalle de las referencias: que operaciones lleva cada una y a que precio. */
+    public const TYPE_REFERENCE_OPERATIONS = 'reference_operations';
+
     public const TYPE_EMPLOYEES_USERS = 'employees_users';
 
     protected $fillable = [
@@ -62,6 +65,7 @@ class DataImportBatch extends Model
             self::TYPE_BANKS,
             self::TYPE_OPERATIONS,
             self::TYPE_REFERENCES,
+            self::TYPE_REFERENCE_OPERATIONS,
             self::TYPE_EMPLOYEES_USERS,
         ];
     }

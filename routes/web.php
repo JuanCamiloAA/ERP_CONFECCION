@@ -27,6 +27,7 @@ use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SuperAdmin\ActiveCompanyController;
 use App\Http\Controllers\SuperAdmin\DashboardWidgetController;
 use App\Http\Controllers\SuperAdmin\DataImportController;
+use App\Http\Controllers\SuperAdmin\DataImportPresetController;
 use App\Http\Controllers\SuperAdmin\LandingAdminController;
 use App\Http\Controllers\SuperAdmin\LandingCmsController;
 use App\Http\Controllers\SuperAdmin\MembershipPlanController;
@@ -197,6 +198,8 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::get('data-imports/templates/zip', [DataImportController::class, 'downloadTemplatesZip'])->name('data-imports.templates.zip');
         Route::get('data-imports/templates/{type}', [DataImportController::class, 'downloadTemplate'])->whereIn('type', DataImportBatch::types())->name('data-imports.templates');
         Route::get('data-imports/{batch}/errors', [DataImportController::class, 'downloadErrors'])->name('data-imports.errors');
+        // Debe ir antes de {batch}: si no, 'errors.csv' se tomaria como el id del lote.
+        Route::get('data-imports/{batch}/errors-csv', [DataImportController::class, 'downloadErrorRows'])->name('data-imports.errors.csv');
         Route::get('data-imports/{batch}/preview', [DataImportController::class, 'preview'])->name('data-imports.preview');
         Route::get('data-imports/{batch}/file', [DataImportController::class, 'downloadFile'])->name('data-imports.file');
         Route::post('data-imports/{batch}/process', [DataImportController::class, 'process'])->name('data-imports.process');
@@ -204,6 +207,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::get('data-imports/{batch}', [DataImportController::class, 'show'])->name('data-imports.show');
         Route::post('data-imports', [DataImportController::class, 'store'])
             ->name('data-imports.store');
+
+        // Selecciones de campos guardadas para las plantillas.
+        Route::post('data-import-presets', [DataImportPresetController::class, 'store'])->name('data-import-presets.store');
+        Route::delete('data-import-presets/{preset}', [DataImportPresetController::class, 'destroy'])->name('data-import-presets.destroy');
 
         // CMS anterior: secciones heredadas (planes, clientes) y ajustes globales / SEO.
         Route::get('landing-legacy', [LandingCmsController::class, 'index'])->name('landing-legacy.index');

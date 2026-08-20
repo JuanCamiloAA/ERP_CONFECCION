@@ -2,11 +2,14 @@
 
 namespace App\Services\DataImport;
 
+use App\Models\DataImportBatch;
 use League\Csv\Bom;
 use League\Csv\Writer;
 
 class TemplateGeneratorService
 {
+    public function __construct(private readonly ImportFieldCatalog $catalog) {}
+
     public function readmeMarkdown(): string
     {
         return <<<'MD'
@@ -27,7 +30,14 @@ class TemplateGeneratorService
 2. **Bancos** (`banks`) — requiere `company_nit`
 3. **Operaciones** (`operations`) — requiere `company_nit`
 4. **Referencias** (`references`) — requiere `company_nit`
-5. **Empleados y usuarios** (`employees_users`) — requiere `company_nit`; opcional `bank_name` (debe existir en catalogo de bancos de esa empresa)
+5. **Operaciones de referencia** (`reference_operations`) — el detalle: que operaciones lleva cada referencia y a que precio. Requiere que ya esten cargadas las operaciones y las referencias
+6. **Empleados y usuarios** (`employees_users`) — requiere `company_nit`; opcional `bank_name` (debe existir en catalogo de bancos de esa empresa)
+
+## Campos de cada plantilla
+
+Cada plantilla se descarga con los campos que se elijan en la pantalla. Los **obligatorios**
+salen siempre. La lista de campos disponibles se lee de la base de datos, asi que una
+columna nueva aparece sola para marcarla, sin esperar una version del sistema.
 
 ## Modos de importacion
 
@@ -40,139 +50,34 @@ class TemplateGeneratorService
 - `banks.csv`
 - `operations.csv`
 - `references.csv`
+- `reference_operations.csv`
 - `employees_users.csv`
 MD;
     }
 
-    public function csvContent(string $type): string
+    /**
+     * Plantilla de un tipo, con los campos elegidos.
+     *
+     * Sin seleccion salen todos los que publique el catalogo — que es lo que hay hoy en
+     * la tabla, no una lista escrita a mano. Los obligatorios entran siempre, aunque no
+     * vengan en la seleccion: sin ellos el archivo no se puede importar.
+     *
+     * @param  list<string>|null  $fields
+     */
+    public function csvContent(string $type, ?array $fields = null): string
     {
-        [$headers, $example] = match ($type) {
-            'companies' => $this->companiesTemplate(),
-            'banks' => $this->banksTemplate(),
-            'operations' => $this->operationsTemplate(),
-            'references' => $this->referencesTemplate(),
-            'employees_users' => $this->employeesUsersTemplate(),
-            default => throw new \InvalidArgumentException('Tipo de plantilla no valido.'),
-        };
+        $campos = $this->catalog->selectedFields($type, $fields);
 
         $writer = Writer::createFromString();
         $writer->setOutputBOM(Bom::Utf8);
-        $writer->insertOne($headers);
-        $writer->insertOne($example);
+        $writer->insertOne(array_map(fn (array $campo) => $campo['key'], $campos));
+        $writer->insertOne(array_map(fn (array $campo) => $campo['example'], $campos));
 
         return $writer->toString();
     }
 
     public function filenameForType(string $type): string
     {
-        return match ($type) {
-            'companies' => 'companies.csv',
-            'banks' => 'banks.csv',
-            'operations' => 'operations.csv',
-            'references' => 'references.csv',
-            'employees_users' => 'employees_users.csv',
-            default => 'plantilla.csv',
-        };
-    }
-
-    /**
-     * @return array{0: list<string>, 1: list<string>}
-     */
-    protected function companiesTemplate(): array
-    {
-        return [
-            ['name', 'nit', 'address', 'phone', 'email', 'is_active'],
-            ['EJEMPLO SA', '900123456-1', 'Calle 1 # 2-3', '3001234567', 'contacto@ejemplo.com', '1'],
-        ];
-    }
-
-    /**
-     * @return array{0: list<string>, 1: list<string>}
-     */
-    protected function banksTemplate(): array
-    {
-        return [
-            ['company_nit', 'name', 'code', 'is_active'],
-            ['900123456-1', 'EJEMPLO BANCO', 'EB', '1'],
-        ];
-    }
-
-    /**
-     * @return array{0: list<string>, 1: list<string>}
-     */
-    protected function operationsTemplate(): array
-    {
-        return [
-            ['company_nit', 'name', 'description', 'base_price', 'is_active'],
-            ['900123456-1', 'EJEMPLO OPERACION', 'Costura', '15000.50', '1'],
-        ];
-    }
-
-    /**
-     * @return array{0: list<string>, 1: list<string>}
-     */
-    protected function referencesTemplate(): array
-    {
-        return [
-            ['company_nit', 'code', 'name', 'description', 'is_active'],
-            ['900123456-1', 'REF-01', 'EJEMPLO REFERENCIA', 'Lote demo', '1'],
-        ];
-    }
-
-    /**
-     * @return array{0: list<string>, 1: list<string>}
-     */
-    protected function employeesUsersTemplate(): array
-    {
-        return [
-            [
-                'company_nit',
-                'first_name',
-                'last_name',
-                'document_type',
-                'document_number',
-                'phone',
-                'address',
-                'hire_date',
-                'base_salary',
-                'payroll_mode',
-                'daily_salary',
-                'ordinary_hours_per_day',
-                'is_exempt_from_overtime',
-                'is_active',
-                'create_user',
-                'user_email',
-                'user_password',
-                'role_name',
-                'bank_name',
-                'bank_account_number',
-                'bank_key',
-                'notes',
-            ],
-            [
-                '900123456-1',
-                'Juan',
-                'Perez',
-                'CC',
-                '1234567890',
-                '3001112233',
-                'Calle 2',
-                '2025-01-15',
-                '1300000',
-                'operations',
-                '',
-                '',
-                '',
-                '1',
-                '1',
-                'juan.perez@ejemplo.com',
-                '',
-                'Operario de Produccion',
-                '',
-                '',
-                '',
-                'Importado por CSV',
-            ],
-        ];
+        return in_array($type, DataImportBatch::types(), true) ? $type.'.csv' : 'plantilla.csv';
     }
 }

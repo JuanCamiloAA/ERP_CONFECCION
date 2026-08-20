@@ -8,6 +8,9 @@ import type { DataImportBatch } from '@/types';
 interface RowErr {
     line: number;
     message: string;
+    /** Opcionales: los reportes guardados antes de que existieran no los traen. */
+    field?: string | null;
+    value?: string | null;
 }
 
 interface Props {
@@ -96,27 +99,58 @@ export default function DataImportsShow({ batch, errors_preview, errors_truncate
                             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
                                 Errores por linea ({errors_total})
                             </h2>
-                            <a
-                                href={route('super-admin.data-imports.errors', batch.id)}
-                                className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
-                            >
-                                <ArrowDownTrayIcon className="h-4 w-4" />
-                                Descargar JSON completo
-                            </a>
+                            <div className="flex flex-wrap items-center gap-4">
+                                <a
+                                    href={route('super-admin.data-imports.errors.csv', batch.id)}
+                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:text-amber-500 dark:text-amber-400"
+                                >
+                                    <ArrowDownTrayIcon className="h-4 w-4" />
+                                    Descargar solo las filas con error
+                                </a>
+                                <a
+                                    href={route('super-admin.data-imports.errors', batch.id)}
+                                    className="inline-flex items-center gap-1.5 text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                                >
+                                    <ArrowDownTrayIcon className="h-4 w-4" />
+                                    Reporte JSON
+                                </a>
+                            </div>
                         </div>
-                        {errors_truncated && (
-                            <p className="text-xs text-slate-500 dark:text-slate-400">
-                                Mostrando las primeras {errors_preview.length} entradas. Descargue el JSON para ver todas.
-                            </p>
-                        )}
-                        <ul className="max-h-96 space-y-2 overflow-auto rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs dark:border-slate-700 dark:bg-slate-900">
-                            {errors_preview.map((err, i) => (
-                                <li key={i} className="border-b border-slate-200 pb-2 last:border-0 dark:border-slate-700">
-                                    <span className="font-mono font-semibold text-slate-700 dark:text-slate-200">Linea {err.line}:</span>{' '}
-                                    <span className="text-slate-600 dark:text-slate-300">{err.message}</span>
-                                </li>
-                            ))}
-                        </ul>
+                        <p className="text-xs text-slate-500 dark:text-slate-400">
+                            El CSV de filas con error trae las columnas originales mas <code className="rounded bg-slate-100 px-1 dark:bg-slate-900">_motivo_error</code>.
+                            Quitela antes de volver a subirlo, y suba el archivo corregido como una carga nueva.
+                            {errors_truncated ? ` Aqui se ven las primeras ${errors_preview.length} entradas.` : ''}
+                        </p>
+                        <div className="max-h-96 overflow-auto rounded-lg border border-slate-200 dark:border-slate-700">
+                            <table className="responsive-table w-full text-xs">
+                                <thead className="sticky top-0 bg-slate-50 dark:bg-slate-900">
+                                    <tr className="text-left text-[11px] uppercase tracking-wide text-slate-500">
+                                        <th className="px-3 py-2">Fila</th>
+                                        <th className="px-3 py-2">Campo</th>
+                                        <th className="px-3 py-2">Valor recibido</th>
+                                        <th className="px-3 py-2">Motivo</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                    {errors_preview.map((err, i) => (
+                                        <tr key={i}>
+                                            <td className="px-3 py-2 font-mono font-semibold text-slate-700 dark:text-slate-200" data-label="Fila">
+                                                {err.line}
+                                            </td>
+                                            <td className="px-3 py-2 font-mono text-slate-600 dark:text-slate-300" data-label="Campo">
+                                                {err.field ?? '—'}
+                                            </td>
+                                            <td className="max-w-[14rem] truncate px-3 py-2 text-slate-600 dark:text-slate-300" data-label="Valor recibido" title={err.value ?? undefined}>
+                                                {err.value ?? '—'}
+                                            </td>
+                                            <td className="px-3 py-2 text-slate-600 dark:text-slate-300" data-label="Motivo">
+                                                {err.message}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
 

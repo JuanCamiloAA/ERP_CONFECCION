@@ -3,24 +3,27 @@
 namespace App\Services\DataImport;
 
 use App\Models\Bank;
+use App\Models\DataImportBatch;
 
 class BankImportStrategy implements ImportStrategyInterface
 {
+    public function __construct(private readonly ImportFieldCatalog $catalog) {}
+
     public function processRow(array $row, int $lineNumber, DataImportContext $ctx): void
     {
         $companyNit = trim((string) ($row['company_nit'] ?? ''));
         $name = trim((string) ($row['name'] ?? ''));
 
         if ($companyNit === '') {
-            throw new RowImportException('Falta company_nit.', $lineNumber);
+            throw new RowImportException('Falta company_nit.', $lineNumber, 'company_nit');
         }
         if ($name === '') {
-            throw new RowImportException('Falta name.', $lineNumber);
+            throw new RowImportException('Falta name.', $lineNumber, 'name');
         }
 
         $companyId = $ctx->resolveCompanyId($companyNit);
         if (! $companyId) {
-            throw new RowImportException('Empresa no encontrada para company_nit.', $lineNumber);
+            throw new RowImportException('Empresa no encontrada para company_nit.', $lineNumber, 'company_nit', $companyNit);
         }
 
         $exists = Bank::query()->withoutGlobalScopes()
@@ -30,44 +33,13 @@ class BankImportStrategy implements ImportStrategyInterface
             ->exists();
 
         if ($exists) {
-            throw new RowImportException('Banco duplicado para la empresa (omitido).', $lineNumber);
+            throw new RowImportException('Banco duplicado para la empresa (omitido).', $lineNumber, 'name', $name);
         }
 
-        Bank::create([
-            'company_id' => $companyId,
-            'name' => $name,
-            'code' => $this->nullable($row['code'] ?? null, 50),
-            'is_active' => $this->parseBool($row['is_active'] ?? null, true),
-        ]);
-    }
-
-    protected function nullable(mixed $v, int $max): ?string
-    {
-        if ($v === null || $v === '') {
-            return null;
-        }
-
-        $s = trim((string) $v);
-
-        return $s === '' ? null : mb_substr($s, 0, $max);
-    }
-
-    protected function parseBool(mixed $v, bool $default): bool
-    {
-        if ($v === null || $v === '') {
-            return $default;
-        }
-
-        $s = strtolower(trim((string) $v));
-
-        if (in_array($s, ['1', 'true', 'yes', 'si', 'sí'], true)) {
-            return true;
-        }
-
-        if (in_array($s, ['0', 'false', 'no'], true)) {
-            return false;
-        }
-
-        return $default;
+        // Las demas columnas salen del catalogo, que las lee de la tabla.
+        Bank::create(array_merge(
+            $this->catalog->attributesFromRow(DataImportBatch::TYPE_BANKS, $row, except: ['name']),
+            ['company_id' => $companyId, 'name' => $name],
+        ));
     }
 }

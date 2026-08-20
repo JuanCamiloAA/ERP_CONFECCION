@@ -2,10 +2,13 @@
 
 namespace App\Services\DataImport;
 
+use App\Models\DataImportBatch;
 use App\Models\Operation;
 
 class OperationImportStrategy implements ImportStrategyInterface
 {
+    public function __construct(private readonly ImportFieldCatalog $catalog) {}
+
     public function processRow(array $row, int $lineNumber, DataImportContext $ctx): void
     {
         $companyNit = trim((string) ($row['company_nit'] ?? ''));
@@ -13,18 +16,18 @@ class OperationImportStrategy implements ImportStrategyInterface
         $basePriceRaw = $row['base_price'] ?? null;
 
         if ($companyNit === '') {
-            throw new RowImportException('Falta company_nit.', $lineNumber);
+            throw new RowImportException('Falta company_nit.', $lineNumber, 'company_nit');
         }
         if ($name === '') {
-            throw new RowImportException('Falta name.', $lineNumber);
+            throw new RowImportException('Falta name.', $lineNumber, 'name');
         }
         if ($basePriceRaw === null || trim((string) $basePriceRaw) === '') {
-            throw new RowImportException('Falta base_price.', $lineNumber);
+            throw new RowImportException('Falta base_price.', $lineNumber, 'base_price');
         }
 
         $companyId = $ctx->resolveCompanyId($companyNit);
         if (! $companyId) {
-            throw new RowImportException('Empresa no encontrada para company_nit.', $lineNumber);
+            throw new RowImportException('Empresa no encontrada para company_nit.', $lineNumber, 'company_nit', $companyNit);
         }
 
         $exists = Operation::query()->withoutGlobalScopes()
@@ -34,51 +37,20 @@ class OperationImportStrategy implements ImportStrategyInterface
             ->exists();
 
         if ($exists) {
-            throw new RowImportException('Operacion duplicada para la empresa (omitido).', $lineNumber);
+            throw new RowImportException('Operacion duplicada para la empresa (omitido).', $lineNumber, 'name', $name);
         }
 
         if (! is_numeric(str_replace(',', '.', (string) $basePriceRaw))) {
-            throw new RowImportException('base_price no numerico.', $lineNumber);
+            throw new RowImportException('base_price no numerico.', $lineNumber, 'base_price', $basePriceRaw);
         }
 
         $basePrice = (float) str_replace(',', '.', (string) $basePriceRaw);
 
-        Operation::create([
-            'company_id' => $companyId,
-            'name' => $name,
-            'description' => $this->nullableText($row['description'] ?? null),
-            'base_price' => $basePrice,
-            'is_active' => $this->parseBool($row['is_active'] ?? null, true),
-        ]);
-    }
-
-    protected function nullableText(mixed $v): ?string
-    {
-        if ($v === null || $v === '') {
-            return null;
-        }
-
-        $s = trim((string) $v);
-
-        return $s === '' ? null : $s;
-    }
-
-    protected function parseBool(mixed $v, bool $default): bool
-    {
-        if ($v === null || $v === '') {
-            return $default;
-        }
-
-        $s = strtolower(trim((string) $v));
-
-        if (in_array($s, ['1', 'true', 'yes', 'si', 'sí'], true)) {
-            return true;
-        }
-
-        if (in_array($s, ['0', 'false', 'no'], true)) {
-            return false;
-        }
-
-        return $default;
+        // El precio se valida arriba (admite coma decimal); el resto de columnas las
+        // pone el catalogo, que las lee de la tabla.
+        Operation::create(array_merge(
+            $this->catalog->attributesFromRow(DataImportBatch::TYPE_OPERATIONS, $row, except: ['name', 'base_price']),
+            ['company_id' => $companyId, 'name' => $name, 'base_price' => $basePrice],
+        ));
     }
 }

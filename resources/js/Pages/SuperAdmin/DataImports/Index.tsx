@@ -1,6 +1,15 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowDownTrayIcon, ChevronDownIcon, ChevronUpIcon, EyeIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { FormEventHandler, useEffect, useState } from 'react';
+import {
+    AdjustmentsHorizontalIcon,
+    ArrowDownTrayIcon,
+    ArrowUpTrayIcon,
+    DocumentTextIcon,
+    EyeIcon,
+    MagnifyingGlassIcon,
+    TrashIcon,
+    XMarkIcon,
+} from '@heroicons/react/24/outline';
+import { DragEvent, FormEventHandler, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
@@ -10,13 +19,111 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import AppLayout from '@/Layouts/AppLayout';
+import { cn } from '@/lib/utils';
 import type { DataImportBatch, PaginatedResponse } from '@/types';
 
-const TYPE_KEYS = ['companies', 'banks', 'operations', 'references', 'employees_users'] as const;
+/**
+ * Orden obligatorio de carga. Es la unica fuente de verdad del orden: la numeracion de
+ * las filas y la cadena de la ayuda salen de aqui, no de una lista escrita aparte.
+ */
+const TYPE_KEYS = ['companies', 'banks', 'operations', 'references', 'reference_operations', 'employees_users'] as const;
+
+type TypeKey = (typeof TYPE_KEYS)[number];
+
+/** De que depende cada entidad. Es informativo: nunca bloquea la carga. */
+const DEPENDS: Record<string, string> = {
+    companies: 'Punto de partida. El NIT es la llave del resto de archivos.',
+    banks: 'Requiere company_nit de una empresa ya cargada.',
+    operations: 'Requiere company_nit.',
+    references: 'Requiere company_nit.',
+    reference_operations: 'Requiere que ya existan las referencias y las operaciones.',
+    employees_users: 'Requiere company_nit. Si usa bank_name, el banco debe existir en esa empresa.',
+};
+
+/**
+ * Agrupacion de campos para el selector. Vive en el front a proposito: una columna nueva
+ * que el catalogo publique cae en «Otros» y sigue apareciendo sola, sin tocar backend.
+ */
+const GROUPS: Record<string, string[]> = {
+    Identificación: [
+        'company_nit', 'nit', 'name', 'first_name', 'last_name', 'document_type',
+        'document_number', 'code', 'reference_code', 'operation_name',
+    ],
+    Contacto: ['phone', 'email', 'address'],
+    Nómina: [
+        'hire_date', 'base_salary', 'payroll_mode', 'daily_salary',
+        'minutes_per_full_workday', 'ordinary_hours_per_day', 'is_exempt_from_overtime',
+    ],
+    'Acceso al sistema': ['create_user', 'user_email', 'user_password', 'role_name'],
+    Banco: ['bank_name', 'bank_account_number', 'bank_key'],
+    'Costo y tiempo': [
+        'base_price', 'price', 'estimated_minutes', 'difficulty_level',
+        'payment_per_unit', 'lot_total_quantity',
+    ],
+};
+
+const groupOf = (key: string): string =>
+    Object.entries(GROUPS).find(([, keys]) => keys.includes(key))?.[0] ?? 'Otros';
+
+/** Seleccion sugerida por tipo: lo habitual sin llegar a la plantilla completa. */
+const RECOMMENDED: Record<string, string[]> = {
+    companies: ['name', 'nit', 'email', 'is_active'],
+    banks: ['company_nit', 'name', 'code'],
+    operations: ['company_nit', 'name', 'base_price', 'estimated_minutes'],
+    references: ['company_nit', 'code', 'name', 'payment_per_unit', 'lot_total_quantity'],
+    reference_operations: ['company_nit', 'reference_code', 'operation_name', 'price', 'estimated_minutes'],
+    employees_users: [
+        'company_nit', 'first_name', 'last_name', 'document_type', 'document_number',
+        'phone', 'hire_date', 'base_salary', 'payroll_mode', 'is_active',
+    ],
+};
+
+/** Un campo de plantilla, tal como lo publica App\Services\DataImport\ImportFieldCatalog. */
+interface CatalogField {
+    key: string;
+    required: boolean;
+    example: string;
+    help: string | null;
+    column: string | null;
+}
+
+interface FieldPreset {
+    id: number;
+    name: string;
+    fields: string[];
+    is_shared: boolean;
+    is_own: boolean;
+}
+
+/** Ultimo lote de un tipo; llega recortado a lo que la fila necesita. */
+interface LatestBatch {
+    id: number;
+    type: string;
+    status: string;
+    rows_total: number;
+    rows_success: number;
+    rows_failed: number;
+    original_filename: string;
+    created_at: string;
+    error_report_path: string | null;
+    meta?: Record<string, unknown> | null;
+}
+
+interface Filters {
+    q: string;
+    estado: string;
+    tipo: string;
+}
 
 interface Props {
     batches: PaginatedResponse<DataImportBatch>;
     types: Record<string, string>;
+    filters: Filters;
+    /** Campos disponibles por tipo; sale de la tabla, asi que crece solo. */
+    fieldCatalog: Record<string, CatalogField[]>;
+    latestByType?: Record<string, LatestBatch> | null;
+    fieldPresets?: Record<string, FieldPreset[]> | null;
+    maxUploadKb?: number;
     csvPreview?: CsvPreviewPayload | null;
     csvPreviewError?: string | null;
 }
@@ -56,8 +163,23 @@ function canDeleteBatch(status: string): boolean {
     return status !== 'processing';
 }
 
-export default function DataImportsIndex({ batches, types, csvPreview = null, csvPreviewError = null }: Props) {
-    const [openHelp, setOpenHelp] = useState(true);
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+export default function DataImportsIndex({
+    batches,
+    types,
+    filters,
+    fieldCatalog = {},
+    latestByType = null,
+    fieldPresets = null,
+    maxUploadKb = 5120,
+    csvPreview = null,
+    csvPreviewError = null,
+}: Props) {
     const [uploadingType, setUploadingType] = useState<string | null>(null);
     const [processingBatchId, setProcessingBatchId] = useState<number | null>(null);
     const [previewOpen, setPreviewOpen] = useState(false);
@@ -67,35 +189,225 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
     const [confirmDelete, setConfirmDelete] = useState<DataImportBatch | null>(null);
     const [deletingBatchId, setDeletingBatchId] = useState<number | null>(null);
 
-    const submitImport: (type: string) => FormEventHandler<HTMLFormElement> =
-        (type) => (e) => {
-            e.preventDefault();
-            if (uploadingType) {
-                return;
-            }
-            const form = e.currentTarget;
-            const fd = new FormData(form);
-            fd.set('type', type);
-            setUploadingType(type);
-            router.post(route('super-admin.data-imports.store'), fd, {
-                forceFormData: true,
-                preserveScroll: true,
-                onSuccess: () => form.reset(),
-                onError: (errors) => {
-                    const message =
-                        (typeof errors.file === 'string' && errors.file) ||
-                        (typeof errors.type === 'string' && errors.type) ||
-                        'No se pudo subir el archivo. Revisa el CSV e intenta de nuevo.';
-                    toast.error(message);
-                },
-                onFinish: () => setUploadingType(null),
-            });
-        };
+    /** Archivo elegido por fila, venga del selector o de arrastrarlo encima. */
+    const [picked, setPicked] = useState<Record<string, File | null>>({});
+    const [dragOver, setDragOver] = useState<string | null>(null);
 
-    const runProcess = (batchId: number) => {
-        if (processingBatchId !== null) {
+    /**
+     * Campos elegidos por tipo. Arranca con todos marcados, que es la plantilla completa
+     * de siempre; los obligatorios van igual aunque no esten en la lista, porque el
+     * backend los reinyecta y sin ellos el archivo no se puede importar.
+     */
+    const [selectedFields, setSelectedFields] = useState<Record<string, string[]>>(() =>
+        Object.fromEntries(Object.entries(fieldCatalog).map(([type, fields]) => [type, fields.map((f) => f.key)])),
+    );
+    const [fieldPickerType, setFieldPickerType] = useState<string | null>(null);
+    const [fieldQuery, setFieldQuery] = useState('');
+    const [activePreset, setActivePreset] = useState<Record<string, string>>({});
+    const [savePresetFor, setSavePresetFor] = useState<string | null>(null);
+    const [presetName, setPresetName] = useState('');
+    const [presetShared, setPresetShared] = useState(false);
+    const [savingPreset, setSavingPreset] = useState(false);
+
+    const [q, setQ] = useState(filters?.q ?? '');
+    const primeraCarga = useRef(true);
+
+    /* ------------------------------------------------------------- catalogo */
+
+    const fieldsOf = (type: string): CatalogField[] => fieldCatalog[type] ?? [];
+    const chosenOf = (type: string): string[] => selectedFields[type] ?? fieldsOf(type).map((f) => f.key);
+    const requiredOf = (type: string): CatalogField[] => fieldsOf(type).filter((f) => f.required);
+    const optionalOf = (type: string): CatalogField[] => fieldsOf(type).filter((f) => !f.required);
+    const presetsOf = (type: string): FieldPreset[] => fieldPresets?.[type] ?? [];
+
+    /** Cuenta lo que realmente saldra en el CSV: lo marcado mas los obligatorios. */
+    const effectiveCount = (type: string): number => {
+        const elegidos = new Set(chosenOf(type));
+        requiredOf(type).forEach((f) => elegidos.add(f.key));
+
+        return elegidos.size;
+    };
+
+    /** Solo se manda la lista si se recorto algo: sin parametro, el servidor da todos. */
+    const fieldsParam = (type: string): string | null => {
+        const todos = fieldsOf(type);
+        const elegidos = chosenOf(type);
+
+        return todos.length === 0 || elegidos.length === todos.length ? null : elegidos.join(',');
+    };
+
+    const templateHref = (type: string): string => {
+        const fields = fieldsParam(type);
+
+        return route('super-admin.data-imports.templates', fields ? { type, fields } : { type });
+    };
+
+    const zipHref = (): string => {
+        // Se arma a mano y no con Ziggy porque la seleccion viaja anidada (fields[tipo]).
+        const partes = TYPE_KEYS.map((type) => {
+            const fields = fieldsParam(type);
+
+            return fields ? `fields[${type}]=${encodeURIComponent(fields)}` : null;
+        }).filter((p): p is string => p !== null);
+
+        const base = route('super-admin.data-imports.templates.zip');
+
+        return partes.length > 0 ? `${base}?${partes.join('&')}` : base;
+    };
+
+    const aplicarSeleccion = (type: string, keys: string[], preset: string) => {
+        setSelectedFields((prev) => ({ ...prev, [type]: keys }));
+        setActivePreset((prev) => ({ ...prev, [type]: preset }));
+    };
+
+    const toggleField = (type: string, key: string) => {
+        const actuales = chosenOf(type);
+        aplicarSeleccion(
+            type,
+            actuales.includes(key) ? actuales.filter((k) => k !== key) : [...actuales, key],
+            'Personalizado',
+        );
+    };
+
+    /** Marca o desmarca un grupo entero; los obligatorios no se tocan. */
+    const toggleGroup = (type: string, grupo: string, marcar: boolean) => {
+        const delGrupo = optionalOf(type).filter((f) => groupOf(f.key) === grupo).map((f) => f.key);
+        const actuales = chosenOf(type);
+        const siguiente = marcar
+            ? Array.from(new Set([...actuales, ...delGrupo]))
+            : actuales.filter((k) => !delGrupo.includes(k));
+
+        aplicarSeleccion(type, siguiente, 'Personalizado');
+    };
+
+    const aplicarPreset = (type: string, nombre: 'Mínimo' | 'Recomendado' | 'Completo') => {
+        if (nombre === 'Completo') {
+            aplicarSeleccion(type, fieldsOf(type).map((f) => f.key), nombre);
+
             return;
         }
+        if (nombre === 'Mínimo') {
+            aplicarSeleccion(type, requiredOf(type).map((f) => f.key), nombre);
+
+            return;
+        }
+
+        // Se filtra contra el catalogo vivo: una columna retirada no rompe el preset.
+        const sugeridos = (RECOMMENDED[type] ?? []).filter((k) => fieldsOf(type).some((f) => f.key === k));
+        aplicarSeleccion(type, Array.from(new Set([...requiredOf(type).map((f) => f.key), ...sugeridos])), nombre);
+    };
+
+    const aplicarPresetGuardado = (type: string, preset: FieldPreset) => {
+        const validos = preset.fields.filter((k) => fieldsOf(type).some((f) => f.key === k));
+        aplicarSeleccion(type, Array.from(new Set([...requiredOf(type).map((f) => f.key), ...validos])), preset.name);
+    };
+
+    const guardarPreset = () => {
+        const type = savePresetFor;
+        if (!type || savingPreset) return;
+
+        const nombre = presetName.trim();
+        if (nombre === '') {
+            toast.error('Ponle un nombre al preset.');
+
+            return;
+        }
+
+        const campos = Array.from(new Set([...requiredOf(type).map((f) => f.key), ...chosenOf(type)]));
+        setSavingPreset(true);
+        router.post(
+            route('super-admin.data-import-presets.store'),
+            { type, name: nombre, fields: campos, is_shared: presetShared },
+            {
+                preserveScroll: true,
+                preserveState: true,
+                onSuccess: () => {
+                    setActivePreset((prev) => ({ ...prev, [type]: nombre }));
+                    setSavePresetFor(null);
+                    setPresetName('');
+                    setPresetShared(false);
+                },
+                onError: () => toast.error('No se pudo guardar el preset.'),
+                onFinish: () => setSavingPreset(false),
+            },
+        );
+    };
+
+    const borrarPreset = (preset: FieldPreset) => {
+        router.delete(route('super-admin.data-import-presets.destroy', preset.id), {
+            preserveScroll: true,
+            preserveState: true,
+            onError: () => toast.error('No se pudo eliminar el preset.'),
+        });
+    };
+
+    /* --------------------------------------------------------------- carga */
+
+    const maxBytes = maxUploadKb * 1024;
+
+    /** Comprobaciones de cliente; el servidor las repite, esto solo evita el viaje. */
+    const aceptarArchivo = (type: string, file: File | null | undefined) => {
+        if (!file) return;
+
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            toast.error('Solo archivos .csv');
+
+            return;
+        }
+        if (file.size > maxBytes) {
+            toast.error(`El archivo pesa ${formatBytes(file.size)} y el maximo es ${formatBytes(maxBytes)}.`);
+
+            return;
+        }
+
+        setPicked((p) => ({ ...p, [type]: file }));
+    };
+
+    const onDrop = (type: string) => (e: DragEvent<HTMLElement>) => {
+        e.preventDefault();
+        setDragOver(null);
+        aceptarArchivo(type, e.dataTransfer.files?.[0]);
+    };
+
+    const submitImport: (type: string) => FormEventHandler<HTMLFormElement> = (type) => (e) => {
+        e.preventDefault();
+        if (uploadingType) return;
+
+        const archivo = picked[type];
+        if (!archivo) {
+            toast.error('Elige o arrastra un archivo CSV primero.');
+
+            return;
+        }
+
+        const form = e.currentTarget;
+        const fd = new FormData(form);
+        // El archivo puede venir de arrastrarlo, y eso no llena el input: se inyecta.
+        fd.set('file', archivo);
+        fd.set('type', type);
+
+        setUploadingType(type);
+        router.post(route('super-admin.data-imports.store'), fd, {
+            forceFormData: true,
+            preserveScroll: true,
+            onSuccess: () => {
+                form.reset();
+                setPicked((p) => ({ ...p, [type]: null }));
+            },
+            onError: (errors) => {
+                const message =
+                    (typeof errors.file === 'string' && errors.file) ||
+                    (typeof errors.type === 'string' && errors.type) ||
+                    'No se pudo subir el archivo. Revisa el CSV e intenta de nuevo.';
+                toast.error(message);
+            },
+            onFinish: () => setUploadingType(null),
+        });
+    };
+
+    const runProcess = (batchId: number) => {
+        if (processingBatchId !== null) return;
+
         setProcessingBatchId(batchId);
         router.post(route('super-admin.data-imports.process', batchId), {}, {
             preserveScroll: true,
@@ -103,20 +415,92 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
         });
     };
 
+    /* -------------------------------------------------------- estado fila */
+
+    const lastOf = (type: string): LatestBatch | null => latestByType?.[type] ?? null;
+
+    /**
+     * Que mostrar en la columna «Estado». Mientras no haya lote, refleja el formulario;
+     * despues, en que quedo la ultima importacion de esa entidad.
+     */
+    const rowState = (type: string): { label: string; variant: 'success' | 'warning' | 'danger' | 'neutral'; hint?: string } => {
+        if (uploadingType === type) return { label: 'Subiendo…', variant: 'warning' };
+
+        const ultimo = lastOf(type);
+
+        if (ultimo && processingBatchId === ultimo.id) return { label: 'Procesando…', variant: 'warning' };
+
+        if (picked[type]) {
+            const f = picked[type] as File;
+
+            return { label: 'Archivo listo', variant: 'neutral', hint: `${f.name} · ${formatBytes(f.size)}` };
+        }
+
+        if (!ultimo) return { label: 'Sin archivo', variant: 'neutral' };
+
+        const detalle = (u: LatestBatch) => `${u.original_filename} · ${new Date(u.created_at).toLocaleDateString()}`;
+
+        if (ultimo.status === 'completed') {
+            return ultimo.rows_failed > 0
+                ? { label: `Importado con ${ultimo.rows_failed} ${ultimo.rows_failed === 1 ? 'error' : 'errores'}`, variant: 'warning', hint: detalle(ultimo) }
+                : { label: `Importado · ${ultimo.rows_success} filas`, variant: 'success', hint: detalle(ultimo) };
+        }
+        if (ultimo.status === 'pending') {
+            const filas = ultimo.meta && typeof ultimo.meta.rows_detected === 'number' ? ultimo.meta.rows_detected : null;
+
+            return {
+                label: 'Listo para procesar',
+                variant: 'neutral',
+                hint: filas !== null ? `${ultimo.original_filename} · ${filas} filas` : detalle(ultimo),
+            };
+        }
+        if (ultimo.status === 'processing') return { label: 'Procesando…', variant: 'warning', hint: detalle(ultimo) };
+
+        const fatal = ultimo.meta && typeof ultimo.meta.fatal_error === 'string' ? ultimo.meta.fatal_error : undefined;
+
+        return { label: 'Fallido', variant: 'danger', hint: fatal ?? detalle(ultimo) };
+    };
+
+    /* ------------------------------------------------------------ historial */
+
+    const filtrosActuales = useMemo(
+        () => ({ q: filters?.q ?? '', estado: filters?.estado ?? 'todos', tipo: filters?.tipo ?? '' }),
+        [filters],
+    );
+
+    const pedirHistorial = (cambios: Partial<Filters>) => {
+        router.get(
+            route('super-admin.data-imports.index'),
+            { ...filtrosActuales, ...cambios },
+            { preserveState: true, preserveScroll: true, replace: true, only: ['batches', 'filters'] },
+        );
+    };
+
+    // Buscador con espera: no se lanza una peticion por tecla.
+    useEffect(() => {
+        if (primeraCarga.current) {
+            primeraCarga.current = false;
+
+            return;
+        }
+        if (q === filtrosActuales.q) return;
+
+        const t = setTimeout(() => pedirHistorial({ q }), 300);
+
+        return () => clearTimeout(t);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [q]);
+
+    /* -------------------------------------------------------- vista previa */
+
     const closePreview = () => {
         setPreviewOpen(false);
         setPreviewData(null);
         setPreviewBatchId(null);
-        const page = batches.meta?.current_page ?? 1;
         router.get(
             route('super-admin.data-imports.index'),
-            { page },
-            {
-                preserveState: true,
-                preserveScroll: true,
-                replace: true,
-                only: ['csvPreview', 'csvPreviewError'],
-            },
+            { ...filtrosActuales, page: batches.current_page ?? 1 },
+            { preserveState: true, preserveScroll: true, replace: true, only: ['csvPreview', 'csvPreviewError'] },
         );
     };
 
@@ -127,6 +511,7 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
             setPreviewOpen(false);
             setPreviewData(null);
             setPreviewBatchId(null);
+
             return;
         }
         if (csvPreview) {
@@ -138,16 +523,15 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
     }, [csvPreview, csvPreviewError]);
 
     const openPreview = (batch: DataImportBatch) => {
-        if (previewLoading) {
-            return;
-        }
+        if (previewLoading) return;
+
         setPreviewBatchId(batch.id);
         setPreviewOpen(true);
         setPreviewData(null);
         setPreviewLoading(true);
         router.get(
             route('super-admin.data-imports.index'),
-            { preview: batch.id, page: batches.meta?.current_page ?? 1 },
+            { ...filtrosActuales, preview: batch.id, page: batches.current_page ?? 1 },
             {
                 preserveState: true,
                 preserveScroll: true,
@@ -158,9 +542,8 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
     };
 
     const handleDelete = () => {
-        if (!confirmDelete || deletingBatchId !== null) {
-            return;
-        }
+        if (!confirmDelete || deletingBatchId !== null) return;
+
         const id = confirmDelete.id;
         setDeletingBatchId(id);
         router.delete(route('super-admin.data-imports.destroy', id), {
@@ -170,117 +553,341 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
         });
     };
 
+    /* ----------------------------------------------------------- fragmentos */
+
+    const chipFormato = (texto: string) => (
+        <span
+            key={texto}
+            className="rounded-md bg-slate-100 px-2 py-1 font-mono text-[11px] text-slate-700 dark:bg-slate-900 dark:text-slate-300"
+        >
+            {texto}
+        </span>
+    );
+
+    /** Opciones propias de un tipo; van dentro del form de su fila. */
+    const opcionesDelTipo = (key: string) => {
+        if (key === 'companies') {
+            return (
+                <label className="flex flex-col gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+                    Si el NIT ya existe
+                    <select
+                        name="company_import_mode"
+                        defaultValue="skip"
+                        className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                    >
+                        <option value="skip">Omitir fila</option>
+                        <option value="update">Actualizar empresa</option>
+                    </select>
+                </label>
+            );
+        }
+
+        if (key === 'employees_users') {
+            return (
+                <label className="flex items-start gap-2 text-[11px] text-slate-600 dark:text-slate-300">
+                    <input
+                        type="checkbox"
+                        name="employee_update_existing"
+                        value="1"
+                        className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-slate-600"
+                    />
+                    Actualizar empleado si ya existe (mismo documento en la empresa)
+                </label>
+            );
+        }
+
+        return null;
+    };
+
+    const filaEntidad = (key: TypeKey, indice: number) => {
+        const archivo = picked[key] ?? null;
+        const ultimo = lastOf(key);
+        const estado = rowState(key);
+        const total = fieldsOf(key).length;
+        const elegidos = effectiveCount(key);
+        const subiendo = uploadingType === key;
+        const procesando = ultimo !== null && processingBatchId === ultimo.id;
+
+        return (
+            <form
+                key={key}
+                onSubmit={submitImport(key)}
+                className="border-b border-slate-200 p-4 last:border-b-0 dark:border-slate-700"
+            >
+                <div className="grid gap-3 lg:grid-cols-12 lg:items-start">
+                    {/* Entidad */}
+                    <div className="lg:col-span-3">
+                        <div className="flex items-start gap-2">
+                            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600 dark:bg-slate-700 dark:text-slate-200">
+                                {indice + 1}
+                            </span>
+                            <div className="min-w-0">
+                                <p className="text-sm font-medium text-slate-800 dark:text-slate-100">{types[key] ?? key}</p>
+                                <p className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{DEPENDS[key]}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Plantilla */}
+                    <div className="flex flex-wrap items-center gap-2 lg:col-span-2">
+                        <a
+                            href={templateHref(key)}
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-700"
+                        >
+                            <ArrowDownTrayIcon className="h-4 w-4" />
+                            Descargar CSV
+                        </a>
+                        <button
+                            type="button"
+                            onClick={() => setFieldPickerType(key)}
+                            className="inline-flex min-h-9 items-center gap-1 rounded-lg border border-slate-300 px-2.5 text-[11px] text-slate-600 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-300 dark:hover:bg-slate-700"
+                        >
+                            <AdjustmentsHorizontalIcon className="h-3.5 w-3.5" />
+                            Campos {elegidos}/{total}
+                        </button>
+                    </div>
+
+                    {/* Archivo */}
+                    <div className="space-y-2 lg:col-span-4">
+                        <label
+                            onDragOver={(e) => {
+                                e.preventDefault();
+                                setDragOver(key);
+                            }}
+                            onDragLeave={() => setDragOver((d) => (d === key ? null : d))}
+                            onDrop={onDrop(key)}
+                            className={cn(
+                                'flex min-h-11 cursor-pointer items-center gap-2 rounded-lg border border-dashed px-3 py-2 text-xs transition-colors',
+                                dragOver === key
+                                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-200'
+                                    : 'border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-600 dark:text-slate-400',
+                            )}
+                        >
+                            {/*
+                              * Sin `required`: un archivo soltado encima no llena el input.
+                              * La comprobacion la hace submitImport antes de enviar.
+                              */}
+                            <input
+                                type="file"
+                                name="file"
+                                accept=".csv"
+                                className="sr-only"
+                                onChange={(e) => {
+                                    aceptarArchivo(key, e.target.files?.[0]);
+                                    e.target.value = '';
+                                }}
+                            />
+                            {archivo ? (
+                                <>
+                                    <DocumentTextIcon className="h-4 w-4 shrink-0 text-indigo-500" />
+                                    <span className="min-w-0 flex-1 truncate text-slate-700 dark:text-slate-200" title={archivo.name}>
+                                        {archivo.name}
+                                    </span>
+                                    <span className="shrink-0 text-[11px] text-slate-400">{formatBytes(archivo.size)}</span>
+                                    <button
+                                        type="button"
+                                        onClick={(e) => {
+                                            e.preventDefault();
+                                            setPicked((p) => ({ ...p, [key]: null }));
+                                        }}
+                                        aria-label="Quitar archivo"
+                                        className="shrink-0 rounded p-1 text-slate-400 hover:text-rose-500"
+                                    >
+                                        <XMarkIcon className="h-4 w-4" />
+                                    </button>
+                                </>
+                            ) : (
+                                <>
+                                    <ArrowUpTrayIcon className="h-4 w-4 shrink-0" />
+                                    <span>Arrastra el CSV o pulsa para elegirlo</span>
+                                </>
+                            )}
+                        </label>
+                        {opcionesDelTipo(key)}
+                    </div>
+
+                    {/* Estado */}
+                    <div className="lg:col-span-2">
+                        <Badge variant={estado.variant}>{estado.label}</Badge>
+                        {estado.hint ? (
+                            <p className="mt-1 truncate text-[11px] text-slate-500 dark:text-slate-400" title={estado.hint}>
+                                {estado.hint}
+                            </p>
+                        ) : null}
+                        {/*
+                          * Barra indeterminada: el procesamiento es sincronico, no hay
+                          * porcentaje real que mostrar sin inventarlo.
+                          */}
+                        {procesando || subiendo ? (
+                            <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+                                <div className="h-full w-1/3 animate-pulse rounded-full bg-indigo-500" />
+                            </div>
+                        ) : null}
+                    </div>
+
+                    {/* Accion */}
+                    <div className="flex flex-wrap items-center gap-2 lg:col-span-1 lg:justify-end">
+                        {archivo ? (
+                            <Button type="submit" size="sm" loading={subiendo} disabled={uploadingType !== null}>
+                                {subiendo ? 'Subiendo…' : 'Cargar'}
+                            </Button>
+                        ) : ultimo && canProcessBatch(ultimo.status) ? (
+                            <Button
+                                type="button"
+                                size="sm"
+                                variant="success"
+                                loading={procesando}
+                                disabled={processingBatchId !== null}
+                                onClick={() => runProcess(ultimo.id)}
+                            >
+                                {procesando ? 'Procesando…' : 'Procesar'}
+                            </Button>
+                        ) : ultimo ? (
+                            <Link
+                                href={route('super-admin.data-imports.show', ultimo.id)}
+                                className="text-xs font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                            >
+                                Ver detalle
+                            </Link>
+                        ) : (
+                            <span className="text-[11px] text-slate-400">—</span>
+                        )}
+                    </div>
+                </div>
+            </form>
+        );
+    };
+
+    /* --------------------------------------------------------------- render */
+
+    const tipoActivo = fieldPickerType;
+    const gruposDelTipo = tipoActivo
+        ? Array.from(new Set(optionalOf(tipoActivo).map((f) => groupOf(f.key))))
+        : [];
+    const filtroCampos = fieldQuery.trim().toLowerCase();
+    const camposVisibles = tipoActivo
+        ? optionalOf(tipoActivo).filter(
+              (f) =>
+                  filtroCampos === '' ||
+                  f.key.toLowerCase().includes(filtroCampos) ||
+                  (f.help ?? '').toLowerCase().includes(filtroCampos),
+          )
+        : [];
+
     return (
         <AppLayout title="Importacion CSV">
             <Head title="Importacion masiva (CSV)" />
-            <div className="space-y-8">
+            <div className="space-y-6">
                 <PageHeader
                     title="Importacion masiva (CSV)"
-                    description="Sube el CSV y pulsa «Procesar» en el historial para ejecutar la importacion al instante (sin colas)."
+                    description="Descarga la plantilla, sube el archivo y pulsa «Procesar». Cada entidad se carga en el orden numerado."
                 />
 
-                <div className="rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                    <button
-                        type="button"
-                        onClick={() => setOpenHelp(!openHelp)}
-                        className="flex w-full items-center justify-between px-4 py-3 text-left text-sm font-medium text-slate-800 dark:text-slate-100"
-                    >
-                        Instrucciones y orden recomendado
-                        {openHelp ? <ChevronUpIcon className="h-5 w-5" /> : <ChevronDownIcon className="h-5 w-5" />}
-                    </button>
-                    {openHelp && (
-                        <div className="space-y-3 border-t border-slate-100 px-4 py-3 text-sm text-slate-600 dark:border-slate-700 dark:text-slate-300">
-                            <p>
-                                Codificacion <strong>UTF-8</strong>, separador coma, encabezados en snake_case (igual que las plantillas). Fechas{' '}
-                                <code className="rounded bg-slate-100 px-1 dark:bg-slate-900">YYYY-MM-DD</code>.
-                            </p>
-                            <ol className="list-decimal space-y-1 pl-5">
-                                <li>Empresas</li>
-                                <li>Bancos (requiere company_nit)</li>
-                                <li>Operaciones</li>
-                                <li>Referencias</li>
-                                <li>Empleados y usuarios</li>
-                            </ol>
-                            <p className="text-slate-500 dark:text-slate-400">
-                                Tras cargar el archivo quedara en estado <strong>Pendiente</strong>. Use el boton <strong>Procesar</strong> en el historial para importar los datos.
-                            </p>
-                            <p className="text-slate-500 dark:text-slate-400">
-                                Modo empresas: si el NIT existe, puede <strong>omitir</strong> la fila o <strong>actualizar</strong> datos. Empleados: marque actualizar
-                                existentes para sobrescribir por numero de documento.
-                            </p>
+                {/* Formato y orden */}
+                <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-2 dark:border-slate-700 dark:bg-slate-800">
+                    <div>
+                        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Formato del archivo
+                        </h2>
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                            {['UTF-8', 'Separador: coma', 'snake_case', 'YYYY-MM-DD', `Máx. ${formatBytes(maxBytes)}`].map(chipFormato)}
                         </div>
-                    )}
-                </div>
+                    </div>
+                    <div>
+                        <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                            Orden obligatorio
+                        </h2>
+                        <div className="mt-2 flex flex-wrap items-center gap-y-1.5">
+                            {TYPE_KEYS.map((key, i) => (
+                                // El chip y su flecha van juntos para que la flecha nunca
+                                // quede sola al final de una linea.
+                                <span key={key} className="inline-flex items-center">
+                                    <span className="rounded-md bg-slate-100 px-2 py-1 text-[11px] text-slate-700 dark:bg-slate-900 dark:text-slate-300">
+                                        {i + 1} {types[key] ?? key}
+                                    </span>
+                                    {i < TYPE_KEYS.length - 1 ? <span className="px-1 text-slate-400">→</span> : null}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                </section>
 
-                <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                    <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Descargar plantillas</h2>
-                    <div className="flex flex-wrap gap-2">
-                        {TYPE_KEYS.map((key) => (
-                            <a
-                                key={key}
-                                href={route('super-admin.data-imports.templates', key)}
-                                className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-700 hover:bg-slate-100 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-700"
-                            >
-                                <ArrowDownTrayIcon className="h-4 w-4" />
-                                {types[key] ?? key}
-                            </a>
-                        ))}
+                {/* Entidades */}
+                <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+                        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Entidades</h2>
                         <a
-                            href={route('super-admin.data-imports.templates.zip')}
-                            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-100"
+                            href={zipHref()}
+                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-medium text-indigo-800 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-100"
                         >
                             <ArrowDownTrayIcon className="h-4 w-4" />
                             Paquete ZIP + LEEME
                         </a>
                     </div>
-                </section>
 
-                <section className="space-y-6">
-                    <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Cargar archivos</h2>
-                    <div className="grid gap-4 md:grid-cols-2">
-                        {TYPE_KEYS.map((key) => (
-                            <form
-                                key={key}
-                                onSubmit={submitImport(key)}
-                                className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800"
-                            >
-                                <h3 className="text-sm font-medium text-slate-800 dark:text-slate-100">{types[key] ?? key}</h3>
-                                {key === 'companies' && (
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-xs text-slate-500 dark:text-slate-400">Si el NIT ya existe</label>
-                                        <select
-                                            name="company_import_mode"
-                                            className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
-                                            defaultValue="skip"
-                                        >
-                                            <option value="skip">Omitir fila</option>
-                                            <option value="update">Actualizar empresa</option>
-                                        </select>
-                                    </div>
-                                )}
-                                {key === 'employees_users' && (
-                                    <label className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
-                                        <input type="checkbox" name="employee_update_existing" value="1" className="rounded border-slate-300 dark:border-slate-600" />
-                                        Actualizar empleado si existe (mismo documento en la empresa)
-                                    </label>
-                                )}
-                                <input
-                                    type="file"
-                                    name="file"
-                                    accept=".csv"
-                                    required
-                                    className="block w-full text-xs text-slate-600 file:mr-2 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-1.5 file:text-xs file:font-medium dark:text-slate-300 dark:file:bg-slate-700"
-                                />
-                                <Button type="submit" size="sm" loading={uploadingType === key} disabled={uploadingType !== null}>
-                                    {uploadingType === key ? 'Subiendo…' : 'Cargar CSV'}
-                                </Button>
-                            </form>
-                        ))}
+                    {/* Cabecera solo en escritorio; en movil cada fila ya se lee sola. */}
+                    <div className="hidden grid-cols-12 gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 lg:grid dark:border-slate-700 dark:text-slate-400">
+                        <span className="col-span-3">Entidad</span>
+                        <span className="col-span-2">Plantilla</span>
+                        <span className="col-span-4">Archivo</span>
+                        <span className="col-span-2">Estado</span>
+                        <span className="col-span-1 text-right">Acción</span>
                     </div>
+
+                    {TYPE_KEYS.map((key, i) => filaEntidad(key, i))}
                 </section>
 
+                {/* Historial */}
                 <section className="space-y-3">
-                    <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Historial</h2>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                        <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Historial</h2>
+                        <div className="flex flex-wrap items-center gap-2">
+                            <div className="relative">
+                                <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                                <input
+                                    type="search"
+                                    value={q}
+                                    onChange={(e) => setQ(e.target.value)}
+                                    placeholder="Archivo o usuario…"
+                                    className="h-9 w-52 rounded-lg border border-slate-300 bg-white pl-8 pr-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                                />
+                            </div>
+                            <div className="flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600">
+                                {([
+                                    ['todos', 'Todos'],
+                                    ['errores', 'Con errores'],
+                                    ['pendientes', 'Pendientes'],
+                                ] as const).map(([valor, etiqueta]) => (
+                                    <button
+                                        key={valor}
+                                        type="button"
+                                        onClick={() => pedirHistorial({ estado: valor })}
+                                        className={cn(
+                                            'h-9 px-3 text-xs',
+                                            filtrosActuales.estado === valor
+                                                ? 'bg-indigo-600 text-white'
+                                                : 'text-slate-600 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-700',
+                                        )}
+                                    >
+                                        {etiqueta}
+                                    </button>
+                                ))}
+                            </div>
+                            <select
+                                value={filtrosActuales.tipo}
+                                onChange={(e) => pedirHistorial({ tipo: e.target.value })}
+                                className="h-9 rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                            >
+                                <option value="">Todas las entidades</option>
+                                {TYPE_KEYS.map((key) => (
+                                    <option key={key} value={key}>
+                                        {types[key] ?? key}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
                     <Table>
                         <TableHead>
                             <TableRow>
@@ -297,27 +904,31 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
                             {batches.data.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-4 py-10 text-center text-sm text-slate-500">
-                                        No hay importaciones registradas.
+                                        No hay importaciones que coincidan con el filtro.
                                     </td>
                                 </tr>
                             ) : (
                                 batches.data.map((b) => (
                                     <TableRow key={b.id}>
-                                        <TableCell className="whitespace-nowrap text-sm">{new Date(b.created_at).toLocaleString()}</TableCell>
-                                        <TableCell className="text-sm">
+                                        <TableCell data-label="Fecha" className="whitespace-nowrap text-sm">
+                                            {new Date(b.created_at).toLocaleString()}
+                                        </TableCell>
+                                        <TableCell data-label="Usuario" className="text-sm">
                                             {b.user ? `${b.user.name} ${b.user.last_name ?? ''}`.trim() : `ID ${b.user_id}`}
                                         </TableCell>
-                                        <TableCell className="text-sm">{types[b.type] ?? b.type}</TableCell>
-                                        <TableCell className="max-w-[12rem] truncate text-sm" title={b.original_filename}>
+                                        <TableCell data-label="Tipo" className="text-sm">
+                                            {types[b.type] ?? b.type}
+                                        </TableCell>
+                                        <TableCell data-label="Archivo" className="max-w-[12rem] truncate text-sm" title={b.original_filename}>
                                             {b.original_filename}
                                         </TableCell>
-                                        <TableCell align="center">
+                                        <TableCell data-label="Estado" align="center">
                                             <Badge variant={statusVariant(b.status)}>{statusLabel(b.status)}</Badge>
                                         </TableCell>
-                                        <TableCell align="center" className="text-sm tabular-nums">
+                                        <TableCell data-label="OK / Error" align="center" className="text-sm tabular-nums">
                                             {b.rows_success} / {b.rows_failed}
                                         </TableCell>
-                                        <TableCell align="right">
+                                        <TableCell data-label="Acciones" align="right">
                                             <div className="flex flex-wrap items-center justify-end gap-2">
                                                 <Button
                                                     type="button"
@@ -341,6 +952,14 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
                                                     >
                                                         {processingBatchId === b.id ? 'Procesando…' : 'Procesar'}
                                                     </Button>
+                                                ) : null}
+                                                {b.rows_failed > 0 ? (
+                                                    <a
+                                                        href={route('super-admin.data-imports.errors.csv', b.id)}
+                                                        className="text-xs font-medium text-amber-600 hover:text-amber-500 dark:text-amber-400"
+                                                    >
+                                                        Filas con error
+                                                    </a>
                                                 ) : null}
                                                 <Link
                                                     href={route('super-admin.data-imports.show', b.id)}
@@ -368,96 +987,306 @@ export default function DataImportsIndex({ batches, types, csvPreview = null, cs
                             )}
                         </TableBody>
                     </Table>
-                    <Pagination links={batches.links} meta={batches.meta} />
+                    <Pagination links={batches.links} from={batches.from} to={batches.to} total={batches.total} />
                 </section>
             </div>
 
+            {/* Vista previa del CSV */}
             <Modal
                 open={previewOpen}
                 onClose={closePreview}
-                title="Vista previa del CSV"
+                title={previewData ? `Vista previa · ${previewData.filename}` : 'Vista previa'}
                 description={
                     previewData
-                        ? `${previewData.filename} · ${types[previewData.type] ?? previewData.type}`
-                        : previewBatchId
-                          ? batches.data.find((b) => b.id === previewBatchId)?.original_filename
-                          : undefined
+                        ? `${previewData.total_data_rows} filas de datos${previewData.truncated ? ' (se muestran las primeras)' : ''}`
+                        : undefined
                 }
                 size="4xl"
-                footer={
-                    previewData ? (
-                        <div className="flex flex-wrap items-center justify-end gap-2">
-                            <Button type="button" variant="secondary" size="sm" onClick={closePreview}>
-                                Cerrar
-                            </Button>
-                            <a
-                                href={route('super-admin.data-imports.file', previewData.batch_id)}
-                                className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500"
-                            >
-                                <ArrowDownTrayIcon className="h-4 w-4" />
-                                Descargar CSV
-                            </a>
-                        </div>
-                    ) : undefined
-                }
             >
                 {previewLoading ? (
-                    <p className="py-8 text-center text-sm text-slate-500 dark:text-slate-400">Cargando vista previa…</p>
+                    <p className="py-6 text-center text-sm text-slate-500">Cargando…</p>
                 ) : previewData ? (
-                    <div className="space-y-3">
-                        <p className="text-xs text-slate-500 dark:text-slate-400">
-                            Mostrando {previewData.rows.length} de {previewData.total_data_rows} filas con datos
-                            {previewData.truncated ? ' (vista limitada)' : ''}.
-                        </p>
-                        <div className="max-h-[min(60vh,28rem)] overflow-auto rounded-lg border border-slate-200 dark:border-slate-600">
-                            <table className="responsive-table min-w-full divide-y divide-slate-200 text-left text-xs dark:divide-slate-600">
-                                <thead className="sticky top-0 bg-slate-100 dark:bg-slate-900">
-                                    <tr>
-                                        {previewData.headers.map((h) => (
-                                            <th key={h} className="whitespace-nowrap px-3 py-2 font-semibold text-slate-700 dark:text-slate-200">
-                                                {h}
-                                            </th>
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-xs">
+                            <thead className="bg-slate-50 dark:bg-slate-900/50">
+                                <tr>
+                                    {previewData.headers.map((h) => (
+                                        <th key={h} className="whitespace-nowrap px-2 py-1.5 text-left font-medium text-slate-600 dark:text-slate-300">
+                                            {h}
+                                        </th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 dark:divide-slate-700">
+                                {previewData.rows.map((row, i) => (
+                                    <tr key={i}>
+                                        {row.map((cell, j) => (
+                                            <td key={j} className="whitespace-nowrap px-2 py-1 text-slate-700 dark:text-slate-300">
+                                                {cell}
+                                            </td>
                                         ))}
                                     </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 bg-white dark:divide-slate-700 dark:bg-slate-800">
-                                    {previewData.rows.length === 0 ? (
-                                        <tr>
-                                            <td colSpan={previewData.headers.length || 1} className="px-3 py-6 text-center text-slate-500">
-                                                El archivo no tiene filas de datos.
-                                            </td>
-                                        </tr>
-                                    ) : (
-                                        previewData.rows.map((row, ri) => (
-                                            <tr key={ri}>
-                                                {row.map((cell, ci) => (
-                                                    <td
-                                                        key={ci}
-                                                        className="max-w-[14rem] truncate whitespace-nowrap px-3 py-2 text-slate-700 dark:text-slate-200"
-                                                        title={cell}
-                                                        data-label={previewData.headers[ci] ?? ''}
-                                                    >
-                                                        {cell || '—'}
-                                                    </td>
-                                                ))}
-                                            </tr>
-                                        ))
-                                    )}
-                                </tbody>
-                            </table>
-                        </div>
+                                ))}
+                            </tbody>
+                        </table>
                     </div>
                 ) : null}
             </Modal>
 
+            {/* Selector de campos de la plantilla */}
+            <Modal
+                open={tipoActivo !== null}
+                onClose={() => {
+                    setFieldPickerType(null);
+                    setFieldQuery('');
+                }}
+                sheetOnMobile
+                size="2xl"
+                title={`Campos de ${tipoActivo ? (types[tipoActivo] ?? tipoActivo) : ''}`}
+                description={
+                    tipoActivo
+                        ? `${effectiveCount(tipoActivo)} de ${fieldsOf(tipoActivo).length} campos · ${requiredOf(tipoActivo).length} obligatorios fijos`
+                        : undefined
+                }
+                footer={
+                    tipoActivo ? (
+                        <div className="flex w-full flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="min-h-11 sm:min-h-9"
+                                onClick={() => {
+                                    setPresetName('');
+                                    setPresetShared(false);
+                                    setSavePresetFor(tipoActivo);
+                                }}
+                            >
+                                Guardar preset
+                            </Button>
+                            <a
+                                href={templateHref(tipoActivo)}
+                                onClick={() => {
+                                    setFieldPickerType(null);
+                                    setFieldQuery('');
+                                }}
+                                className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 text-xs font-medium text-white hover:bg-indigo-700 sm:min-h-9 sm:w-auto"
+                            >
+                                <ArrowDownTrayIcon className="h-4 w-4" />
+                                Descargar plantilla · {effectiveCount(tipoActivo)} campos
+                            </a>
+                        </div>
+                    ) : null
+                }
+            >
+                {tipoActivo ? (
+                    <div className="space-y-4">
+                        {/* Obligatorios: franja fija, no casillas apagadas que confunden. */}
+                        <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-800/60 dark:bg-amber-950/30">
+                            <p className="text-[11px] font-medium uppercase tracking-wide text-amber-800 dark:text-amber-200">
+                                Siempre incluidos
+                            </p>
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                                {requiredOf(tipoActivo).map((f) => (
+                                    <span
+                                        key={f.key}
+                                        title={f.help ?? undefined}
+                                        className="rounded bg-white px-1.5 py-0.5 font-mono text-[11px] text-amber-900 dark:bg-amber-900/40 dark:text-amber-100"
+                                    >
+                                        {f.key}
+                                    </span>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* Presets */}
+                        <div className="-mx-1 flex gap-1.5 overflow-x-auto px-1 pb-1">
+                            {(['Mínimo', 'Recomendado', 'Completo'] as const).map((nombre) => (
+                                <button
+                                    key={nombre}
+                                    type="button"
+                                    onClick={() => aplicarPreset(tipoActivo, nombre)}
+                                    className={cn(
+                                        'shrink-0 rounded-full border px-3 py-1.5 text-xs',
+                                        activePreset[tipoActivo] === nombre
+                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-200'
+                                            : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300',
+                                    )}
+                                >
+                                    {nombre}
+                                </button>
+                            ))}
+                            {presetsOf(tipoActivo).map((preset) => (
+                                <span
+                                    key={preset.id}
+                                    className={cn(
+                                        'inline-flex shrink-0 items-center gap-1 rounded-full border py-1.5 pl-3 pr-1.5 text-xs',
+                                        activePreset[tipoActivo] === preset.name
+                                            ? 'border-indigo-500 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/50 dark:text-indigo-200'
+                                            : 'border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300',
+                                    )}
+                                >
+                                    <button type="button" onClick={() => aplicarPresetGuardado(tipoActivo, preset)}>
+                                        {preset.name}
+                                        {preset.is_shared ? ' · compartido' : ''}
+                                    </button>
+                                    {preset.is_own ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => borrarPreset(preset)}
+                                            aria-label={`Eliminar preset ${preset.name}`}
+                                            className="rounded-full p-0.5 text-slate-400 hover:text-rose-500"
+                                        >
+                                            <XMarkIcon className="h-3.5 w-3.5" />
+                                        </button>
+                                    ) : null}
+                                </span>
+                            ))}
+                            {activePreset[tipoActivo] === 'Personalizado' ? (
+                                <span className="shrink-0 rounded-full border border-slate-300 px-3 py-1.5 text-xs text-slate-500 dark:border-slate-600">
+                                    Personalizado
+                                </span>
+                            ) : null}
+                        </div>
+
+                        {/* Buscador */}
+                        <div className="relative">
+                            <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <input
+                                type="search"
+                                value={fieldQuery}
+                                onChange={(e) => setFieldQuery(e.target.value)}
+                                placeholder="Buscar campo…"
+                                className="h-11 w-full rounded-lg border border-slate-300 bg-white pl-8 pr-3 text-sm text-slate-700 sm:h-9 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                            />
+                        </div>
+
+                        {/* Opcionales, por grupo */}
+                        {camposVisibles.length === 0 ? (
+                            <p className="py-6 text-center text-sm text-slate-500">
+                                {optionalOf(tipoActivo).length === 0
+                                    ? 'Esta plantilla no tiene campos opcionales: todos son obligatorios.'
+                                    : 'Ningun campo coincide con la busqueda.'}
+                            </p>
+                        ) : (
+                            gruposDelTipo.map((grupo) => {
+                                const delGrupo = camposVisibles.filter((f) => groupOf(f.key) === grupo);
+                                if (delGrupo.length === 0) return null;
+
+                                const marcados = delGrupo.filter((f) => chosenOf(tipoActivo).includes(f.key)).length;
+                                const todosMarcados = marcados === delGrupo.length;
+
+                                return (
+                                    <div key={grupo}>
+                                        <div className="flex items-center justify-between gap-2 pb-1.5">
+                                            <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+                                                {grupo} <span className="font-normal">({marcados}/{delGrupo.length})</span>
+                                            </p>
+                                            {/*
+                                              * Solo si el grupo tiene opcionales; si no, seria
+                                              * un boton que no hace nada.
+                                              */}
+                                            <button
+                                                type="button"
+                                                onClick={() => toggleGroup(tipoActivo, grupo, !todosMarcados)}
+                                                className="text-[11px] font-medium text-indigo-600 hover:underline dark:text-indigo-400"
+                                            >
+                                                {todosMarcados ? 'Quitar grupo' : 'Añadir grupo'}
+                                            </button>
+                                        </div>
+                                        <div className="grid gap-1.5 sm:grid-cols-2">
+                                            {delGrupo.map((field) => {
+                                                const marcado = chosenOf(tipoActivo).includes(field.key);
+
+                                                return (
+                                                    <label
+                                                        key={field.key}
+                                                        className={cn(
+                                                            'flex min-h-11 cursor-pointer items-start gap-2 rounded-lg border p-2 text-xs',
+                                                            marcado
+                                                                ? 'border-indigo-200 bg-indigo-50/60 dark:border-indigo-800 dark:bg-indigo-950/40'
+                                                                : 'border-slate-200 dark:border-slate-700',
+                                                        )}
+                                                    >
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={marcado}
+                                                            onChange={() => toggleField(tipoActivo, field.key)}
+                                                            className="mt-0.5 h-5 w-5 shrink-0 rounded border-slate-300 text-indigo-600"
+                                                        />
+                                                        <span className="min-w-0">
+                                                            <code className="font-medium text-slate-800 dark:text-slate-100">{field.key}</code>
+                                                            {field.help ? (
+                                                                <span className="mt-0.5 block text-slate-500 dark:text-slate-400">{field.help}</span>
+                                                            ) : null}
+                                                        </span>
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                ) : null}
+            </Modal>
+
+            {/* Guardar preset */}
+            <Modal
+                open={savePresetFor !== null}
+                onClose={() => setSavePresetFor(null)}
+                title="Guardar seleccion de campos"
+                description="Con el mismo nombre se sobrescribe el preset anterior."
+                size="sm"
+                footer={
+                    <>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setSavePresetFor(null)}>
+                            Cancelar
+                        </Button>
+                        <Button type="button" size="sm" loading={savingPreset} onClick={guardarPreset}>
+                            Guardar
+                        </Button>
+                    </>
+                }
+            >
+                <div className="space-y-3">
+                    <label className="block text-xs text-slate-600 dark:text-slate-300">
+                        Nombre
+                        <input
+                            type="text"
+                            value={presetName}
+                            maxLength={60}
+                            onChange={(e) => setPresetName(e.target.value)}
+                            placeholder="Ej. Nomina basica"
+                            className="mt-1 h-10 w-full rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100"
+                        />
+                    </label>
+                    <label className="flex items-start gap-2 text-xs text-slate-600 dark:text-slate-300">
+                        <input
+                            type="checkbox"
+                            checked={presetShared}
+                            onChange={(e) => setPresetShared(e.target.checked)}
+                            className="mt-0.5 h-4 w-4 rounded border-slate-300 dark:border-slate-600"
+                        />
+                        Compartirlo con los demas super usuarios
+                    </label>
+                    {savePresetFor ? (
+                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                            Se guardaran {effectiveCount(savePresetFor)} campos de «{types[savePresetFor] ?? savePresetFor}».
+                        </p>
+                    ) : null}
+                </div>
+            </Modal>
+
             <ConfirmDialog
-                open={!!confirmDelete}
+                open={confirmDelete !== null}
                 onClose={() => setConfirmDelete(null)}
                 onConfirm={handleDelete}
                 title="Eliminar importacion"
                 message={
                     confirmDelete
-                        ? `Se borrara el registro «${confirmDelete.original_filename}» del historial y el archivo CSV almacenado. Los datos ya importados en el sistema no se revierten.`
+                        ? `Se eliminara el registro de «${confirmDelete.original_filename}» junto con su archivo y su reporte de errores. Los datos ya importados no se revierten.`
                         : ''
                 }
                 confirmText="Eliminar"

@@ -17,6 +17,7 @@ class DataImportProcessor
         protected BankImportStrategy $bankStrategy,
         protected OperationImportStrategy $operationStrategy,
         protected ReferenceImportStrategy $referenceStrategy,
+        protected ReferenceOperationImportStrategy $referenceOperationStrategy,
         protected EmployeeUserImportStrategy $employeeUserStrategy,
     ) {}
 
@@ -80,10 +81,14 @@ class DataImportProcessor
                     $success++;
                 } catch (RowImportException $e) {
                     $failed++;
-                    $errors[] = [
+                    // `field` y `value` solo entran cuando la estrategia los aporta: el
+                    // reporte no debe llevar claves nulas que el detalle tendria que filtrar.
+                    $errors[] = array_filter([
                         'line' => $e->lineNumber ?: $lineNumber,
                         'message' => $e->getMessage(),
-                    ];
+                        'field' => $e->field,
+                        'value' => is_scalar($e->value) ? (string) $e->value : null,
+                    ], fn ($v) => $v !== null);
                 } catch (Throwable $e) {
                     $failed++;
                     $errors[] = [
@@ -172,6 +177,7 @@ class DataImportProcessor
             DataImportBatch::TYPE_BANKS => $this->bankStrategy,
             DataImportBatch::TYPE_OPERATIONS => $this->operationStrategy,
             DataImportBatch::TYPE_REFERENCES => $this->referenceStrategy,
+            DataImportBatch::TYPE_REFERENCE_OPERATIONS => $this->referenceOperationStrategy,
             DataImportBatch::TYPE_EMPLOYEES_USERS => $this->employeeUserStrategy,
             default => throw new \InvalidArgumentException('Tipo de importacion no soportado.'),
         };

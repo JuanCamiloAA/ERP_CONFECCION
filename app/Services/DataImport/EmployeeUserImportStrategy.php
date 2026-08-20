@@ -3,6 +3,7 @@
 namespace App\Services\DataImport;
 
 use App\Models\Bank;
+use App\Models\DataImportBatch;
 use App\Models\Employee;
 use App\Models\Role;
 use App\Models\User;
@@ -12,6 +13,8 @@ use Illuminate\Support\Str;
 
 class EmployeeUserImportStrategy implements ImportStrategyInterface
 {
+    public function __construct(private readonly ImportFieldCatalog $catalog) {}
+
     public function processRow(array $row, int $lineNumber, DataImportContext $ctx): void
     {
         $companyNit = trim((string) ($row['company_nit'] ?? ''));
@@ -20,18 +23,18 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
         $documentNumber = trim((string) ($row['document_number'] ?? ''));
 
         if ($companyNit === '') {
-            throw new RowImportException('Falta company_nit.', $lineNumber);
+            throw new RowImportException('Falta company_nit.', $lineNumber, 'company_nit');
         }
         if ($firstName === '' || $lastName === '') {
-            throw new RowImportException('Falta first_name o last_name.', $lineNumber);
+            throw new RowImportException('Falta first_name o last_name.', $lineNumber, $firstName === '' ? 'first_name' : 'last_name');
         }
         if ($documentNumber === '') {
-            throw new RowImportException('Falta document_number.', $lineNumber);
+            throw new RowImportException('Falta document_number.', $lineNumber, 'document_number');
         }
 
         $companyId = $ctx->resolveCompanyId($companyNit);
         if (! $companyId) {
-            throw new RowImportException('Empresa no encontrada para company_nit.', $lineNumber);
+            throw new RowImportException('Empresa no encontrada para company_nit.', $lineNumber, 'company_nit', $companyNit);
         }
 
         $documentType = strtoupper(trim((string) ($row['document_type'] ?? 'CC')));
@@ -40,7 +43,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
         }
         $allowedDocs = ['CC', 'CE', 'TI', 'PAS', 'NIT'];
         if (! in_array($documentType, $allowedDocs, true)) {
-            throw new RowImportException('document_type invalido.', $lineNumber);
+            throw new RowImportException('document_type invalido.', $lineNumber, 'document_type', $documentType);
         }
 
         $payrollMode = strtolower(trim((string) ($row['payroll_mode'] ?? Employee::PAYROLL_MODE_OPERATIONS)));
@@ -53,7 +56,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
         if ($payrollMode === Employee::PAYROLL_MODE_FIXED_DAILY) {
             $ds = $row['daily_salary'] ?? null;
             if ($ds === null || trim((string) $ds) === '') {
-                throw new RowImportException('daily_salary obligatorio si payroll_mode es fixed_daily.', $lineNumber);
+                throw new RowImportException('daily_salary obligatorio si payroll_mode es fixed_daily.', $lineNumber, 'daily_salary', $ds);
             }
             $dailySalary = (float) str_replace(',', '.', (string) $ds);
         }
@@ -65,7 +68,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
             $baseSalary = (float) str_replace(',', '.', (string) $baseSalaryRaw);
         }
         if ($payrollMode === Employee::PAYROLL_MODE_HOURLY_LEGAL && $baseSalary <= 0) {
-            throw new RowImportException('base_salary obligatorio (> 0) si payroll_mode es hourly_legal.', $lineNumber);
+            throw new RowImportException('base_salary obligatorio (> 0) si payroll_mode es hourly_legal.', $lineNumber, 'base_salary', $baseSalaryRaw);
         }
 
         $ordinaryHoursPerDay = 8.0;
@@ -84,13 +87,13 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
         $anyBank = $bankName !== '' || $bankAccount !== '' || $bankKey !== '';
         if ($anyBank) {
             if ($bankName === '' || $bankAccount === '' || $bankKey === '') {
-                throw new RowImportException('Datos bancarios: indique bank_name, bank_account_number y bank_key juntos.', $lineNumber);
+                throw new RowImportException('Datos bancarios: indique bank_name, bank_account_number y bank_key juntos.', $lineNumber, 'bank_name', $bankName);
             }
             if (! preg_match('/^[0-9]+$/', $bankAccount)) {
-                throw new RowImportException('bank_account_number solo digitos.', $lineNumber);
+                throw new RowImportException('bank_account_number solo digitos.', $lineNumber, 'bank_account_number', $bankAccount);
             }
             if (! preg_match('/^[0-9A-Za-z]+$/', $bankKey)) {
-                throw new RowImportException('bank_key solo letras y numeros.', $lineNumber);
+                throw new RowImportException('bank_key solo letras y numeros.', $lineNumber, 'bank_key', $bankKey);
             }
         }
 
@@ -103,7 +106,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
                 ->whereRaw('LOWER(name) = ?', [mb_strtolower($bankName)])
                 ->first();
             if (! $bank) {
-                throw new RowImportException('Banco no encontrado o inactivo para bank_name.', $lineNumber);
+                throw new RowImportException('Banco no encontrado o inactivo para bank_name.', $lineNumber, 'bank_name', $bankName);
             }
             $bankId = (int) $bank->id;
         }
@@ -114,13 +117,13 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
 
         if ($createUser) {
             if ($userEmail === '' || ! filter_var($userEmail, FILTER_VALIDATE_EMAIL)) {
-                throw new RowImportException('user_email obligatorio y valido si create_user=1.', $lineNumber);
+                throw new RowImportException('user_email obligatorio y valido si create_user=1.', $lineNumber, 'user_email', $userEmail);
             }
             if ($roleName === '') {
-                throw new RowImportException('role_name obligatorio si create_user=1.', $lineNumber);
+                throw new RowImportException('role_name obligatorio si create_user=1.', $lineNumber, 'role_name');
             }
             if (mb_strtolower($roleName) === 'super_admin') {
-                throw new RowImportException('No se puede asignar rol super_admin por importacion.', $lineNumber);
+                throw new RowImportException('No se puede asignar rol super_admin por importacion.', $lineNumber, 'role_name', $roleName);
             }
         }
 
@@ -131,7 +134,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
             ->first();
 
         if ($employee && ! $ctx->employeeUpdateExisting) {
-            throw new RowImportException('Empleado ya existe (active update_existing=1 para actualizar).', $lineNumber);
+            throw new RowImportException('Empleado ya existe (active update_existing=1 para actualizar).', $lineNumber, 'document_number', $documentNumber);
         }
 
         if ($createUser) {
@@ -139,7 +142,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
             if ($existingUser) {
                 $sameEmployee = $employee && (int) $existingUser->employee_id === (int) $employee->id;
                 if (! $sameEmployee) {
-                    throw new RowImportException('El correo user_email ya esta en uso.', $lineNumber);
+                    throw new RowImportException('El correo user_email ya esta en uso.', $lineNumber, 'user_email', $userEmail);
                 }
             }
         }
@@ -166,7 +169,12 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
             $row,
             $lineNumber,
         ) {
-            $payload = [
+            // Lo que el catalogo saque de la tabla va debajo; encima manda lo que esta
+            // clase arma con reglas propias (modo de nomina, banco, correo…). Asi una
+            // columna nueva se importa sola sin pisar nada de lo ya pensado.
+            $delCatalogo = $this->catalog->attributesFromRow(DataImportBatch::TYPE_EMPLOYEES_USERS, $row);
+
+            $payload = array_merge($delCatalogo, [
                 'first_name' => $firstName,
                 'last_name' => $lastName,
                 'document_type' => $documentType,
@@ -178,7 +186,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
                 'base_salary' => $baseSalary,
                 'payroll_mode' => $payrollMode,
                 'daily_salary' => $payrollMode === Employee::PAYROLL_MODE_FIXED_DAILY ? $dailySalary : null,
-                'minutes_per_full_workday' => 480,
+                'minutes_per_full_workday' => $delCatalogo['minutes_per_full_workday'] ?? 480,
                 'ordinary_hours_per_day' => $ordinaryHoursPerDay,
                 'is_exempt_from_overtime' => $isExemptFromOvertime,
                 'scheduled_work_days' => Employee::DEFAULT_SCHEDULED_WORK_DAYS,
@@ -187,7 +195,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
                 'bank_key' => $bankId ? $bankKey : null,
                 'is_active' => $this->parseBool($row['is_active'] ?? null, true),
                 'notes' => $this->nullableNotes($row['notes'] ?? null),
-            ];
+            ]);
 
             if ($employee) {
                 $employee->update($payload);
@@ -210,7 +218,7 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
                         ->first();
 
                 if (! $role) {
-                    throw new RowImportException('Rol no encontrado para la empresa: '.$roleName, $lineNumber);
+                    throw new RowImportException('Rol no encontrado para la empresa: '.$roleName, $lineNumber, 'role_name', $roleName);
                 }
 
                 $passwordPlain = trim((string) ($row['user_password'] ?? ''));
