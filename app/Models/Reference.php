@@ -72,7 +72,7 @@ class Reference extends Model
     }
 
     /**
-     * Costo operacional unitario: suma de los precios de las lineas activas de la referencia.
+     * Costo operacional unitario: suma de los precios del detalle de operaciones.
      *
      * Se lee de la columna, que se mantiene al dia con refreshOperationalCost(); asi el
      * listado de referencias muestra la cifra sin sumar el detalle de cada una.
@@ -85,19 +85,22 @@ class Reference extends Model
     /**
      * Recalcula y guarda el costo operacional unitario a partir del detalle de operaciones.
      *
-     * Hay que llamarlo cada vez que cambian esas lineas — agregar, cambiar el precio,
-     * activar o desactivar, quitar —, para que el comparativo economico refleje lo que
+     * Hay que llamarlo cuando cambia que operaciones lleva la referencia —agregar, quitar
+     * o cambiarle el precio a una linea—, para que el comparativo economico refleje lo que
      * hoy cuesta producir una unidad y no lo que costaba al crear la referencia.
      *
-     * Solo suman las lineas activas: una inactiva no se puede producir (el registro de
-     * produccion solo ofrece las activas), asi que nunca llega a pagarse.
+     * Suman TODAS las lineas, activas o no. Una linea se inactiva cuando su produccion
+     * completo el lote (ver App\Support\ReferenceLotCompletion, que al cerrar la
+     * referencia inactiva la referencia y todo su detalle) o, excepcionalmente, a mano
+     * desde el formulario de la linea. En ninguno de los dos casos la prenda dejo de
+     * costar eso: filtrar por activas dejaba en cero el costo de toda referencia cerrada.
      *
      * El nombre de la columna conserva el sufijo `_fixed` de cuando el valor era una foto
      * del momento de la creacion; hoy es un valor derivado.
      */
     public function refreshOperationalCost(): void
     {
-        $suma = (float) $this->referenceOperations()->where('is_active', true)->sum('price');
+        $suma = (float) $this->referenceOperations()->sum('price');
 
         $this->update(['operational_cost_per_unit_fixed' => round($suma, 2)]);
     }

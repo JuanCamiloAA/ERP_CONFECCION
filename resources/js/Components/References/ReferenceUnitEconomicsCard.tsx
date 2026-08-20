@@ -8,7 +8,7 @@ import { cn, formatCurrency } from '@/lib/utils';
 export interface ReferenceUnitEconomicsCardProps {
     /** Valor unitario que reciben por la referencia (puede ser 0 si aún no está cargado). */
     paymentPerUnit: number;
-    /** Costo operacional unitario: suma de precios de las operaciones activas de la referencia. */
+    /** Costo operacional unitario: suma de precios del detalle de operaciones de la referencia. */
     productionCostPerUnit: number;
     /** Hay al menos una operacion vinculada (pivot). */
     hasOperations: boolean;
@@ -53,7 +53,7 @@ export function ReferenceUnitEconomicsCard({
         <Card className={className}>
             <CardHeader
                 title="Comparativo economico"
-                description="El costo operacional unitario es la suma de los precios de las operaciones activas de la referencia. Se recalcula al agregar, editar, activar o desactivar una linea del detalle."
+                description="El costo operacional unitario es la suma de los precios del detalle de operaciones. Se recalcula al agregar, quitar o cambiar el precio de una linea; inactivar una operacion no lo altera, porque la prenda igual costo eso."
             />
             <div className="mt-4 space-y-4">
                 {paymentIncomplete && (
@@ -79,7 +79,7 @@ export function ReferenceUnitEconomicsCard({
                     </p>
                 ) : hasOperations && productionCostPerUnit === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Costo operacional unitario: 0. Las operaciones del detalle suman 0, o todas estan inactivas.
+                        Costo operacional unitario: 0. Los precios del detalle de operaciones suman 0.
                     </p>
                 ) : null}
 
