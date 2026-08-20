@@ -192,6 +192,10 @@ export default function DataImportsIndex({
     /** Archivo elegido por fila, venga del selector o de arrastrarlo encima. */
     const [picked, setPicked] = useState<Record<string, File | null>>({});
     const [dragOver, setDragOver] = useState<string | null>(null);
+    /** Tarjetas «en espera» que el usuario desplego a mano para cargar igual. */
+    const [expandidas, setExpandidas] = useState<string[]>([]);
+    const [historialAbierto, setHistorialAbierto] = useState(false);
+    const [plantillasAbierto, setPlantillasAbierto] = useState(false);
 
     /**
      * Campos elegidos por tipo. Arranca con todos marcados, que es la plantilla completa
@@ -461,6 +465,115 @@ export default function DataImportsIndex({
         return { label: 'Fallido', variant: 'danger', hint: fatal ?? detalle(ultimo) };
     };
 
+    /* ------------------------------------------------------- estado movil */
+
+    /**
+     * Un paso cuenta como cumplido cuando su ultima importacion termino. De aqui sale
+     * cual es la entidad accionable y cuales se muestran en espera.
+     */
+    const pasoCumplido = (key: string): boolean => lastOf(key)?.status === 'completed';
+
+    /** Primer paso de la lista que aun no se ha importado; es el que se destaca. */
+    const indiceAccionable = TYPE_KEYS.findIndex((key) => !pasoCumplido(key));
+
+    type EstadoTarjeta = 'importado' | 'errores' | 'listo' | 'listo-local' | 'sin-archivo' | 'en-espera' | 'procesando' | 'subiendo' | 'fallido';
+
+    /**
+     * En que esta cada entidad. En movil decide que se dibuja: la tarjeta solo muestra
+     * los controles que aplican a su estado, en vez de repetirlos las seis veces.
+     */
+    const estadoTarjeta = (key: TypeKey, indice: number): EstadoTarjeta => {
+        if (uploadingType === key) return 'subiendo';
+
+        const ultimo = lastOf(key);
+        if (ultimo && processingBatchId === ultimo.id) return 'procesando';
+        if (picked[key]) return 'listo-local';
+
+        if (ultimo) {
+            if (ultimo.status === 'pending') return 'listo';
+            if (ultimo.status === 'processing') return 'procesando';
+            if (ultimo.status === 'failed') return 'fallido';
+
+            return ultimo.rows_failed > 0 ? 'errores' : 'importado';
+        }
+
+        // Sin lote: en espera si algun paso anterior no se ha importado. Es solo un aviso
+        // visual; al tocar la tarjeta se despliega y se puede cargar igual, porque los
+        // datos pueden existir ya en la base sin haber pasado por aqui.
+        return indice > 0 && indice > indiceAccionable && !expandidas.includes(key) ? 'en-espera' : 'sin-archivo';
+    };
+
+    /** Paso del que se esta esperando; solo tiene sentido en «en-espera». */
+    const pasoQueFalta = (indice: number): number =>
+        TYPE_KEYS.slice(0, indice).findIndex((key) => !pasoCumplido(key)) + 1;
+
+    const horaDe = (iso: string): string =>
+        new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    /** El unico indicador de estado de la tarjeta, arriba a la derecha. */
+    const indicador = (key: TypeKey, indice: number): { texto: string; clase: string } => {
+        const estado = estadoTarjeta(key, indice);
+        const ultimo = lastOf(key);
+
+        switch (estado) {
+            case 'importado':
+                return { texto: `${ultimo?.rows_success ?? 0} OK`, clase: 'text-emerald-600 dark:text-emerald-400' };
+            case 'errores':
+                return {
+                    texto: `${ultimo?.rows_failed ?? 0} ${ultimo?.rows_failed === 1 ? 'error' : 'errores'}`,
+                    clase: 'text-amber-600 dark:text-amber-400',
+                };
+            case 'listo':
+            case 'listo-local':
+                return { texto: 'Listo', clase: 'text-indigo-600 dark:text-indigo-400' };
+            case 'procesando':
+                return { texto: 'Procesando', clase: 'text-indigo-600 dark:text-indigo-400' };
+            case 'subiendo':
+                return { texto: 'Subiendo', clase: 'text-indigo-600 dark:text-indigo-400' };
+            case 'fallido':
+                return { texto: 'Fallido', clase: 'text-rose-600 dark:text-rose-400' };
+            case 'en-espera':
+                return { texto: `Tras el paso ${pasoQueFalta(indice)}`, clase: 'text-slate-400 dark:text-slate-500' };
+            default:
+                return { texto: 'Sin archivo', clase: 'text-slate-400 dark:text-slate-500' };
+        }
+    };
+
+    /** Linea de contexto: una sola, y sin repetir lo que ya dice el indicador. */
+    const contexto = (key: TypeKey, indice: number): string => {
+        const estado = estadoTarjeta(key, indice);
+        const ultimo = lastOf(key);
+
+        if (estado === 'importado' && ultimo) return `${ultimo.original_filename} · importado ${horaDe(ultimo.created_at)}`;
+        if (estado === 'errores' && ultimo) return `${ultimo.rows_success} filas importadas · ${ultimo.rows_failed} rechazadas`;
+        if (estado === 'fallido' && ultimo) {
+            return typeof ultimo.meta?.fatal_error === 'string' ? ultimo.meta.fatal_error : 'La importacion no pudo completarse.';
+        }
+
+        return DEPENDS[key];
+    };
+
+    /** Chip del archivo aun sin procesar; no aparece en ningun otro estado. */
+    const chipArchivo = (key: TypeKey, indice: number): string | null => {
+        const estado = estadoTarjeta(key, indice);
+
+        if (estado === 'listo-local') {
+            const f = picked[key] as File;
+
+            return `${f.name} · ${formatBytes(f.size)}`;
+        }
+
+        if (estado === 'listo') {
+            const ultimo = lastOf(key);
+            if (!ultimo) return null;
+            const filas = typeof ultimo.meta?.rows_detected === 'number' ? ultimo.meta.rows_detected : null;
+
+            return filas !== null ? `${ultimo.original_filename} · ${filas} filas` : ultimo.original_filename;
+        }
+
+        return null;
+    };
+
     /* ------------------------------------------------------------ historial */
 
     const filtrosActuales = useMemo(
@@ -612,9 +725,29 @@ export default function DataImportsIndex({
             <form
                 key={key}
                 onSubmit={submitImport(key)}
-                className="border-b border-slate-200 p-4 last:border-b-0 dark:border-slate-700"
+                className="lg:border-b lg:border-slate-200 lg:p-4 lg:last:border-b-0 dark:lg:border-slate-700"
             >
-                <div className="grid gap-3 lg:grid-cols-12 lg:items-start">
+                {/*
+                  * Un solo input por entidad, fuera de las dos vistas: en escritorio lo
+                  * dispara el area de arrastre y en movil el boton «Subir CSV».
+                  * Sin `required`: un archivo soltado encima no lo llena, y la
+                  * comprobacion la hace submitImport antes de enviar.
+                  */}
+                <input
+                    id={`file-${key}`}
+                    type="file"
+                    name="file"
+                    accept=".csv"
+                    className="sr-only"
+                    onChange={(e) => {
+                        aceptarArchivo(key, e.target.files?.[0]);
+                        e.target.value = '';
+                    }}
+                />
+
+                <div className="lg:hidden">{tarjetaEntidad(key, indice)}</div>
+
+                <div className="hidden gap-3 lg:grid lg:grid-cols-12 lg:items-start">
                     {/* Entidad */}
                     <div className="lg:col-span-3">
                         <div className="flex items-start gap-2">
@@ -650,6 +783,7 @@ export default function DataImportsIndex({
                     {/* Archivo */}
                     <div className="space-y-2 lg:col-span-4">
                         <label
+                            htmlFor={`file-${key}`}
                             onDragOver={(e) => {
                                 e.preventDefault();
                                 setDragOver(key);
@@ -663,20 +797,6 @@ export default function DataImportsIndex({
                                     : 'border-slate-300 text-slate-500 hover:border-slate-400 dark:border-slate-600 dark:text-slate-400',
                             )}
                         >
-                            {/*
-                              * Sin `required`: un archivo soltado encima no llena el input.
-                              * La comprobacion la hace submitImport antes de enviar.
-                              */}
-                            <input
-                                type="file"
-                                name="file"
-                                accept=".csv"
-                                className="sr-only"
-                                onChange={(e) => {
-                                    aceptarArchivo(key, e.target.files?.[0]);
-                                    e.target.value = '';
-                                }}
-                            />
                             {archivo ? (
                                 <>
                                     <DocumentTextIcon className="h-4 w-4 shrink-0 text-indigo-500" />
@@ -758,6 +878,160 @@ export default function DataImportsIndex({
         );
     };
 
+    /**
+     * Tarjeta de una entidad en movil.
+     *
+     * A diferencia de la fila de escritorio, no apila todos los controles: cada estado
+     * dibuja solo lo suyo. Las plantillas no viven aqui —se abren en su propia hoja—,
+     * asi que la tarjeta se lee de un vistazo y nunca compiten dos acciones.
+     */
+    const tarjetaEntidad = (key: TypeKey, indice: number) => {
+        const estado = estadoTarjeta(key, indice);
+        const ultimo = lastOf(key);
+        const marca = indicador(key, indice);
+        const chip = chipArchivo(key, indice);
+        const enEspera = estado === 'en-espera';
+        const esAccionable = indice === indiceAccionable;
+        const importado = estado === 'importado';
+        const irAlDetalle = () => ultimo && router.visit(route('super-admin.data-imports.show', ultimo.id));
+
+        const circulo = importado
+            ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+            : esAccionable && !enEspera
+              ? 'bg-indigo-600 text-white'
+              : 'bg-slate-100 text-slate-500 dark:bg-slate-700 dark:text-slate-400';
+
+        const botonCampos = (fantasma: boolean) => (
+            <button
+                type="button"
+                onClick={() => setFieldPickerType(key)}
+                className={cn(
+                    'min-h-11 shrink-0 px-3 text-[13px]',
+                    fantasma
+                        ? 'text-indigo-600 dark:text-indigo-400'
+                        : 'rounded-lg border border-slate-300 text-slate-600 dark:border-slate-600 dark:text-slate-300',
+                )}
+            >
+                {fantasma ? 'Campos' : `Campos ${effectiveCount(key)}/${fieldsOf(key).length}`}
+            </button>
+        );
+
+        return (
+            <div
+                key={key}
+                data-entidad={key}
+                onClick={importado ? irAlDetalle : enEspera ? () => setExpandidas((e) => [...e, key]) : undefined}
+                onKeyDown={(e) => {
+                    if (!(importado || enEspera) || (e.key !== 'Enter' && e.key !== ' ')) return;
+                    e.preventDefault();
+                    if (importado) irAlDetalle();
+                    else setExpandidas((x) => [...x, key]);
+                }}
+                role={importado || enEspera ? 'button' : undefined}
+                tabIndex={importado || enEspera ? 0 : undefined}
+                className={cn(
+                    'rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800',
+                    (importado || enEspera) && 'cursor-pointer',
+                    enEspera && 'opacity-55',
+                )}
+            >
+                <div className="flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                        <span
+                            className={cn(
+                                'flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full text-[11px] font-semibold',
+                                circulo,
+                            )}
+                        >
+                            {importado ? '✓' : indice + 1}
+                        </span>
+                        <span className="truncate text-[15px] font-medium text-slate-800 dark:text-slate-100">{types[key] ?? key}</span>
+                    </div>
+                    <span className={cn('shrink-0 text-[12px] font-medium', marca.clase)}>{marca.texto}</span>
+                </div>
+
+                <p className="mt-2 text-[12px] leading-snug text-slate-500 dark:text-slate-400">{contexto(key, indice)}</p>
+
+                {chip ? (
+                    <p className="mt-2.5 truncate rounded-md bg-slate-100 px-2 py-1.5 text-[12px] text-slate-700 dark:bg-slate-900 dark:text-slate-200">
+                        {chip}
+                    </p>
+                ) : null}
+
+                {/*
+                  * Las opciones del tipo solo cuando hay archivo elegido y sin subir: van
+                  * con la carga, y cambiarlas despues no tendria efecto.
+                  */}
+                {estado === 'listo-local' && opcionesDelTipo(key) ? <div className="mt-2.5">{opcionesDelTipo(key)}</div> : null}
+
+                {importado || enEspera ? null : (
+                    <div className="mt-2.5 flex items-center gap-2">
+                        {estado === 'errores' && ultimo ? (
+                            <Link
+                                href={route('super-admin.data-imports.show', ultimo.id)}
+                                className="flex min-h-11 w-full items-center justify-center rounded-lg border border-amber-300 text-[13px] font-medium text-amber-700 dark:border-amber-700 dark:text-amber-300"
+                            >
+                                Ver errores
+                            </Link>
+                        ) : estado === 'listo-local' ? (
+                            <>
+                                <Button
+                                    type="submit"
+                                    size="sm"
+                                    className="min-h-11 flex-1"
+                                    loading={uploadingType === key}
+                                    disabled={uploadingType !== null}
+                                >
+                                    Cargar
+                                </Button>
+                                {botonCampos(false)}
+                            </>
+                        ) : (estado === 'listo' || estado === 'fallido') && ultimo ? (
+                            <>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="success"
+                                    className="min-h-11 flex-1"
+                                    loading={processingBatchId === ultimo.id}
+                                    disabled={processingBatchId !== null}
+                                    onClick={() => runProcess(ultimo.id)}
+                                >
+                                    {estado === 'fallido' ? 'Reintentar' : 'Procesar'}
+                                </Button>
+                                {estado === 'fallido' ? (
+                                    <Link
+                                        href={route('super-admin.data-imports.show', ultimo.id)}
+                                        className="flex min-h-11 shrink-0 items-center rounded-lg border border-slate-300 px-3 text-[13px] text-slate-600 dark:border-slate-600 dark:text-slate-300"
+                                    >
+                                        Detalle
+                                    </Link>
+                                ) : (
+                                    botonCampos(false)
+                                )}
+                            </>
+                        ) : estado === 'procesando' || estado === 'subiendo' ? (
+                            <Button type="button" size="sm" className="min-h-11 w-full" loading disabled>
+                                {estado === 'subiendo' ? 'Subiendo…' : 'Procesando…'}
+                            </Button>
+                        ) : (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => document.getElementById('file-' + key)?.click()}
+                                    className="min-h-11 flex-1 rounded-lg border border-slate-300 text-[13px] font-medium text-slate-700 dark:border-slate-600 dark:text-slate-200"
+                                >
+                                    Subir CSV
+                                </button>
+                                {botonCampos(true)}
+                            </>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    };
+
     /* --------------------------------------------------------------- render */
 
     const tipoActivo = fieldPickerType;
@@ -780,11 +1054,18 @@ export default function DataImportsIndex({
             <div className="space-y-6">
                 <PageHeader
                     title="Importacion masiva (CSV)"
-                    description="Descarga la plantilla, sube el archivo y pulsa «Procesar». Cada entidad se carga en el orden numerado."
+                    description="Sigue el orden: cada paso necesita el anterior."
+                    action={
+                        <Button type="button" variant="secondary" size="sm" className="min-h-11 lg:min-h-9" onClick={() => setPlantillasAbierto(true)}>
+                            <ArrowDownTrayIcon className="mr-1.5 h-4 w-4" />
+                            Plantillas
+                        </Button>
+                    }
                 />
 
                 {/* Formato y orden */}
-                <section className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-2 dark:border-slate-700 dark:bg-slate-800">
+                {/* En movil esto vive en la hoja de plantillas: la lista numerada ya dice el orden. */}
+                <section className="hidden gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid lg:grid-cols-2 dark:border-slate-700 dark:bg-slate-800">
                     <div>
                         <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
                             Formato del archivo
@@ -813,19 +1094,13 @@ export default function DataImportsIndex({
                 </section>
 
                 {/* Entidades */}
-                <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-800">
-                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 dark:border-slate-700">
+                <section className="space-y-2.5 lg:space-y-0 lg:overflow-hidden lg:rounded-xl lg:border lg:border-slate-200 lg:bg-white lg:shadow-sm dark:lg:border-slate-700 dark:lg:bg-slate-800">
+                    <div className="hidden flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-4 py-3 lg:flex dark:border-slate-700">
                         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Entidades</h2>
-                        <a
-                            href={zipHref()}
-                            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-medium text-indigo-800 hover:bg-indigo-100 dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-100"
-                        >
-                            <ArrowDownTrayIcon className="h-4 w-4" />
-                            Paquete ZIP + LEEME
-                        </a>
+                        <span className="text-xs text-slate-500 dark:text-slate-400">Las plantillas y el paquete ZIP estan en «Plantillas».</span>
                     </div>
 
-                    {/* Cabecera solo en escritorio; en movil cada fila ya se lee sola. */}
+                    {/* Cabecera solo en escritorio; en movil cada tarjeta se lee sola. */}
                     <div className="hidden grid-cols-12 gap-3 border-b border-slate-200 px-4 py-2 text-[11px] font-medium uppercase tracking-wide text-slate-500 lg:grid dark:border-slate-700 dark:text-slate-400">
                         <span className="col-span-3">Entidad</span>
                         <span className="col-span-2">Plantilla</span>
@@ -841,7 +1116,15 @@ export default function DataImportsIndex({
                 <section className="space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                         <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">Historial</h2>
-                        <div className="flex flex-wrap items-center gap-2">
+                        {/* En movil no se lista de entrada: se abre a peticion. */}
+                        <button
+                            type="button"
+                            onClick={() => setHistorialAbierto((v) => !v)}
+                            className="min-h-11 text-[13px] font-medium text-indigo-600 lg:hidden dark:text-indigo-400"
+                        >
+                            {historialAbierto ? 'Ocultar historial' : 'Ver historial'}
+                        </button>
+                        <div className={cn('flex-wrap items-center gap-2 lg:flex', historialAbierto ? 'flex w-full' : 'hidden')}>
                             <div className="relative">
                                 <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                                 <input
@@ -888,6 +1171,7 @@ export default function DataImportsIndex({
                         </div>
                     </div>
 
+                    <div className={cn('space-y-3 lg:block', historialAbierto ? 'block' : 'hidden')}>
                     <Table>
                         <TableHead>
                             <TableRow>
@@ -988,8 +1272,72 @@ export default function DataImportsIndex({
                         </TableBody>
                     </Table>
                     <Pagination links={batches.links} from={batches.from} to={batches.to} total={batches.total} />
+                    </div>
                 </section>
             </div>
+
+            {/*
+              * Hoja de plantillas: el unico acceso a las descargas en movil, para que la
+              * lista de entidades no repita «Descargar CSV» y «Campos» seis veces.
+              */}
+            <Modal
+                open={plantillasAbierto}
+                onClose={() => setPlantillasAbierto(false)}
+                sheetOnMobile
+                size="lg"
+                title="Plantillas"
+                description="Descarga la de cada entidad, o el paquete completo."
+                footer={
+                    <a
+                        href={zipHref()}
+                        className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50 px-3 text-xs font-medium text-indigo-800 hover:bg-indigo-100 sm:min-h-9 sm:w-auto dark:border-indigo-800 dark:bg-indigo-950 dark:text-indigo-100"
+                    >
+                        <ArrowDownTrayIcon className="h-4 w-4" />
+                        Paquete ZIP + LEEME
+                    </a>
+                }
+            >
+                <div className="space-y-3">
+                    <div className="flex flex-wrap gap-1.5">
+                        {['UTF-8', 'Separador: coma', 'snake_case', 'YYYY-MM-DD', `Máx. ${formatBytes(maxBytes)}`].map(chipFormato)}
+                    </div>
+
+                    <div className="space-y-2">
+                        {TYPE_KEYS.map((key, i) => (
+                            <div
+                                key={key}
+                                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 p-2 dark:border-slate-700"
+                            >
+                                <div className="flex min-w-0 items-center gap-2">
+                                    <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-500 dark:bg-slate-700 dark:text-slate-400">
+                                        {i + 1}
+                                    </span>
+                                    <span className="truncate text-sm text-slate-800 dark:text-slate-100">{types[key] ?? key}</span>
+                                </div>
+                                <div className="flex shrink-0 items-center gap-1">
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setPlantillasAbierto(false);
+                                            setFieldPickerType(key);
+                                        }}
+                                        className="min-h-11 rounded-lg px-2 text-[12px] text-indigo-600 sm:min-h-9 dark:text-indigo-400"
+                                    >
+                                        Campos {effectiveCount(key)}/{fieldsOf(key).length}
+                                    </button>
+                                    <a
+                                        href={templateHref(key)}
+                                        aria-label={`Descargar plantilla de ${types[key] ?? key}`}
+                                        className="flex min-h-11 min-w-11 items-center justify-center rounded-lg border border-slate-300 sm:min-h-9 sm:min-w-9 dark:border-slate-600"
+                                    >
+                                        <ArrowDownTrayIcon className="h-4 w-4 text-slate-600 dark:text-slate-300" />
+                                    </a>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </Modal>
 
             {/* Vista previa del CSV */}
             <Modal
