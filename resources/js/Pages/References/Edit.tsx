@@ -111,8 +111,8 @@ export default function ReferenceEdit({ reference, comparison }: Props) {
                     hasOperations={comparison.has_operations}
                     currency={comparison.currency}
                     paymentIncomplete={paymentIncompleteUi}
-                    operationalLotQtyAtCostFix={comparison.operational_lot_qty_at_cost_fix}
-                    totalOperationalAtCreation={comparison.total_operational_at_creation}
+                    operationalLotQty={comparison.operational_lot_qty}
+                    totalOperational={comparison.total_operational}
                 />
             </form>
         </AppLayout>

@@ -253,8 +253,10 @@ export interface ReferenceEconomicsComparison {
     has_operations: boolean;
     payment_per_unit_incomplete: boolean;
     currency: string;
-    operational_lot_qty_at_cost_fix: number;
-    total_operational_at_creation: number;
+    /** Lote vigente de la referencia. */
+    operational_lot_qty: number;
+    /** Costo operacional del lote completo, al costo unitario de hoy. */
+    total_operational: number;
 }
 
 export interface Reference {
@@ -264,9 +266,9 @@ export interface Reference {
     name: string;
     /** Valor unitario que reciben por la prenda (pago del cliente); puede ser null en datos antiguos. */
     payment_per_unit?: string | number | null;
-    /** Costo operacional unitario fijado al crear (suma precios operaciones al guardar). */
+    /** Costo operacional unitario: suma de precios de las operaciones activas, al dia. */
     operational_cost_per_unit_fixed?: string | number | null;
-    /** Unidades del lote registradas al fijar el costo operacional. */
+    /** Unidades del lote registradas al crear; historico, ya no alimenta el comparativo. */
     operational_lot_qty_at_cost_fix?: number | null;
     description: string | null;
     image: string | null;

@@ -8,7 +8,7 @@ import { cn, formatCurrency } from '@/lib/utils';
 export interface ReferenceUnitEconomicsCardProps {
     /** Valor unitario que reciben por la referencia (puede ser 0 si aún no está cargado). */
     paymentPerUnit: number;
-    /** Costo operacional unitario fijado al crear la referencia (no se recalcula al activar/desactivar operaciones). */
+    /** Costo operacional unitario: suma de precios de las operaciones activas de la referencia. */
     productionCostPerUnit: number;
     /** Hay al menos una operacion vinculada (pivot). */
     hasOperations: boolean;
@@ -16,9 +16,10 @@ export interface ReferenceUnitEconomicsCardProps {
     /** true si en BD el precio de pago es null (referencia legacy). */
     paymentIncomplete?: boolean;
     className?: string;
-    /** Unidades del lote declaradas al momento de fijar el costo (al crear). */
-    operationalLotQtyAtCostFix?: number;
-    totalOperationalAtCreation?: number;
+    /** Unidades del lote vigente de la referencia. */
+    operationalLotQty?: number;
+    /** Costo operacional del lote completo, al costo unitario de hoy. */
+    totalOperational?: number;
 }
 
 export function ReferenceUnitEconomicsCard({
@@ -28,8 +29,8 @@ export function ReferenceUnitEconomicsCard({
     currency = 'COP',
     paymentIncomplete = false,
     className,
-    operationalLotQtyAtCostFix,
-    totalOperationalAtCreation,
+    operationalLotQty,
+    totalOperational,
 }: ReferenceUnitEconomicsCardProps) {
     const [quantity, setQuantity] = useState(1);
     const safeQty = Math.max(1, Number.isFinite(quantity) ? Math.floor(quantity) : 1);
@@ -45,14 +46,14 @@ export function ReferenceUnitEconomicsCard({
     const marginTotal = Math.round((totalPayment - totalCost) * 100) / 100;
     const marginPctOnPayment = paymentPerUnit > 0 ? Math.round((marginPerUnit / paymentPerUnit) * 10_000) / 100 : null;
 
-    const lotSnap = operationalLotQtyAtCostFix ?? 0;
-    const totalSnap = totalOperationalAtCreation ?? 0;
+    const lote = operationalLotQty ?? 0;
+    const totalLote = totalOperational ?? 0;
 
     return (
         <Card className={className}>
             <CardHeader
                 title="Comparativo economico"
-                description="El costo operacional unitario se fija solo al crear la referencia (suma de precios de las operaciones vinculadas y el lote superior). No cambia si desactiva operaciones despues."
+                description="El costo operacional unitario es la suma de los precios de las operaciones activas de la referencia. Se recalcula al agregar, editar, activar o desactivar una linea del detalle."
             />
             <div className="mt-4 space-y-4">
                 {paymentIncomplete && (
@@ -65,21 +66,20 @@ export function ReferenceUnitEconomicsCard({
                     </div>
                 )}
 
-                {lotSnap > 0 && totalSnap > 0 && (
+                {lote > 0 && totalLote > 0 && (
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Al crear la referencia, con un lote de <strong>{lotSnap.toLocaleString()}</strong> unidades, el{' '}
-                        <strong>costo operacional total</strong> estimado fue <strong>{formatCurrency(totalSnap, currency)}</strong>.
+                        Con el lote de <strong>{lote.toLocaleString()}</strong> unidades, el <strong>costo operacional total</strong> es{' '}
+                        <strong>{formatCurrency(totalLote, currency)}</strong>.
                     </p>
                 )}
 
                 {!showCostFigures ? (
                     <p className="text-sm text-slate-600 dark:text-slate-400">
-                        Sin operaciones vinculadas y sin costo fijo registrado. Al crear la referencia incluya operaciones para fijar el costo
-                        operacional.
+                        Sin operaciones vinculadas. Agregue operaciones al detalle para que la referencia tenga costo operacional.
                     </p>
                 ) : hasOperations && productionCostPerUnit === 0 ? (
                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Costo operacional unitario fijo al crear: 0 (la suma de precios de operaciones al guardar fue 0).
+                        Costo operacional unitario: 0. Las operaciones del detalle suman 0, o todas estan inactivas.
                     </p>
                 ) : null}
 
@@ -99,7 +99,7 @@ export function ReferenceUnitEconomicsCard({
                                 </td>
                             </tr>
                             <tr>
-                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300" data-label="Concepto">Costo operacional fijo (u.)</td>
+                                <td className="px-3 py-2 text-slate-700 dark:text-slate-300" data-label="Concepto">Costo operacional (u.)</td>
                                 <td className="px-3 py-2 text-right font-medium tabular-nums text-slate-900 dark:text-slate-100" data-label="Unitario">
                                     {showCostFigures ? formatCurrency(productionCostPerUnit, currency) : '—'}
                                 </td>

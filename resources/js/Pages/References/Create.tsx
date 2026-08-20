@@ -282,8 +282,8 @@ export default function ReferenceCreate({ operations }: Props) {
                         productionCostPerUnit={productionCostUnit}
                         hasOperations={refOperations.length > 0}
                         currency={companyCurrency}
-                        operationalLotQtyAtCostFix={lotQtyPreview > 0 ? lotQtyPreview : undefined}
-                        totalOperationalAtCreation={lotQtyPreview > 0 ? totalOperationalPreview : undefined}
+                        operationalLotQty={lotQtyPreview > 0 ? lotQtyPreview : undefined}
+                        totalOperational={lotQtyPreview > 0 ? totalOperationalPreview : undefined}
                     />
                 </div>
             </form>

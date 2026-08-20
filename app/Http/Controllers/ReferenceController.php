@@ -92,7 +92,6 @@ class ReferenceController extends Controller
         $user = $request->user();
 
         return DB::transaction(function () use ($request, $data, $user) {
-            $sumUnit = round(collect($data['operations'] ?? [])->sum(fn ($row) => (float) ($row['price'] ?? 0)), 2);
             $lotQty = (int) $data['lot_total_quantity'];
 
             $reference = Reference::create([
@@ -100,7 +99,7 @@ class ReferenceController extends Controller
                 'code' => $data['code'],
                 'name' => $data['name'],
                 'payment_per_unit' => $data['payment_per_unit'],
-                'operational_cost_per_unit_fixed' => $sumUnit,
+                'operational_cost_per_unit_fixed' => 0,
                 'operational_lot_qty_at_cost_fix' => $lotQty,
                 'description' => $data['description'] ?? null,
                 'image' => null,
@@ -134,6 +133,10 @@ class ReferenceController extends Controller
                 })->all();
                 $reference->operations()->sync($sync);
             }
+
+            // El costo sale siempre del detalle ya guardado, tambien al crear: un solo
+            // lugar decide cuanto cuesta la unidad.
+            $reference->refreshOperationalCost();
 
             return redirect()->route('references.show', $reference)->with('success', 'Referencia creada.');
         });
@@ -198,8 +201,8 @@ class ReferenceController extends Controller
      *     has_operations: bool,
      *     payment_per_unit_incomplete: bool,
      *     currency: string,
-     *     operational_lot_qty_at_cost_fix: int,
-     *     total_operational_at_creation: float
+     *     operational_lot_qty: int,
+     *     total_operational: float
      * }
      */
     protected function buildEconomicsComparison(Reference $reference): array
@@ -212,8 +215,10 @@ class ReferenceController extends Controller
         $settings = $reference->company?->settings ?? [];
         $currency = is_array($settings) ? (string) ($settings['currency'] ?? 'COP') : 'COP';
         $paymentMissing = ($reference->getAttributes()['payment_per_unit'] ?? null) === null;
-        $lotSnap = (int) ($reference->operational_lot_qty_at_cost_fix ?? 0);
-        $totalAtCreation = round($cost * $lotSnap, 2);
+        // Lote vigente, no el declarado al crear: el costo unitario ya es un valor vivo,
+        // asi que el total tiene que acompanarlo o la tarjeta se contradice sola.
+        $lot = (int) ($reference->lot_total_quantity ?? 0);
+        $totalOperational = round($cost * $lot, 2);
 
         return [
             'payment_per_unit' => $payment,
@@ -222,8 +227,8 @@ class ReferenceController extends Controller
             'has_operations' => $hasOperations,
             'payment_per_unit_incomplete' => $paymentMissing,
             'currency' => $currency,
-            'operational_lot_qty_at_cost_fix' => $lotSnap,
-            'total_operational_at_creation' => $totalAtCreation,
+            'operational_lot_qty' => $lot,
+            'total_operational' => $totalOperational,
         ];
     }
 
@@ -251,6 +256,8 @@ class ReferenceController extends Controller
             ],
         ]);
 
+        $reference->refreshOperationalCost();
+
         return back()->with('success', 'Operacion asociada.');
     }
 
@@ -276,12 +283,15 @@ class ReferenceController extends Controller
             'is_active' => (bool) $request->input('is_active', true),
         ]);
 
+        $reference->refreshOperationalCost();
+
         return back()->with('success', 'Precio actualizado.');
     }
 
     public function detachOperation(Reference $reference, Operation $operation): RedirectResponse
     {
         $reference->operations()->detach($operation->id);
+        $reference->refreshOperationalCost();
 
         return back()->with('success', 'Operacion desasociada.');
     }

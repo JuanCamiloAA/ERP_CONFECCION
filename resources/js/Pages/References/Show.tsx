@@ -153,8 +153,8 @@ export default function ReferenceShow({ reference, allOperations, comparison }: 
                     hasOperations={comparison.has_operations}
                     currency={comparison.currency}
                     paymentIncomplete={comparison.payment_per_unit_incomplete}
-                    operationalLotQtyAtCostFix={comparison.operational_lot_qty_at_cost_fix}
-                    totalOperationalAtCreation={comparison.total_operational_at_creation}
+                    operationalLotQty={comparison.operational_lot_qty}
+                    totalOperational={comparison.total_operational}
                 />
 
                 <Card>
