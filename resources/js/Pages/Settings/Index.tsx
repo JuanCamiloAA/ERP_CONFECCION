@@ -9,6 +9,7 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { mediaUrl } from '@/lib/mediaUrl';
 import { DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS, DIFFICULTY_LABELS } from '@/lib/difficulty';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -189,7 +190,7 @@ export default function SettingsIndex({ company, settings }: Props) {
                         <div className="mt-4 flex flex-col items-center gap-3">
                             <div className="flex h-32 w-32 items-center justify-center overflow-hidden rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/50">
                                 {preview ? (
-                                    <img src={preview} alt="logo" className="h-full w-full object-cover" />
+                                    <ZoomableImage src={preview} alt="logo" title="Logo de la empresa" className="h-full w-full object-cover" />
                                 ) : (
                                     <BuildingOffice2Icon className="h-12 w-12 text-slate-300 dark:text-slate-600" />
                                 )}

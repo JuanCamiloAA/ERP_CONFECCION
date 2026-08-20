@@ -12,6 +12,7 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
 import AppLayout from '@/Layouts/AppLayout';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS, difficultyLabel, levelFromMinutes } from '@/lib/difficulty';
 import { formatCurrency } from '@/lib/utils';
 import type { Reference, ReferenceEconomicsComparison, ReferenceOperationPivot } from '@/types';
@@ -129,7 +130,7 @@ export default function ReferenceShow({ reference, allOperations, comparison }: 
                     <div className="flex flex-col items-start gap-4 sm:flex-row">
                         <div className="flex h-24 w-24 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40">
                             {reference.image ? (
-                                <img src={reference.image} alt={reference.name} className="h-24 w-24 rounded-lg object-cover" />
+                                <ZoomableImage src={reference.image} alt={reference.name} title={`${reference.code} — ${reference.name}`} className="h-24 w-24 rounded-lg object-cover" />
                             ) : (
                                 <TagIcon className="h-10 w-10" />
                             )}

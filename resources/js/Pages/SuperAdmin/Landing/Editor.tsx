@@ -14,6 +14,7 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { cn } from '@/lib/utils';
 
 interface SectionRow {
@@ -585,7 +586,7 @@ export default function LandingEditor({
                                                         {linked ? (
                                                             <div className="flex items-center gap-3 rounded-lg border border-slate-200 bg-slate-50/80 p-3 dark:border-slate-600 dark:bg-slate-800/50">
                                                                 {co?.logo_url ? (
-                                                                    <img src={co.logo_url} alt="" className="h-12 w-12 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-600" />
+                                                                    <ZoomableImage src={co.logo_url} alt={co.name ?? ''} title={co.name ?? 'Logo'} className="h-12 w-12 rounded-lg object-cover ring-1 ring-slate-200 dark:ring-slate-600" />
                                                                 ) : (
                                                                     <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-slate-200 text-xs text-slate-500 dark:bg-slate-700">Sin logo</div>
                                                                 )}

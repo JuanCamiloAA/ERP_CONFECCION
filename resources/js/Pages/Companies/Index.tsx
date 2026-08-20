@@ -104,7 +104,7 @@ export default function CompaniesIndex({ companies, filters }: Props) {
                                     <TableCell>
                                         <div className="flex items-center gap-3">
                                             {company.logo ? (
-                                                <Avatar src={mediaUrl(company.logo)} name={company.name} size="sm" />
+                                                <Avatar src={mediaUrl(company.logo)} name={company.name} size="sm" zoomable />
                                             ) : (
                                                 <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400">
                                                     <BuildingOffice2Icon className="h-5 w-5" />

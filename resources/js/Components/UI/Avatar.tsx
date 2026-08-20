@@ -1,3 +1,4 @@
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { cn } from '@/lib/utils';
 
 interface AvatarProps {
@@ -6,6 +7,11 @@ interface AvatarProps {
     name?: string;
     size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl';
     className?: string;
+    /**
+     * Al pulsarlo abre la foto en el visor. Es opcional a proposito: en la barra superior
+     * el avatar despliega el menu de usuario, y ahi el clic ya tiene dueno.
+     */
+    zoomable?: boolean;
 }
 
 const sizes = {
@@ -42,17 +48,17 @@ function getColorFromName(name: string): string {
     return colors[Math.abs(hash) % colors.length];
 }
 
-export function Avatar({ src, alt, name = 'Usuario', size = 'md', className }: AvatarProps) {
+export function Avatar({ src, alt, name = 'Usuario', size = 'md', className, zoomable = false }: AvatarProps) {
     const initials = getInitials(name);
     const bgColor = getColorFromName(name);
 
     if (src) {
-        return (
-            <img
-                src={src}
-                alt={alt ?? name}
-                className={cn('rounded-full object-cover ring-2 ring-white dark:ring-slate-800', sizes[size], className)}
-            />
+        const clases = cn('rounded-full object-cover ring-2 ring-white dark:ring-slate-800', sizes[size], className);
+
+        return zoomable ? (
+            <ZoomableImage src={src} alt={alt ?? name} title={name} className={clases} />
+        ) : (
+            <img src={src} alt={alt ?? name} className={clases} />
         );
     }
 

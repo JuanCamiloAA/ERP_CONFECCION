@@ -8,6 +8,7 @@ import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import AppLayout from '@/Layouts/AppLayout';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { mediaUrl } from '@/lib/mediaUrl';
 import type { AuthUser } from '@/types';
 
@@ -69,7 +70,7 @@ export default function ProfileEdit({ user }: Props) {
                             <div className="mt-4 flex flex-col items-center gap-3">
                                 {preview ? (
                                     <div className="h-32 w-32 overflow-hidden rounded-full border-2 border-slate-200 dark:border-slate-700">
-                                        <img src={preview} alt={user.full_name} className="h-full w-full object-cover" />
+                                        <ZoomableImage src={preview} alt={user.full_name} title={user.full_name} className="h-full w-full object-cover" />
                                     </div>
                                 ) : (
                                     <Avatar src={null} name={user.full_name} size="xl" />

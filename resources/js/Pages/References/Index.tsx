@@ -12,6 +12,7 @@ import { SearchInput } from '@/Components/UI/SearchInput';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import { usePermissions } from '@/contexts/PermissionsContext';
 import AppLayout from '@/Layouts/AppLayout';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import type { PaginatedResponse, Reference } from '@/types';
 
@@ -147,7 +148,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
                                     <div className="flex items-start gap-3">
                                         <div className="flex h-13 w-13 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
                                             {ref.image ? (
-                                                <img src={ref.image} alt={ref.name} className="h-full w-full object-cover" />
+                                                <ZoomableImage src={ref.image} alt={ref.name} title={`${ref.code} — ${ref.name}`} className="h-full w-full object-cover" />
                                             ) : (
                                                 <TagIcon className="h-6 w-6" />
                                             )}
@@ -250,7 +251,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
                                             <div className="flex items-center gap-3">
                                                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40">
                                                     {ref.image ? (
-                                                        <img src={ref.image} alt={ref.name} className="h-10 w-10 rounded-lg object-cover" />
+                                                        <ZoomableImage src={ref.image} alt={ref.name} title={`${ref.code} — ${ref.name}`} className="h-10 w-10 rounded-lg object-cover" />
                                                     ) : (
                                                         <TagIcon className="h-5 w-5" />
                                                     )}

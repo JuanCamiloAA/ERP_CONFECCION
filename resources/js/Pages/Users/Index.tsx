@@ -145,7 +145,7 @@ export default function UsersIndex({ users, filters }: Props) {
                                 <TableRow key={user.id}>
                                     <TableCell>
                                         <div className="flex items-center gap-3">
-                                            <Avatar src={user.avatar} name={user.full_name} size="sm" />
+                                            <Avatar src={user.avatar} name={user.full_name} size="sm" zoomable />
                                             <div>
                                                 <p className="font-medium text-slate-900 dark:text-slate-100">{user.full_name}</p>
                                                 <p className="text-xs text-slate-500 dark:text-slate-400">{user.email}</p>

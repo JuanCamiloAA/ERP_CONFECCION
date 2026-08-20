@@ -119,7 +119,7 @@ export default function ProductionRanking({ filters, ranking }: Props) {
                                         )}
                                     </div>
 
-                                    <Avatar name={row.employee?.full_name ?? 'Empleado'} src={row.employee?.photo} size="md" />
+                                    <Avatar name={row.employee?.full_name ?? 'Empleado'} src={row.employee?.photo} size="md" zoomable />
 
                                     <div className="min-w-0 flex-1">
                                         <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">

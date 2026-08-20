@@ -194,7 +194,7 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
 
                 <Card>
                     <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-                        <Avatar src={employee.photo} name={employee.full_name} size="xl" />
+                        <Avatar src={employee.photo} name={employee.full_name} size="xl" zoomable />
                         <div className="flex-1 text-center sm:text-left">
                             <div className="flex flex-col items-center gap-2 sm:flex-row">
                                 <h2 className="text-2xl font-bold text-slate-900 dark:text-slate-100">{employee.full_name}</h2>

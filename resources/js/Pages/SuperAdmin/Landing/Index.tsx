@@ -41,6 +41,7 @@ import { Modal } from '@/Components/UI/Modal';
 import { Select } from '@/Components/UI/Select';
 import { Textarea } from '@/Components/UI/Textarea';
 import AppLayout from '@/Layouts/AppLayout';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { summarize } from '@/Pages/SuperAdmin/Landing/summarize';
 import '../../../../css/public.css';
 
@@ -433,9 +434,10 @@ export default function LandingAdminIndex({
                         <p className="mb-1.5 text-xs font-medium text-slate-700 dark:text-slate-300">{field.label}</p>
                         <div className="flex aspect-[4/3] items-center justify-center rounded-lg border border-dashed border-slate-300 dark:border-slate-600">
                             {preview ? (
-                                <img
+                                <ZoomableImage
                                     src={preview}
-                                    alt=""
+                                    alt={field.label}
+                                    title={field.label}
                                     className="h-full w-full rounded-lg object-cover"
                                     onError={() => toast.error('La imagen no se pudo cargar desde el almacenamiento.')}
                                 />

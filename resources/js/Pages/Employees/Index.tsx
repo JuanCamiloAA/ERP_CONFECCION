@@ -188,7 +188,7 @@ export default function EmployeesIndex({ employees, filters }: Props) {
                                 key={employee.id}
                                 className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800"
                             >
-                                <Avatar src={employee.photo} name={employee.full_name} size="md" className="shrink-0" />
+                                <Avatar src={employee.photo} name={employee.full_name} size="md" className="shrink-0" zoomable />
                                 <div className="min-w-0 flex-1">
                                     <Link
                                         href={route('employees.show', employee.id)}
@@ -267,7 +267,7 @@ export default function EmployeesIndex({ employees, filters }: Props) {
                                     <TableRow key={employee.id}>
                                         <TableCell>
                                             <div className="flex items-center gap-3">
-                                                <Avatar src={employee.photo} name={employee.full_name} size="sm" />
+                                                <Avatar src={employee.photo} name={employee.full_name} size="sm" zoomable />
                                                 <div>
                                                     <Link
                                                         href={route('employees.show', employee.id)}

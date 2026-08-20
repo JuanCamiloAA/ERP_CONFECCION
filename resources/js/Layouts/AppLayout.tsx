@@ -32,6 +32,7 @@ import { Link, router, usePage } from '@inertiajs/react';
 import { Fragment, ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { BrandMark } from '@/Components/BrandMark';
+import { ImageLightboxProvider } from '@/Components/UI/ImageLightbox';
 import { Avatar } from '@/Components/UI/Avatar';
 import { SuperAdminCompanySwitcher } from '@/Components/SuperAdminCompanySwitcher';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -312,6 +313,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
     };
 
     return (
+        <ImageLightboxProvider>
         <div className="flex min-h-screen bg-slate-50 dark:bg-slate-900">
             {/* Sidebar mobile overlay */}
             {sidebarOpen && (
@@ -527,5 +529,6 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                 </main>
             </div>
         </div>
+        </ImageLightboxProvider>
     );
 }

@@ -6,6 +6,7 @@ import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import AppLayout from '@/Layouts/AppLayout';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
 import type { ExpenseDetail } from '@/types';
 
@@ -103,7 +104,7 @@ export default function ExpenseShow({ expense }: Props) {
                                     </a>
                                     {expense.receipt_mime && !expense.receipt_mime.includes('pdf') ? (
                                         <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-600">
-                                            <img src={expense.receipt_url} alt="Comprobante" className="max-h-96 w-full object-contain" />
+                                            <ZoomableImage src={expense.receipt_url} alt="Comprobante" title="Comprobante del gasto" className="max-h-96 w-full object-contain" />
                                         </div>
                                     ) : null}
                                 </div>

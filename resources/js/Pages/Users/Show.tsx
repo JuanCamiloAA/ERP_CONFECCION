@@ -76,7 +76,7 @@ export default function UserShow({ user, accessLogs }: Props) {
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
                     <Card className="lg:col-span-1">
                         <div className="flex flex-col items-center text-center">
-                            <Avatar src={user.avatar} name={user.full_name} size="xl" />
+                            <Avatar src={user.avatar} name={user.full_name} size="xl" zoomable />
                             <h3 className="mt-3 text-lg font-semibold text-slate-900 dark:text-slate-100">{user.full_name}</h3>
                             {role && <div className="mt-1"><RoleBadge role={role} /></div>}
                             <Badge variant={user.is_active ? 'success' : 'danger'} className="mt-2">
