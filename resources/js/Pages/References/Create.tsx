@@ -1,35 +1,26 @@
-import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeftIcon, PhotoIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
-import { Badge } from '@/Components/UI/Badge';
-import { Button } from '@/Components/UI/Button';
+import { Head, Link, useForm, usePage } from '@inertiajs/react';
+import { ArrowLeftIcon, PhotoIcon, PlusIcon } from '@heroicons/react/24/outline';
+import { DragEvent, FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { Can } from '@/Components/UI/Can';
-import { Card, CardHeader } from '@/Components/UI/Card';
 import { ZoomableImage } from '@/Components/UI/ImageLightbox';
-import { Input } from '@/Components/UI/Input';
-import { PageHeader } from '@/Components/UI/PageHeader';
-import { Select } from '@/Components/UI/Select';
 import { Switch } from '@/Components/UI/Switch';
-import { Textarea } from '@/Components/UI/Textarea';
-import { ReferenceUnitEconomicsCard } from '@/Components/References/ReferenceUnitEconomicsCard';
+import { ReferenceEconomicsBlock, ReferenceEconomicsPanel } from '@/Components/References/ReferenceEconomicsPanel';
+import { ReferenceFormLayout } from '@/Components/References/ReferenceFormLayout';
+import { ReferenceFormSection } from '@/Components/References/ReferenceFormSection';
+import {
+    ReferenceOperationsTable,
+    type OperationOption,
+    type RefOperation,
+} from '@/Components/References/ReferenceOperationsTable';
+import {
+    ReferenceSaveChecklist,
+    itemsChecklist,
+    progresoChecklist,
+} from '@/Components/References/ReferenceSaveChecklist';
 import { OperationQuickCreateModal, type QuickCreatedOperation } from '@/Components/Operations/OperationQuickCreateModal';
 import AppLayout from '@/Layouts/AppLayout';
-import { DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS, difficultyLabel, levelFromMinutes } from '@/lib/difficulty';
-import { formatCurrency } from '@/lib/utils';
-
-interface OperationOption {
-    id: number;
-    name: string;
-    base_price: string | number;
-    estimated_minutes?: string | number;
-}
-
-interface RefOperation {
-    operation_id: number;
-    name: string;
-    price: number;
-    estimated_minutes: number;
-}
+import { DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS } from '@/lib/difficulty';
+import { cn, formatCurrency } from '@/lib/utils';
 
 interface Props {
     operations: OperationOption[];
@@ -40,12 +31,12 @@ export default function ReferenceCreate({ operations }: Props) {
     const settings = page.props.activeCompany?.settings as Record<string, unknown> | null | undefined;
     const companyCurrency = typeof settings?.currency === 'string' ? settings.currency : 'COP';
     const thresholds = page.props.difficultyMinuteThresholds ?? DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS;
+
     const [availableOperations, setAvailableOperations] = useState<OperationOption[]>(operations);
     const [refOperations, setRefOperations] = useState<RefOperation[]>([]);
-    const [selectedOpId, setSelectedOpId] = useState<number | ''>('');
-    const [opPrice, setOpPrice] = useState<string>('');
-    const [opMinutes, setOpMinutes] = useState<string>('');
     const [showOperationModal, setShowOperationModal] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
+    const [detalleMovil, setDetalleMovil] = useState(false);
 
     /** Vista previa de la imagen elegida; se libera al cambiarla o al salir. */
     const [preview, setPreview] = useState<string | null>(null);
@@ -54,7 +45,7 @@ export default function ReferenceCreate({ operations }: Props) {
         if (preview) URL.revokeObjectURL(preview);
     }, [preview]);
 
-    const { data, setData, processing, errors } = useForm({
+    const { data, setData, post, transform, processing, errors } = useForm({
         code: '',
         name: '',
         payment_per_unit: '' as number | '',
@@ -66,16 +57,36 @@ export default function ReferenceCreate({ operations }: Props) {
 
     const paymentNum = data.payment_per_unit === '' ? 0 : Number(data.payment_per_unit);
     const productionCostUnit = useMemo(() => refOperations.reduce((s, r) => s + Number(r.price), 0), [refOperations]);
+    const minutosTotales = useMemo(() => refOperations.reduce((s, r) => s + Number(r.estimated_minutes), 0), [refOperations]);
     const lotQtyPreview = data.lot_total_quantity === '' ? 0 : Number(data.lot_total_quantity);
-    const totalOperationalPreview = Math.round(productionCostUnit * lotQtyPreview * 100) / 100;
+
+    const checklist = itemsChecklist({
+        code: data.code,
+        name: data.name,
+        payment: data.payment_per_unit,
+        lote: data.lot_total_quantity,
+        tieneImagen: data.image !== null,
+    });
+    const progreso = progresoChecklist(checklist);
 
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        const payload = {
-            ...data,
-            operations: refOperations.map((o) => ({ operation_id: o.operation_id, price: o.price, estimated_minutes: o.estimated_minutes })),
-        };
-        router.post(route('references.store'), payload as never, { forceFormData: true });
+
+        // Se envia con el helper del formulario y no con `router.post` suelto: de la otra
+        // manera `errors` y `processing` de useForm nunca se llenaban, y una referencia
+        // rechazada por el servidor se quedaba muda, sin decir que estaba mal.
+        transform((datos) => ({
+            ...datos,
+            operations: refOperations.map((o) => ({
+                operation_id: o.operation_id,
+                price: o.price,
+                // La regla del servidor es `nullable|min:0.01`: un 0 no pasa nunca. Sin
+                // minutos se manda vacio, que es el caso previsto para «sin dificultad».
+                estimated_minutes: o.estimated_minutes > 0 ? o.estimated_minutes : null,
+            })),
+        }));
+
+        post(route('references.store'), { forceFormData: true });
     };
 
     /**
@@ -86,7 +97,9 @@ export default function ReferenceCreate({ operations }: Props) {
      * pulsar Enter en cualquier campo. Se guarda unicamente desde «Guardar».
      *
      * Se deja pasar en el textarea, donde Enter es un salto de linea, y sobre un boton
-     * enfocado, que es pulsarlo: cortarlo ahi dejaria el formulario sin teclado.
+     * enfocado, que es pulsarlo: cortarlo ahi dejaria el formulario sin teclado. La fila
+     * de captura de operaciones detiene la tecla antes de llegar aqui, porque alli Enter
+     * agrega la linea.
      */
     const bloquearEnvioConEnter = (e: KeyboardEvent<HTMLFormElement>) => {
         if (e.key !== 'Enter') return;
@@ -97,24 +110,8 @@ export default function ReferenceCreate({ operations }: Props) {
         e.preventDefault();
     };
 
-    const addOperation = () => {
-        if (!selectedOpId) return;
-        const op = availableOperations.find((o) => o.id === Number(selectedOpId));
-        if (!op) return;
-        if (refOperations.some((r) => r.operation_id === op.id)) return;
-
-        setRefOperations((prev) => [
-            ...prev,
-            {
-                operation_id: op.id,
-                name: op.name,
-                price: opPrice ? Number(opPrice) : Number(op.base_price),
-                estimated_minutes: opMinutes ? Number(opMinutes) : Number(op.estimated_minutes ?? 0),
-            },
-        ]);
-        setSelectedOpId('');
-        setOpPrice('');
-        setOpMinutes('');
+    const addOperation = (linea: RefOperation) => {
+        setRefOperations((prev) => (prev.some((r) => r.operation_id === linea.operation_id) ? prev : [...prev, linea]));
     };
 
     const removeOp = (id: number) => setRefOperations((prev) => prev.filter((r) => r.operation_id !== id));
@@ -134,200 +131,443 @@ export default function ReferenceCreate({ operations }: Props) {
         setShowOperationModal(false);
     };
 
+    const alSoltarImagen = (e: DragEvent<HTMLElement>) => {
+        e.preventDefault();
+        setDragOver(false);
+        const archivo = e.dataTransfer.files?.[0];
+        if (archivo && archivo.type.startsWith('image/')) elegirImagen(archivo);
+    };
+
+    /**
+     * Errores que el servidor devuelve por linea (`operations.0.price`…). No caben junto a
+     * un campo del formulario, asi que se listan encima de la tabla; sin esto el guardado
+     * fallaba en silencio.
+     */
+    const erroresOperaciones = Object.entries(errors)
+        .filter(([clave]) => clave.startsWith('operations'))
+        .map(([, mensaje]) => String(mensaje));
+
+    /**
+     * Todo lo demas que rechace el servidor y no tenga un campo donde mostrarse — la
+     * empresa sin seleccionar, por ejemplo —. Sin esto, «Guardar» no hacia nada visible.
+     */
+    const camposConCampo = ['code', 'name', 'payment_per_unit', 'lot_total_quantity', 'description', 'image', 'is_active'];
+    const erroresGenerales = Object.entries(errors)
+        .filter(([clave]) => !clave.startsWith('operations') && !camposConCampo.includes(clave))
+        .map(([, mensaje]) => String(mensaje));
+
+    const margenUnitario = paymentNum - productionCostUnit;
+
+    /* ------------------------------------------------------------ fragmentos */
+
+    const encabezado = (
+        <header
+            className="sticky top-0 z-30 px-4 py-3 sm:px-7 sm:py-4"
+            style={{ backgroundColor: 'var(--ref-surface-head)', borderBottom: '1px solid var(--ref-border)' }}
+        >
+            {/* --- escritorio --- */}
+            <div className="hidden items-center justify-between gap-4 sm:flex">
+                <div className="min-w-0">
+                    <nav className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--ref-subtle)' }}>
+                        <Link href={route('references.index')} className="hover:underline">
+                            Referencias
+                        </Link>
+                        <span>/</span>
+                        <span>Nueva</span>
+                    </nav>
+                    <h1 className="mt-0.5 text-[19px]" style={{ color: 'var(--ref-text)' }}>
+                        {data.name.trim() || 'Nueva referencia'}
+                    </h1>
+                </div>
+                <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-[12px]" style={{ color: 'var(--ref-muted)' }}>
+                        {progreso.hechos} de {progreso.total} para guardar
+                    </span>
+                    <Link href={route('references.index')} className="ref-btn">
+                        <ArrowLeftIcon className="h-4 w-4" />
+                        Cancelar
+                    </Link>
+                    <button type="submit" disabled={processing} className="ref-btn ref-btn-primary">
+                        {processing ? 'Guardando…' : 'Guardar'}
+                    </button>
+                </div>
+            </div>
+
+            {/* --- movil: titulo compacto + barra de 4 segmentos --- */}
+            <div className="sm:hidden">
+                <div className="flex items-center gap-2">
+                    <Link
+                        href={route('references.index')}
+                        aria-label="Volver a referencias"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+                        style={{ color: 'var(--ref-muted)' }}
+                    >
+                        <ArrowLeftIcon className="h-5 w-5" />
+                    </Link>
+                    <h1 className="min-w-0 flex-1 truncate text-[17px]" style={{ color: 'var(--ref-text)' }}>
+                        {data.name.trim() || 'Nueva referencia'}
+                    </h1>
+                    <span className="shrink-0 text-[12px]" style={{ color: 'var(--ref-muted)' }}>
+                        {progreso.hechos} de {progreso.total}
+                    </span>
+                </div>
+                <div className="mt-2 flex gap-1" aria-hidden="true">
+                    {checklist.map((item, i) => (
+                        <span
+                            key={item.label}
+                            className="h-[3px] flex-1 rounded-full"
+                            style={{ backgroundColor: item.listo ? 'var(--ref-accent)' : 'var(--ref-border)', opacity: i === 3 ? 0.6 : 1 }}
+                        />
+                    ))}
+                </div>
+            </div>
+        </header>
+    );
+
+    const panel = (
+        <ReferenceEconomicsPanel
+            paymentPerUnit={paymentNum}
+            productionCostPerUnit={productionCostUnit}
+            lote={lotQtyPreview}
+            currency={companyCurrency}
+        >
+            <ReferenceEconomicsBlock kicker="Falta para guardar">
+                <ReferenceSaveChecklist items={checklist} />
+            </ReferenceEconomicsBlock>
+        </ReferenceEconomicsPanel>
+    );
+
+    const barraMovil = (
+        <>
+            {detalleMovil ? (
+                <div className="max-h-[50vh] overflow-y-auto px-4 py-3" style={{ borderBottom: '1px solid var(--ref-border)' }}>
+                    <dl className="space-y-1.5 text-[12px]">
+                        {[
+                            ['Pago por unidad', formatCurrency(paymentNum, companyCurrency)],
+                            ['Costo operacional', formatCurrency(productionCostUnit, companyCurrency)],
+                            ['Margen del lote', formatCurrency((paymentNum - productionCostUnit) * lotQtyPreview, companyCurrency)],
+                        ].map(([k, v]) => (
+                            <div key={k} className="flex items-center justify-between">
+                                <dt style={{ color: 'var(--ref-muted)' }}>{k}</dt>
+                                <dd style={{ color: 'var(--ref-text)' }}>{v}</dd>
+                            </div>
+                        ))}
+                    </dl>
+
+                    {refOperations.length > 0 ? (
+                        <>
+                            <p className="ref-kicker mt-3">Peso en el costo</p>
+                            <ul className="mt-1.5 space-y-1 text-[12px]">
+                                {refOperations.map((o) => (
+                                    <li key={o.operation_id} className="flex items-center justify-between gap-3">
+                                        <span className="min-w-0 truncate" style={{ color: 'var(--ref-muted)' }}>
+                                            {o.name}
+                                        </span>
+                                        <span className="shrink-0" style={{ color: 'var(--ref-text)' }}>
+                                            {productionCostUnit > 0 ? Math.round((o.price / productionCostUnit) * 100) : 0}%
+                                        </span>
+                                    </li>
+                                ))}
+                            </ul>
+                        </>
+                    ) : null}
+
+                    <div className="mt-3">
+                        <p className="ref-kicker">Falta para guardar</p>
+                        <div className="mt-1.5">
+                            <ReferenceSaveChecklist items={checklist} />
+                        </div>
+                    </div>
+                </div>
+            ) : null}
+
+            <div className="px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+                <div className="flex items-baseline justify-between">
+                    <span className="ref-kicker">Margen unitario</span>
+                    <span className="text-[22px] leading-none" style={{ color: margenUnitario < 0 ? 'var(--ref-danger)' : 'var(--ref-text)' }}>
+                        {formatCurrency(margenUnitario, companyCurrency)}
+                        {paymentNum > 0 ? (
+                            <span className="ml-1.5 text-[12px]" style={{ color: 'var(--ref-muted)' }}>
+                                {Math.round((margenUnitario / paymentNum) * 1000) / 10}%
+                            </span>
+                        ) : null}
+                    </span>
+                </div>
+                <div className="mt-2 flex h-1 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--ref-accent-track)' }} aria-hidden="true">
+                    <span
+                        style={{
+                            width: `${Math.max(paymentNum, productionCostUnit) > 0 ? Math.min(100, (productionCostUnit / Math.max(paymentNum, productionCostUnit)) * 100) : 0}%`,
+                            backgroundColor: 'var(--ref-accent-on)',
+                        }}
+                    />
+                    <span className="flex-1" style={{ backgroundColor: 'var(--ref-accent)' }} />
+                </div>
+                <div className="mt-2.5 flex gap-2">
+                    <button type="button" onClick={() => setDetalleMovil((v) => !v)} className="ref-btn flex-1">
+                        {detalleMovil ? 'Ocultar' : 'Ver detalle'}
+                    </button>
+                    <button type="submit" disabled={processing} className="ref-btn ref-btn-primary flex-[2]">
+                        {processing ? 'Guardando…' : 'Guardar referencia'}
+                    </button>
+                </div>
+            </div>
+        </>
+    );
+
+    /* ---------------------------------------------------------------- render */
+
     return (
         <AppLayout title="Nueva referencia">
             <Head title="Nueva referencia" />
-            <form onSubmit={submit} onKeyDown={bloquearEnvioConEnter} className="space-y-6">
-                <PageHeader
-                    title="Nueva referencia"
-                    breadcrumbs={[
-                        { label: 'Referencias', href: route('references.index') },
-                        { label: 'Nueva' },
-                    ]}
-                    action={
-                        <div className="flex gap-2">
-                            <Link href={route('references.index')}>
-                                <Button variant="ghost" icon={<ArrowLeftIcon className="h-4 w-4" />}>Cancelar</Button>
-                            </Link>
-                            <Button type="submit" loading={processing}>Guardar</Button>
+            <form onSubmit={submit} onKeyDown={bloquearEnvioConEnter}>
+                <ReferenceFormLayout header={encabezado} aside={panel} mobileBar={barraMovil}>
+                    {erroresGenerales.length > 0 ? (
+                        <div
+                            role="alert"
+                            className="rounded-[10px] px-3.5 py-2.5 text-[13px]"
+                            style={{ border: '1px solid var(--ref-danger)', color: 'var(--ref-danger)' }}
+                        >
+                            {erroresGenerales.map((mensaje) => (
+                                <p key={mensaje}>{mensaje}</p>
+                            ))}
                         </div>
-                    }
-                />
+                    ) : null}
 
-                <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                    <Card className="lg:col-span-2">
-                        <CardHeader title="Datos basicos" />
-                        <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <Input label="Codigo" value={data.code} onChange={(e) => setData('code', e.target.value)} error={errors.code} required />
-                            <Input label="Nombre" value={data.name} onChange={(e) => setData('name', e.target.value)} error={errors.name} required />
-                            <Input
-                                label="Valor unitario de pago"
-                                type="number"
-                                step="0.01"
-                                min={0}
-                                value={data.payment_per_unit}
-                                onChange={(e) =>
-                                    setData('payment_per_unit', e.target.value === '' ? ('' as number | '') : Number(e.target.value))}
-                                error={errors.payment_per_unit}
-                                required
-                                prefix="$"
-                                description="Lo que reciben por cada unidad vendida o entregada al cliente; no es el costo interno de operaciones."
-                                className="sm:col-span-2"
-                            />
-                            <Input
-                                label="Cantidad total del lote"
-                                type="number"
-                                min={1}
-                                value={data.lot_total_quantity}
-                                onChange={(e) =>
-                                    setData('lot_total_quantity', e.target.value === '' ? ('' as number | '') : Number(e.target.value))}
-                                error={errors.lot_total_quantity}
-                                required
-                                description="Tope de unidades por operacion en produccion. El costo operacional sale de los precios de las operaciones que agregues abajo."
-                            />
-                            <Textarea label="Descripcion" value={data.description} onChange={(e) => setData('description', e.target.value)} error={errors.description} className="sm:col-span-2" rows={3} />
-                            <div className="sm:col-span-2">
-                                <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Imagen</label>
-                                <div className="flex items-start gap-3">
-                                    <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-900/50">
-                                        {preview ? (
-                                            <ZoomableImage
-                                                src={preview}
-                                                alt={data.name || 'Imagen de la referencia'}
-                                                title={data.name || 'Imagen de la referencia'}
-                                                className="h-full w-full object-cover"
-                                            />
-                                        ) : (
-                                            <PhotoIcon className="h-9 w-9 text-slate-300 dark:text-slate-600" />
-                                        )}
-                                    </div>
-                                    <div className="min-w-0 flex-1">
-                                        <input
-                                            type="file"
-                                            accept="image/*"
-                                            onChange={(e) => elegirImagen(e.target.files?.[0] ?? null)}
-                                            className="w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-300 dark:file:bg-indigo-900/30 dark:file:text-indigo-300"
+                    {/* ------------------------------------------- 1 · Identidad */}
+                    <ReferenceFormSection step={1} title="Identidad" summary={data.code.trim() || undefined}>
+                        <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
+                            <div className="shrink-0">
+                                {/*
+                                  * El input vive fuera del label para que «Cambiar» pueda
+                                  * dispararlo: con una imagen puesta, el clic sobre la
+                                  * miniatura lo toma el visor y ya no abre el selector.
+                                  */}
+                                <input
+                                    id="ref-imagen"
+                                    type="file"
+                                    accept="image/*"
+                                    className="sr-only"
+                                    onChange={(e) => {
+                                        elegirImagen(e.target.files?.[0] ?? null);
+                                        e.target.value = '';
+                                    }}
+                                />
+                                <label
+                                    htmlFor="ref-imagen"
+                                    onDragOver={(e) => {
+                                        e.preventDefault();
+                                        setDragOver(true);
+                                    }}
+                                    onDragLeave={() => setDragOver(false)}
+                                    onDrop={alSoltarImagen}
+                                    className="flex h-[104px] w-[104px] cursor-pointer items-center justify-center overflow-hidden rounded-[10px]"
+                                    style={{
+                                        border: `1px ${preview ? 'solid' : 'dashed'} ${dragOver ? 'var(--ref-accent)' : 'var(--ref-border)'}`,
+                                        backgroundColor: dragOver ? 'var(--ref-accent-soft)' : 'var(--ref-surface)',
+                                    }}
+                                >
+                                    {preview ? (
+                                        <ZoomableImage
+                                            src={preview}
+                                            alt={data.name || 'Imagen de la referencia'}
+                                            title={data.name || 'Imagen de la referencia'}
+                                            className="h-full w-full object-cover"
                                         />
-                                        <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                                            {preview ? 'Pulsa la miniatura para verla en grande.' : 'Al elegirla veras aqui la vista previa.'}
-                                        </p>
-                                        {preview ? (
-                                            <button
-                                                type="button"
-                                                onClick={() => elegirImagen(null)}
-                                                className="mt-1 text-xs font-medium text-rose-600 hover:underline dark:text-rose-400"
-                                            >
-                                                Quitar imagen
-                                            </button>
-                                        ) : null}
+                                    ) : (
+                                        <span className="px-2 text-center text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
+                                            <PhotoIcon className="mx-auto h-6 w-6" />
+                                            <span className="mt-1 block">Arrastra o elige</span>
+                                        </span>
+                                    )}
+                                </label>
+
+                                {preview ? (
+                                    <div className="mt-1.5 w-[104px]">
+                                        <button
+                                            type="button"
+                                            onClick={() => document.getElementById('ref-imagen')?.click()}
+                                            className="ref-btn ref-btn-sm w-full"
+                                        >
+                                            Cambiar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => elegirImagen(null)}
+                                            className="mt-1 h-9 w-full text-[11px] sm:h-6"
+                                            style={{ color: 'var(--ref-danger)' }}
+                                        >
+                                            Quitar
+                                        </button>
                                     </div>
+                                ) : null}
+                            </div>
+
+                            <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-[150px_1fr]">
+                                <div className="min-w-0">
+                                    <label htmlFor="ref-code" className="ref-label">
+                                        Código
+                                    </label>
+                                    <input
+                                        id="ref-code"
+                                        value={data.code}
+                                        onChange={(e) => setData('code', e.target.value)}
+                                        className={cn('ref-field', errors.code && 'ref-field-error')}
+                                        required
+                                    />
+                                    {errors.code ? (
+                                        <p className="ref-help" style={{ color: 'var(--ref-danger)' }}>
+                                            {errors.code}
+                                        </p>
+                                    ) : null}
+                                </div>
+
+                                <div className="min-w-0">
+                                    <label htmlFor="ref-name" className="ref-label">
+                                        Nombre
+                                    </label>
+                                    <input
+                                        id="ref-name"
+                                        value={data.name}
+                                        onChange={(e) => setData('name', e.target.value)}
+                                        className={cn('ref-field', errors.name && 'ref-field-error')}
+                                        required
+                                    />
+                                    {errors.name ? (
+                                        <p className="ref-help" style={{ color: 'var(--ref-danger)' }}>
+                                            {errors.name}
+                                        </p>
+                                    ) : null}
+                                </div>
+
+                                <div className="min-w-0 sm:col-span-2">
+                                    <label htmlFor="ref-desc" className="ref-label">
+                                        Descripción <span style={{ color: 'var(--ref-subtle)' }}>— opcional</span>
+                                    </label>
+                                    <textarea
+                                        id="ref-desc"
+                                        rows={2}
+                                        value={data.description}
+                                        onChange={(e) => setData('description', e.target.value)}
+                                        className="ref-field"
+                                    />
                                 </div>
                             </div>
-                            <div className="sm:col-span-2">
-                                <Switch checked={data.is_active} onChange={(v) => setData('is_active', v)} label="Activa" description="Disponible para registrar produccion" />
-                            </div>
                         </div>
-                    </Card>
+                    </ReferenceFormSection>
 
-                    <Card className="lg:col-span-3">
-                        <CardHeader title="Operaciones de la referencia" description="Lista de operaciones con sus precios especificos" />
-                        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-[1fr_160px_160px_auto]">
-                            <Select
-                                label="Operacion"
-                                value={selectedOpId}
-                                onChange={(e) => {
-                                    const id = Number(e.target.value);
-                                    setSelectedOpId(id);
-                                    const op = availableOperations.find((o) => o.id === id);
-                                    if (op) {
-                                        setOpPrice(String(op.base_price));
-                                        setOpMinutes(String(op.estimated_minutes ?? ''));
+                    {/* --------------------------------------- 2 · Dinero y lote */}
+                    <ReferenceFormSection
+                        step={2}
+                        title="Dinero y lote"
+                        summary={paymentNum > 0 ? `${formatCurrency(paymentNum, companyCurrency)} / u.` : undefined}
+                    >
+                        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+                            <div className="min-w-0">
+                                <label htmlFor="ref-pago" className="ref-label">
+                                    Valor unitario de pago
+                                </label>
+                                <input
+                                    id="ref-pago"
+                                    type="number"
+                                    step="0.01"
+                                    min={0}
+                                    inputMode="decimal"
+                                    value={data.payment_per_unit}
+                                    onChange={(e) =>
+                                        setData('payment_per_unit', e.target.value === '' ? ('' as number | '') : Number(e.target.value))
                                     }
-                                }}
-                                options={availableOperations.filter((o) => !refOperations.some((r) => r.operation_id === o.id)).map((o) => ({
-                                    value: o.id, label: `${o.name} (${formatCurrency(o.base_price)})`,
-                                }))}
-                                placeholder="Selecciona una operacion"
-                            />
-                            <Input label="Precio" type="number" step="0.01" value={opPrice} onChange={(e) => setOpPrice(e.target.value)} prefix="$" />
-                            <Input
-                                label="Minutos"
-                                type="number"
-                                step="0.1"
-                                min={0.1}
-                                value={opMinutes}
-                                onChange={(e) => setOpMinutes(e.target.value)}
-                                suffix="min"
-                                description={
-                                    opMinutes
-                                        ? `Dificultad: ${difficultyLabel(levelFromMinutes(Number(opMinutes), thresholds))}`
-                                        : 'Minutos de esta operacion para esta referencia'
-                                }
-                            />
-                            <div className="flex items-end">
-                                <Button type="button" onClick={addOperation} icon={<PlusIcon className="h-4 w-4" />} disabled={!selectedOpId}>
-                                    Agregar
-                                </Button>
-                            </div>
-                        </div>
-                        <Can permission="operations.index.create">
-                            <div className="mt-3">
-                                <Button
-                                    type="button"
-                                    variant="secondary"
-                                    size="sm"
-                                    icon={<PlusIcon className="h-4 w-4" />}
-                                    onClick={() => setShowOperationModal(true)}
-                                >
-                                    Nueva operacion
-                                </Button>
-                            </div>
-                        </Can>
-
-                        <div className="mt-4 rounded-lg border border-slate-200 dark:border-slate-700">
-                            <table className="responsive-table w-full text-sm">
-                                <thead className="bg-slate-50 dark:bg-slate-900/50">
-                                    <tr className="text-left text-xs uppercase tracking-wider text-slate-500">
-                                        <th className="px-4 py-2">Operacion</th>
-                                        <th className="px-4 py-2 text-right">Precio</th>
-                                        <th className="px-4 py-2 text-right">Minutos</th>
-                                        <th className="px-4 py-2 text-center">Dificultad</th>
-                                        <th className="w-16" />
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100 dark:divide-slate-700/50">
-                                    {refOperations.length === 0 ? (
-                                        <tr><td colSpan={5} className="py-6 text-center text-slate-400">Aun no agregaste operaciones</td></tr>
-                                    ) : (
-                                        refOperations.map((r) => (
-                                            <tr key={r.operation_id}>
-                                                <td className="px-4 py-2" data-label="Operacion">{r.name}</td>
-                                                <td className="px-4 py-2 text-right font-medium" data-label="Precio">{formatCurrency(r.price)}</td>
-                                                <td className="px-4 py-2 text-right" data-label="Minutos">{r.estimated_minutes} min</td>
-                                                <td className="px-4 py-2 text-center" data-label="Dificultad">
-                                                    <Badge variant="info">{difficultyLabel(levelFromMinutes(r.estimated_minutes, thresholds))}</Badge>
-                                                </td>
-                                                <td className="px-4 py-2 text-right" data-label="">
-                                                    <Button type="button" variant="ghost" size="sm" icon={<TrashIcon className="h-4 w-4 text-rose-500" />} onClick={() => removeOp(r.operation_id)} />
-                                                </td>
-                                            </tr>
-                                        ))
+                                    className={cn('ref-field', errors.payment_per_unit && 'ref-field-error')}
+                                    required
+                                />
+                                <p className="ref-help">
+                                    {errors.payment_per_unit ?? (
+                                        <>
+                                            Lo que <strong style={{ color: 'var(--ref-muted)' }}>reciben</strong> por unidad entregada.
+                                        </>
                                     )}
-                                </tbody>
-                            </table>
-                        </div>
-                    </Card>
+                                </p>
+                            </div>
 
-                    <ReferenceUnitEconomicsCard
-                        className="lg:col-span-3"
-                        paymentPerUnit={paymentNum}
-                        productionCostPerUnit={productionCostUnit}
-                        hasOperations={refOperations.length > 0}
-                        currency={companyCurrency}
-                        operationalLotQty={lotQtyPreview > 0 ? lotQtyPreview : undefined}
-                        totalOperational={lotQtyPreview > 0 ? totalOperationalPreview : undefined}
-                    />
-                </div>
+                            <div className="min-w-0">
+                                <label htmlFor="ref-lote" className="ref-label">
+                                    Cantidad total del lote
+                                </label>
+                                <input
+                                    id="ref-lote"
+                                    type="number"
+                                    step="1"
+                                    min={1}
+                                    inputMode="numeric"
+                                    value={data.lot_total_quantity}
+                                    onChange={(e) =>
+                                        setData('lot_total_quantity', e.target.value === '' ? ('' as number | '') : Number(e.target.value))
+                                    }
+                                    className={cn('ref-field', errors.lot_total_quantity && 'ref-field-error')}
+                                    required
+                                />
+                                <p className="ref-help">{errors.lot_total_quantity ?? 'Tope de unidades por operación.'}</p>
+                            </div>
+
+                            {/* El switch va dentro del mismo borde que los campos: la fila lee como tres campos. */}
+                            <div className="col-span-2 min-w-0 sm:col-span-1">
+                                <span className="ref-label">Estado</span>
+                                <div
+                                    className="flex min-h-[44px] items-center justify-between gap-3 rounded-lg px-3 sm:min-h-[38px]"
+                                    style={{ border: '1px solid var(--ref-border)', backgroundColor: 'var(--ref-surface)' }}
+                                >
+                                    <span className="min-w-0">
+                                        <span className="block text-[13px]" style={{ color: 'var(--ref-text)' }}>
+                                            Activa
+                                        </span>
+                                        <span className="block text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
+                                            Admite producción
+                                        </span>
+                                    </span>
+                                    <Switch checked={data.is_active} onChange={(v) => setData('is_active', v)} />
+                                </div>
+                            </div>
+                        </div>
+                    </ReferenceFormSection>
+
+                    {/* ---------------------------------------- 3 · Operaciones */}
+                    <ReferenceFormSection
+                        step={3}
+                        title="Operaciones"
+                        summary={
+                            refOperations.length > 0
+                                ? `${refOperations.length} ${refOperations.length === 1 ? 'línea' : 'líneas'} · ${minutosTotales.toLocaleString('es-CO')} min · ${formatCurrency(productionCostUnit, companyCurrency)} / u.`
+                                : undefined
+                        }
+                        action={
+                            <Can permission="operations.index.create">
+                                <button type="button" onClick={() => setShowOperationModal(true)} className="ref-btn ref-btn-sm">
+                                    <PlusIcon className="h-3.5 w-3.5" />
+                                    Crear operación nueva
+                                </button>
+                            </Can>
+                        }
+                    >
+                        {erroresOperaciones.length > 0 ? (
+                            <ul
+                                className="mb-3 space-y-1 rounded-lg px-3 py-2 text-[12px]"
+                                style={{ border: '1px solid var(--ref-danger)', color: 'var(--ref-danger)' }}
+                            >
+                                {erroresOperaciones.map((mensaje) => (
+                                    <li key={mensaje}>{mensaje}</li>
+                                ))}
+                            </ul>
+                        ) : null}
+
+                        <ReferenceOperationsTable
+                            lineas={refOperations}
+                            disponibles={availableOperations}
+                            thresholds={thresholds}
+                            currency={companyCurrency}
+                            onAgregar={addOperation}
+                            onQuitar={removeOp}
+                        />
+                    </ReferenceFormSection>
+                </ReferenceFormLayout>
             </form>
 
             <OperationQuickCreateModal

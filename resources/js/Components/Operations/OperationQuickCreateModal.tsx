@@ -93,7 +93,16 @@ export function OperationQuickCreateModal({ open, onClose, onCreated }: Operatio
                     <Button type="button" variant="ghost" onClick={handleClose}>
                         Cancelar
                     </Button>
-                    <Button type="submit" form="operation-quick-create-form" loading={processing}>
+                    {/*
+                      * Delineado, como el resto de los primarios de los formularios de
+                      * referencia. Solo se cambia el aspecto: el comportamiento es el mismo.
+                      */}
+                    <Button
+                        type="submit"
+                        form="operation-quick-create-form"
+                        loading={processing}
+                        className="border border-indigo-500 bg-indigo-500/12 text-indigo-700 shadow-none hover:bg-indigo-500/20 dark:border-indigo-400 dark:bg-indigo-400/12 dark:text-indigo-200 dark:hover:bg-indigo-400/20"
+                    >
                         Guardar
                     </Button>
                 </>
