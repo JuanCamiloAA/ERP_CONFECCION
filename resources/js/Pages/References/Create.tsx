@@ -1,10 +1,11 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { ArrowLeftIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { FormEvent, KeyboardEvent, useMemo, useState } from 'react';
+import { ArrowLeftIcon, PhotoIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { Card, CardHeader } from '@/Components/UI/Card';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Select } from '@/Components/UI/Select';
@@ -45,6 +46,13 @@ export default function ReferenceCreate({ operations }: Props) {
     const [opPrice, setOpPrice] = useState<string>('');
     const [opMinutes, setOpMinutes] = useState<string>('');
     const [showOperationModal, setShowOperationModal] = useState(false);
+
+    /** Vista previa de la imagen elegida; se libera al cambiarla o al salir. */
+    const [preview, setPreview] = useState<string | null>(null);
+
+    useEffect(() => () => {
+        if (preview) URL.revokeObjectURL(preview);
+    }, [preview]);
 
     const { data, setData, processing, errors } = useForm({
         code: '',
@@ -111,6 +119,12 @@ export default function ReferenceCreate({ operations }: Props) {
 
     const removeOp = (id: number) => setRefOperations((prev) => prev.filter((r) => r.operation_id !== id));
 
+    const elegirImagen = (file: File | null) => {
+        setData('image', file);
+        if (preview) URL.revokeObjectURL(preview);
+        setPreview(file ? URL.createObjectURL(file) : null);
+    };
+
     const handleOperationCreated = (op: QuickCreatedOperation) => {
         setAvailableOperations((prev) => [...prev, op].sort((a, b) => a.name.localeCompare(b.name)));
         setRefOperations((prev) => [
@@ -169,17 +183,45 @@ export default function ReferenceCreate({ operations }: Props) {
                                     setData('lot_total_quantity', e.target.value === '' ? ('' as number | '') : Number(e.target.value))}
                                 error={errors.lot_total_quantity}
                                 required
-                                description="Tope de unidades por operacion. Al guardar se fijara el costo operacional: suma de precios de operaciones x este lote."
+                                description="Tope de unidades por operacion en produccion. El costo operacional sale de los precios de las operaciones que agregues abajo."
                             />
                             <Textarea label="Descripcion" value={data.description} onChange={(e) => setData('description', e.target.value)} error={errors.description} className="sm:col-span-2" rows={3} />
                             <div className="sm:col-span-2">
                                 <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Imagen</label>
-                                <input
-                                    type="file"
-                                    accept="image/*"
-                                    onChange={(e) => setData('image', e.target.files?.[0] ?? null)}
-                                    className="w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-300 dark:file:bg-indigo-900/30 dark:file:text-indigo-300"
-                                />
+                                <div className="flex items-start gap-3">
+                                    <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-900/50">
+                                        {preview ? (
+                                            <ZoomableImage
+                                                src={preview}
+                                                alt={data.name || 'Imagen de la referencia'}
+                                                title={data.name || 'Imagen de la referencia'}
+                                                className="h-full w-full object-cover"
+                                            />
+                                        ) : (
+                                            <PhotoIcon className="h-9 w-9 text-slate-300 dark:text-slate-600" />
+                                        )}
+                                    </div>
+                                    <div className="min-w-0 flex-1">
+                                        <input
+                                            type="file"
+                                            accept="image/*"
+                                            onChange={(e) => elegirImagen(e.target.files?.[0] ?? null)}
+                                            className="w-full text-sm text-slate-700 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:font-medium file:text-indigo-700 hover:file:bg-indigo-100 dark:text-slate-300 dark:file:bg-indigo-900/30 dark:file:text-indigo-300"
+                                        />
+                                        <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                            {preview ? 'Pulsa la miniatura para verla en grande.' : 'Al elegirla veras aqui la vista previa.'}
+                                        </p>
+                                        {preview ? (
+                                            <button
+                                                type="button"
+                                                onClick={() => elegirImagen(null)}
+                                                className="mt-1 text-xs font-medium text-rose-600 hover:underline dark:text-rose-400"
+                                            >
+                                                Quitar imagen
+                                            </button>
+                                        ) : null}
+                                    </div>
+                                </div>
                             </div>
                             <div className="sm:col-span-2">
                                 <Switch checked={data.is_active} onChange={(v) => setData('is_active', v)} label="Activa" description="Disponible para registrar produccion" />

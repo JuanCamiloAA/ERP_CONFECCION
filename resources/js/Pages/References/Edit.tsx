@@ -1,9 +1,10 @@
 import { Head, Link, router, useForm } from '@inertiajs/react';
-import { ArrowLeftIcon } from '@heroicons/react/24/outline';
-import { FormEvent } from 'react';
+import { ArrowLeftIcon, PhotoIcon } from '@heroicons/react/24/outline';
+import { FormEvent, useEffect, useState } from 'react';
 import { ReferenceUnitEconomicsCard } from '@/Components/References/ReferenceUnitEconomicsCard';
 import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
+import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Switch } from '@/Components/UI/Switch';
@@ -29,6 +30,19 @@ export default function ReferenceEdit({ reference, comparison }: Props) {
         image: null as File | null,
         is_active: reference.is_active,
     });
+
+    /** Vista previa: la imagen actual hasta que se elija otra. */
+    const [preview, setPreview] = useState<string | null>(reference.image ?? null);
+
+    useEffect(() => () => {
+        if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+    }, [preview]);
+
+    const elegirImagen = (file: File | null) => {
+        setData('image', file);
+        if (preview?.startsWith('blob:')) URL.revokeObjectURL(preview);
+        setPreview(file ? URL.createObjectURL(file) : (reference.image ?? null));
+    };
 
     const paymentNum = data.payment_per_unit === '' ? 0 : Number(data.payment_per_unit);
     const paymentIncompleteUi = comparison.payment_per_unit_incomplete && data.payment_per_unit === '';
@@ -87,17 +101,49 @@ export default function ReferenceEdit({ reference, comparison }: Props) {
                                 setData('lot_total_quantity', e.target.value === '' ? ('' as number | '') : Number(e.target.value))}
                             error={errors.lot_total_quantity}
                             required
-                            description="No puede ser menor a la suma de produccion ya registrada. El costo operacional fijo se calculo al crear con el lote en ese momento; cambiar este valor no actualiza ese costo."
+                            description="No puede ser menor a la suma de produccion ya registrada. El costo operacional unitario no depende del lote: sale de los precios del detalle de operaciones."
                         />
                         <Textarea label="Descripcion" value={data.description} onChange={(e) => setData('description', e.target.value)} className="sm:col-span-2" rows={3} />
                         <div className="sm:col-span-2">
                             <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Imagen</label>
-                            <input
-                                type="file"
-                                accept="image/*"
-                                onChange={(e) => setData('image', e.target.files?.[0] ?? null)}
-                                className="w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:font-medium file:text-indigo-700 dark:file:bg-indigo-900/30 dark:file:text-indigo-300"
-                            />
+                            <div className="flex items-start gap-3">
+                                <div className="flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 dark:border-slate-600 dark:bg-slate-900/50">
+                                    {preview ? (
+                                        <ZoomableImage
+                                            src={preview}
+                                            alt={data.name || reference.name}
+                                            title={`${data.code || reference.code} — ${data.name || reference.name}`}
+                                            className="h-full w-full object-cover"
+                                        />
+                                    ) : (
+                                        <PhotoIcon className="h-9 w-9 text-slate-300 dark:text-slate-600" />
+                                    )}
+                                </div>
+                                <div className="min-w-0 flex-1">
+                                    <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => elegirImagen(e.target.files?.[0] ?? null)}
+                                        className="w-full text-sm file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-2 file:font-medium file:text-indigo-700 dark:file:bg-indigo-900/30 dark:file:text-indigo-300"
+                                    />
+                                    <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
+                                        {data.image
+                                            ? 'Imagen nueva: reemplazara a la actual al guardar.'
+                                            : preview
+                                              ? 'Imagen actual. Elige un archivo para reemplazarla.'
+                                              : 'Al elegirla veras aqui la vista previa.'}
+                                    </p>
+                                    {data.image ? (
+                                        <button
+                                            type="button"
+                                            onClick={() => elegirImagen(null)}
+                                            className="mt-1 text-xs font-medium text-rose-600 hover:underline dark:text-rose-400"
+                                        >
+                                            Descartar la nueva
+                                        </button>
+                                    ) : null}
+                                </div>
+                            </div>
                         </div>
                         <div className="sm:col-span-2">
                             <Switch checked={data.is_active} onChange={(v) => setData('is_active', v)} label="Activa" />
