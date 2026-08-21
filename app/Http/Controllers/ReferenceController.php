@@ -17,6 +17,7 @@ use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -146,10 +147,10 @@ class ReferenceController extends Controller
     {
         $reference->load(['operations', 'company']);
         $reference->loadSum('productions', 'quantity');
+        $reference->setAttribute('productions_max_per_operation', $this->maxProducedInOneOperation($reference));
 
         return Inertia::render('References/Show', [
             'reference' => $reference,
-            'allOperations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price', 'estimated_minutes', 'difficulty_level']),
             'comparison' => $this->buildEconomicsComparison($reference),
         ]);
     }
@@ -160,14 +161,37 @@ class ReferenceController extends Controller
 
         return Inertia::render('References/Edit', [
             'reference' => $reference,
+            'operations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price', 'estimated_minutes', 'difficulty_level']),
             'comparison' => $this->buildEconomicsComparison($reference),
+            'producedMax' => $this->maxProducedInOneOperation($reference),
         ]);
+    }
+
+    /**
+     * Unidades producidas de la operacion mas avanzada.
+     *
+     * Es la cifra que hay que comparar contra el lote: `productions_sum_quantity` suma
+     * todas las operaciones, asi que una prenda de ocho pasos daria un 800% de avance.
+     */
+    protected function maxProducedInOneOperation(Reference $reference): int
+    {
+        return (int) Production::query()
+            ->withoutGlobalScopes()
+            ->where('reference_id', $reference->id)
+            ->selectRaw('operation_id, SUM(quantity) as op_sum')
+            ->groupBy('operation_id')
+            ->pluck('op_sum')
+            ->max();
     }
 
     public function update(UpdateReferenceRequest $request, Reference $reference): RedirectResponse
     {
         $data = $request->validated();
-        unset($data['image']);
+
+        // El detalle solo se toca si la peticion lo trae: cualquier otro consumidor del
+        // endpoint sigue actualizando unicamente los datos de la referencia.
+        $operations = $data['operations'] ?? null;
+        unset($data['operations'], $data['image']);
 
         if ($request->hasFile('image')) {
             $this->storedFileDeleter->deleteIfPresent($reference->getAttributes()['image'] ?? null);
@@ -178,16 +202,151 @@ class ReferenceController extends Controller
             $data['image'] = $uploaded['path'];
         }
 
-        $reference->update($data);
+        if ($operations !== null) {
+            $quitadas = $reference->referenceOperations()
+                ->whereNotIn('operation_id', collect($operations)->pluck('operation_id')->all())
+                ->pluck('operation_id');
+
+            // Quitar una linea ya producida dejaria producciones apuntando a un detalle
+            // que no existe, y con el la trazabilidad de lo que se pago.
+            if ($quitadas->isNotEmpty()) {
+                $conProduccion = Production::query()->withoutGlobalScopes()
+                    ->where('reference_id', $reference->id)
+                    ->whereIn('operation_id', $quitadas)
+                    ->pluck('operation_id')
+                    ->unique();
+
+                if ($conProduccion->isNotEmpty()) {
+                    $nombres = Operation::query()->withoutGlobalScopes()
+                        ->whereIn('id', $conProduccion)
+                        ->pluck('name')
+                        ->implode(', ');
+
+                    throw ValidationException::withMessages([
+                        'operations' => "No puedes quitar operaciones con produccion registrada: {$nombres}.",
+                    ]);
+                }
+            }
+        }
+
+        DB::transaction(function () use ($reference, $data, $operations) {
+            $reference->update($data);
+
+            if ($operations !== null) {
+                $thresholds = OperationDifficulty::thresholdsFor($reference->company);
+
+                // El estado activo es del detalle, no del formulario: una linea cerrada por
+                // lote completo o inactivada a mano no debe reactivarse al guardar.
+                $activasPrevias = $reference->referenceOperations()
+                    ->pluck('is_active', 'operation_id');
+
+                $sync = collect($operations)->mapWithKeys(function ($row) use ($thresholds, $activasPrevias) {
+                    $minutes = $row['estimated_minutes'] ?? null;
+
+                    return [
+                        $row['operation_id'] => [
+                            'price' => $row['price'],
+                            'estimated_minutes' => $minutes,
+                            'difficulty_level' => $minutes !== null && $minutes !== ''
+                                ? OperationDifficulty::levelFromMinutes((float) $minutes, $thresholds)
+                                : null,
+                            'is_active' => (bool) ($activasPrevias[$row['operation_id']] ?? true),
+                        ],
+                    ];
+                })->all();
+
+                $reference->operations()->sync($sync);
+            }
+
+            $reference->refreshOperationalCost();
+        });
 
         $reference->refresh();
+        // Despues del costo: el cierre por lote depende del detalle ya sincronizado.
         ReferenceLotCompletion::sync((int) $reference->id);
 
         return redirect()->route('references.show', $reference)->with('success', 'Referencia actualizada.');
     }
 
+    /**
+     * Copia una referencia con su detalle de operaciones, lista para ajustar.
+     *
+     * No se copian ni la imagen —dos referencias apuntando al mismo archivo hacen que
+     * borrar una deje a la otra sin imagen— ni las producciones, que son historia de la
+     * referencia original.
+     */
+    public function duplicate(Request $request, Reference $reference): RedirectResponse
+    {
+        $user = $request->user();
+        abort_if(! $user?->can('references.index.create') && ! $user?->isSuperAdmin(), 403);
+
+        $copia = DB::transaction(function () use ($reference) {
+            $copia = Reference::create([
+                'company_id' => $reference->company_id,
+                'code' => $this->availableCopyCode($reference),
+                'name' => $reference->name,
+                'payment_per_unit' => $reference->payment_per_unit,
+                'description' => $reference->description,
+                'lot_total_quantity' => $reference->lot_total_quantity,
+                'is_active' => $reference->is_active,
+                'image' => null,
+                'operational_cost_per_unit_fixed' => 0,
+                'operational_lot_qty_at_cost_fix' => $reference->lot_total_quantity,
+            ]);
+
+            $sync = $reference->referenceOperations->mapWithKeys(fn ($linea) => [
+                $linea->operation_id => [
+                    'price' => $linea->price,
+                    'estimated_minutes' => $linea->estimated_minutes,
+                    'difficulty_level' => $linea->difficulty_level,
+                    'is_active' => $linea->is_active,
+                ],
+            ])->all();
+
+            if ($sync !== []) {
+                $copia->operations()->sync($sync);
+            }
+
+            $copia->refreshOperationalCost();
+
+            return $copia;
+        });
+
+        return redirect()->route('references.edit', $copia)->with('success', 'Referencia duplicada. Revisa el codigo.');
+    }
+
+    /**
+     * Primer «-COPIA» libre dentro de la empresa; el codigo es unico por empresa.
+     */
+    protected function availableCopyCode(Reference $reference): string
+    {
+        $base = $reference->code.'-COPIA';
+        $candidato = $base;
+        $n = 1;
+
+        while (Reference::query()->withoutGlobalScopes()
+            ->where('company_id', $reference->company_id)
+            ->whereNull('deleted_at')
+            ->where('code', $candidato)
+            ->exists()) {
+            $n++;
+            $candidato = $base.'-'.$n;
+        }
+
+        return mb_substr($candidato, 0, 50);
+    }
+
     public function destroy(Reference $reference): RedirectResponse
     {
+        // Antes dependia de lo que hiciera la llave foranea: mejor un mensaje que un 500.
+        $producidas = Production::query()->withoutGlobalScopes()
+            ->where('reference_id', $reference->id)
+            ->exists();
+
+        if ($producidas) {
+            return back()->with('error', 'No puedes eliminar una referencia con produccion registrada.');
+        }
+
         $reference->delete();
 
         return redirect()->route('references.index')->with('success', 'Referencia eliminada.');

@@ -94,6 +94,7 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {reference}.
         Route::post('/references/recalculate-difficulty', [ReferenceController::class, 'recalculateAllDifficulties'])->name('references.recalculate-difficulty');
         Route::resource('references', ReferenceController::class);
+        Route::post('/references/{reference}/duplicate', [ReferenceController::class, 'duplicate'])->name('references.duplicate');
         Route::post('/references/{reference}/recalculate-difficulty', [ReferenceController::class, 'recalculateDifficulties'])->name('references.operations.recalculate');
         Route::post('/references/{reference}/operations', [ReferenceController::class, 'attachOperation'])->name('references.operations.attach');
         Route::put('/references/{reference}/operations/{operation}', [ReferenceController::class, 'updateOperationPrice'])->name('references.operations.update');

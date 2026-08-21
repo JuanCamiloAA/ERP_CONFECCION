@@ -35,6 +35,13 @@ class UpdateReferenceRequest extends FormRequest
             'lot_total_quantity' => ['required', 'integer', 'min:1', 'max:2147483647'],
             'image' => ['nullable', 'image', 'max:2048'],
             'is_active' => ['nullable', 'boolean'],
+
+            // Mismas reglas que al crear. `sometimes`: si la clave no viene, el detalle de
+            // operaciones no se toca y el endpoint sigue comportandose como hasta ahora.
+            'operations' => ['sometimes', 'array'],
+            'operations.*.operation_id' => ['required', 'integer', 'exists:operations,id'],
+            'operations.*.price' => ['required', 'numeric', 'min:0'],
+            'operations.*.estimated_minutes' => ['nullable', 'numeric', 'min:0.01', 'max:9999.99'],
         ];
     }
 

@@ -1,1 +1,0 @@
-import{j as a}from"./app-D0X8WEt4.js";import{a as p}from"./phosphorIcon-CtC3irq3.js";function m({logo:r,className:n="",imageClassName:e,style:t,size:i=18}){return(r==null?void 0:r.type)==="image"&&r.url?a.jsx("img",{src:r.url,alt:"",className:`object-contain ${e??n}`,style:t}):a.jsx("span",{className:n,style:t,children:p((r==null?void 0:r.icon)||"ph-needle",i)})}export{m as B};

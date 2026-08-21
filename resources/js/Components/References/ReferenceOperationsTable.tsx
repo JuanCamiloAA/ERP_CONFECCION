@@ -15,6 +15,11 @@ export interface RefOperation {
     name: string;
     price: number;
     estimated_minutes: number;
+    /**
+     * Solo lo usa la vista: una linea inactiva no se ofrece al registrar produccion, pero
+     * sigue sumando al costo unitario, asi que se marca en vez de esconderse.
+     */
+    is_active?: boolean;
 }
 
 interface Props {
@@ -26,10 +31,17 @@ interface Props {
     currency: string;
     onAgregar: (linea: RefOperation) => void;
     onQuitar: (operationId: number) => void;
-    /** Solo en editar: permite corregir en linea el precio de una linea existente. */
+    /** Solo en editar: corrige en linea el precio de una linea existente. */
     onPrecio?: (operationId: number, precio: number) => void;
+    /** Solo en editar: corrige los minutos; la dificultad se recalcula sola. */
+    onMinutos?: (operationId: number, minutos: number) => void;
+    /** Vista: sin fila de captura, sin papelera y con el precio como texto. */
+    readOnly?: boolean;
     className?: string;
 }
+
+/** Una linea es inactiva solo si el dato lo dice; sin dato, se asume activa. */
+const inactiva = (l: RefOperation): boolean => l.is_active === false;
 
 const numero = (valor: string): number => {
     const n = Number(String(valor).replace(',', '.'));
@@ -47,6 +59,10 @@ const numero = (valor: string): number => {
  *
  * La columna «% del costo» responde «que me esta costando caro» sin salir de la pantalla.
  *
+ * Con `onPrecio` y `onMinutos` la linea se corrige donde esta, sin abrir nada: el input
+ * no lleva borde hasta que se pasa por encima. La dificultad no se edita a mano —sale de
+ * los minutos y de los rangos de la empresa— pero se actualiza al teclear.
+ *
  * Escritorio y movil dibujan sus propios campos —la tabla no cabe en 390px—, por eso cada
  * uno lleva su referencia: si compartieran una, al montarse el segundo la del primero
  * quedaria apuntando a un nodo que no se ve.
@@ -59,6 +75,8 @@ export function ReferenceOperationsTable({
     onAgregar,
     onQuitar,
     onPrecio,
+    onMinutos,
+    readOnly = false,
     className,
 }: Props) {
     const [busqueda, setBusqueda] = useState('');
@@ -296,7 +314,7 @@ export function ReferenceOperationsTable({
                                 ['Minutos', 'w-[116px]'],
                                 ['Dificultad', 'w-[104px]'],
                                 ['% del costo', 'w-[132px]'],
-                                ['', 'w-[44px]'],
+                                ...(readOnly ? [] : [['', 'w-[44px]']]),
                             ].map(([h, w], i) => (
                                 <th
                                     key={h || `c${i}`}
@@ -314,11 +332,19 @@ export function ReferenceOperationsTable({
 
                             return (
                                 <tr key={l.operation_id} style={{ borderTop: '1px solid var(--ref-border-table)' }}>
-                                    <td className="px-3 py-2" style={{ color: 'var(--ref-text)' }}>
+                                    <td className="px-3 py-2" style={{ color: inactiva(l) ? 'var(--ref-muted)' : 'var(--ref-text)' }}>
                                         {l.name}
+                                        {inactiva(l) ? (
+                                            <span
+                                                className="ml-2 rounded-full px-2 py-0.5 text-[11px]"
+                                                style={{ border: '1px solid var(--ref-border)', color: 'var(--ref-subtle)' }}
+                                            >
+                                                Inactiva
+                                            </span>
+                                        ) : null}
                                     </td>
                                     <td className="px-3 py-2">
-                                        {onPrecio ? (
+                                        {onPrecio && !readOnly ? (
                                             <input
                                                 type="number"
                                                 step="0.01"
@@ -334,10 +360,30 @@ export function ReferenceOperationsTable({
                                             <span style={{ color: 'var(--ref-text)' }}>{formatCurrency(l.price, currency)}</span>
                                         )}
                                     </td>
-                                    <td className="px-3 py-2" style={{ color: 'var(--ref-muted)' }}>
-                                        {l.estimated_minutes} min
+                                    <td className="px-3 py-2">
+                                        {onMinutos && !readOnly ? (
+                                            <span className="flex items-center gap-1">
+                                                <input
+                                                    type="number"
+                                                    step="0.1"
+                                                    min={0}
+                                                    value={l.estimated_minutes}
+                                                    aria-label={`Minutos de ${l.name}`}
+                                                    onChange={(e) => onMinutos(l.operation_id, numero(e.target.value))}
+                                                    onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                    className="w-full min-w-0 rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[13px] hover:border-[color:var(--ref-border)]"
+                                                    style={{ color: 'var(--ref-text)' }}
+                                                />
+                                                <span className="shrink-0 text-[12px]" style={{ color: 'var(--ref-subtle)' }}>
+                                                    min
+                                                </span>
+                                            </span>
+                                        ) : (
+                                            <span style={{ color: 'var(--ref-muted)' }}>{l.estimated_minutes} min</span>
+                                        )}
                                     </td>
                                     <td className="px-3 py-2" style={{ color: 'var(--ref-muted)' }}>
+                                        {/* Derivada de los minutos: la fija el servidor con los rangos de Mi empresa. */}
                                         {difficultyLabel(levelFromMinutes(Number(l.estimated_minutes), thresholds))}
                                     </td>
                                     <td className="px-3 py-2">
@@ -353,23 +399,26 @@ export function ReferenceOperationsTable({
                                             </span>
                                         </span>
                                     </td>
-                                    <td className="px-2 py-2 text-right">
-                                        <button
-                                            type="button"
-                                            onClick={() => onQuitar(l.operation_id)}
-                                            aria-label={`Quitar ${l.name}`}
-                                            className="rounded-md p-1.5"
-                                            style={{ color: 'var(--ref-subtle)' }}
-                                        >
-                                            <TrashIcon className="h-4 w-4" />
-                                        </button>
-                                    </td>
+                                    {readOnly ? null : (
+                                        <td className="px-2 py-2 text-right">
+                                            <button
+                                                type="button"
+                                                onClick={() => onQuitar(l.operation_id)}
+                                                aria-label={`Quitar ${l.name}`}
+                                                className="rounded-md p-1.5"
+                                                style={{ color: 'var(--ref-subtle)' }}
+                                            >
+                                                <TrashIcon className="h-4 w-4" />
+                                            </button>
+                                        </td>
+                                    )}
                                 </tr>
                             );
                         })}
 
                         {/* Captura: siempre la ultima fila, tambien cuando aun no hay lineas. */}
-                        <tr style={{ borderTop: '1px solid var(--ref-border-table)', backgroundColor: 'var(--ref-accent-soft)' }}>
+                        {readOnly ? null : (
+                            <tr style={{ borderTop: '1px solid var(--ref-border-table)', backgroundColor: 'var(--ref-accent-soft)' }}>
                             <td className="px-3 py-2 align-top">{buscadorCombo(buscadorEscritorio, 'ref-ops-lista')}</td>
                             <td className="px-2 py-2 align-top">{campoPrecio(precioEscritorio)}</td>
                             <td className="px-2 py-2 align-top">{campoMinutos}</td>
@@ -382,7 +431,8 @@ export function ReferenceOperationsTable({
                                     Agregar
                                 </button>
                             </td>
-                        </tr>
+                            </tr>
+                        )}
                     </tbody>
                 </table>
 
@@ -394,7 +444,9 @@ export function ReferenceOperationsTable({
                         borderTop: '1px solid var(--ref-border-table)',
                     }}
                 >
-                    Escribe para buscar la operación; Enter agrega la línea y deja el cursor listo para la siguiente.
+                    {readOnly
+                        ? 'Las líneas inactivas siguen sumando al costo unitario, pero no se ofrecen al registrar producción. Para cambiar precios o minutos, entra a editar.'
+                        : 'Escribe para buscar la operación; Enter agrega la línea y deja el cursor listo para la siguiente.'}
                 </p>
             </div>
 
@@ -410,11 +462,33 @@ export function ReferenceOperationsTable({
                             style={{ backgroundColor: 'var(--ref-surface)', border: '1px solid var(--ref-border)' }}
                         >
                             <div className="min-w-0">
-                                <p className="truncate text-[14px]" style={{ color: 'var(--ref-text)' }}>
+                                <p className="truncate text-[14px]" style={{ color: inactiva(l) ? 'var(--ref-muted)' : 'var(--ref-text)' }}>
                                     {l.name}
+                                    {inactiva(l) ? (
+                                        <span className="ml-2 text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
+                                            · Inactiva
+                                        </span>
+                                    ) : null}
                                 </p>
                                 <p className="mt-1 flex flex-wrap items-center gap-2 text-[12px]" style={{ color: 'var(--ref-muted)' }}>
-                                    {l.estimated_minutes} min
+                                    {onMinutos && !readOnly ? (
+                                        <span className="flex items-center gap-1">
+                                            <input
+                                                type="number"
+                                                step="0.1"
+                                                min={0}
+                                                inputMode="decimal"
+                                                value={l.estimated_minutes}
+                                                aria-label={`Minutos de ${l.name}`}
+                                                onChange={(e) => onMinutos(l.operation_id, numero(e.target.value))}
+                                                onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                                className="ref-field h-11 w-20 px-2 text-[13px]"
+                                            />
+                                            <span style={{ color: 'var(--ref-subtle)' }}>min</span>
+                                        </span>
+                                    ) : (
+                                        <span>{l.estimated_minutes} min</span>
+                                    )}
                                     <span
                                         className="rounded-full px-2 py-0.5 text-[11px]"
                                         style={{ backgroundColor: 'var(--ref-accent-soft)', color: 'var(--ref-accent-on)' }}
@@ -424,25 +498,46 @@ export function ReferenceOperationsTable({
                                 </p>
                             </div>
                             <div className="shrink-0 text-right">
-                                <p className="text-[14px]" style={{ color: 'var(--ref-text)' }}>
-                                    {formatCurrency(l.price, currency)}
-                                </p>
+                                {onPrecio && !readOnly ? (
+                                    <input
+                                        type="number"
+                                        step="0.01"
+                                        min={0}
+                                        inputMode="decimal"
+                                        value={l.price}
+                                        aria-label={`Precio de ${l.name}`}
+                                        onChange={(e) => onPrecio(l.operation_id, numero(e.target.value))}
+                                        onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
+                                        className="ref-field h-11 w-28 px-2 text-right text-[13px]"
+                                    />
+                                ) : (
+                                    <p className="text-[14px]" style={{ color: 'var(--ref-text)' }}>
+                                        {formatCurrency(l.price, currency)}
+                                    </p>
+                                )}
                                 <p className="mt-0.5 text-[12px]" style={{ color: 'var(--ref-muted)' }}>
                                     {peso.toFixed(0)}% del costo
                                 </p>
-                                <button
-                                    type="button"
-                                    onClick={() => onQuitar(l.operation_id)}
-                                    className="mt-1 h-11 text-[12px]"
-                                    style={{ color: 'var(--ref-danger)' }}
-                                >
-                                    Quitar
-                                </button>
+                                {readOnly ? null : (
+                                    <button
+                                        type="button"
+                                        onClick={() => onQuitar(l.operation_id)}
+                                        className="mt-1 h-11 text-[12px]"
+                                        style={{ color: 'var(--ref-danger)' }}
+                                    >
+                                        Quitar
+                                    </button>
+                                )}
                             </div>
                         </div>
                     );
                 })}
 
+                {readOnly ? (
+                    <p className="text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
+                        Las líneas inactivas siguen sumando al costo unitario. Para cambiar precios o minutos, entra a editar.
+                    </p>
+                ) : (
                 <button
                     type="button"
                     onClick={() => {
@@ -455,10 +550,11 @@ export function ReferenceOperationsTable({
                     <PlusIcon className="h-4 w-4" />
                     Agregar operación
                 </button>
+                )}
             </div>
 
             {/* Hoja inferior de captura en movil. */}
-            {hojaMovil ? (
+            {hojaMovil && !readOnly ? (
                 <div
                     className="fixed inset-0 z-50 flex flex-col justify-end sm:hidden"
                     role="dialog"
