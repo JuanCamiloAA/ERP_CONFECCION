@@ -13,3 +13,7 @@ reabrir operaciones
 php artisan productions:reopen-unpaid --dry-run
 
 php artisan productions:reopen-unpaid --status=pendiente
+
+
+memory_limit = 512M
+max_execution_time = 300

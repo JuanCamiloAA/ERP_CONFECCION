@@ -246,7 +246,12 @@ class ReferenceController extends Controller
     {
         $reference->load(['operations', 'company']);
         $reference->loadSum('productions', 'quantity');
-        $reference->setAttribute('productions_max_per_operation', $this->maxProducedInOneOperation($reference));
+
+        $progress = $this->productionProgress($reference);
+        $reference->setAttribute('productions_max_per_operation', $progress['max']);
+        // La ficha mide el avance en operaciones completadas, igual que el listado; sin
+        // esta cifra cada pantalla contaba una cosa distinta del mismo lote.
+        $reference->setAttribute('operations_completed_count', $progress['completed']);
 
         return Inertia::render('References/Show', [
             'reference' => $reference,
@@ -262,25 +267,37 @@ class ReferenceController extends Controller
             'reference' => $reference,
             'operations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price', 'estimated_minutes', 'difficulty_level']),
             'comparison' => $this->buildEconomicsComparison($reference),
-            'producedMax' => $this->maxProducedInOneOperation($reference),
+            'producedMax' => $this->productionProgress($reference)['max'],
         ]);
     }
 
     /**
-     * Unidades producidas de la operacion mas avanzada.
+     * Avance de una referencia, con las dos cifras que se miden contra el lote.
      *
-     * Es la cifra que hay que comparar contra el lote: `productions_sum_quantity` suma
-     * todas las operaciones, asi que una prenda de ocho pasos daria un 800% de avance.
+     * - `max`: unidades producidas de la operacion mas avanzada. Es lo comparable contra
+     *   el lote; `productions_sum_quantity` suma todas las operaciones, asi que una
+     *   prenda de ocho pasos daria un 800% de avance.
+     * - `completed`: cuantas operaciones ya cubren el lote completo. Mismo criterio que
+     *   usa el listado (ver index), para que la ficha y la tabla no discrepen.
+     *
+     * @return array{max: int, completed: int}
      */
-    protected function maxProducedInOneOperation(Reference $reference): int
+    protected function productionProgress(Reference $reference): array
     {
-        return (int) Production::query()
+        $sums = Production::query()
             ->withoutGlobalScopes()
             ->where('reference_id', $reference->id)
             ->selectRaw('operation_id, SUM(quantity) as op_sum')
             ->groupBy('operation_id')
-            ->pluck('op_sum')
-            ->max();
+            ->pluck('op_sum');
+
+        $lot = (int) ($reference->lot_total_quantity ?? 0);
+
+        return [
+            'max' => (int) $sums->max(),
+            // Sin lote definido no hay meta contra la cual dar una operacion por completa.
+            'completed' => $lot > 0 ? $sums->filter(fn ($sum) => (int) $sum >= $lot)->count() : 0,
+        ];
     }
 
     public function update(UpdateReferenceRequest $request, Reference $reference): RedirectResponse

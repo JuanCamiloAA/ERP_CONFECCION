@@ -20,6 +20,8 @@ interface Props {
         productions_sum_quantity?: number | null;
         /** Maximo acumulado en una sola operacion: es lo comparable contra el lote. */
         productions_max_per_operation?: number | null;
+        /** Cuantas de las operaciones de la referencia ya cubren el lote completo. */
+        operations_completed_count?: number | null;
     };
     comparison: ReferenceEconomicsComparison;
 }
@@ -57,7 +59,6 @@ export default function ReferenceShow({ reference, comparison }: Props) {
     const margen = pago - costo;
 
     const producidas = Number(reference.productions_max_per_operation ?? 0);
-    const avance = lote > 0 ? Math.min(100, Math.round((producidas / lote) * 100)) : null;
 
     /** El detalle, en la forma que espera la tabla compartida. */
     const lineas: RefOperation[] = useMemo(
@@ -73,6 +74,18 @@ export default function ReferenceShow({ reference, comparison }: Props) {
     );
 
     const minutosTotales = lineas.reduce((s, l) => s + l.estimated_minutes, 0);
+
+    /**
+     * Avance en OPERACIONES, el mismo que muestra la columna del listado: de las
+     * operaciones que lleva la referencia, cuantas ya cubren el lote completo. Medirlo en
+     * unidades de la operacion mas adelantada daba «100% del lote» en una referencia con
+     * 2 de 5 operaciones terminadas, que es lo contrario de lo que se quiere leer aqui.
+     * Espejo de operationsProgress() en References/Index.
+     */
+    const opsTotal = lineas.length;
+    const opsHechas = Number(reference.operations_completed_count ?? 0);
+    const conLote = lote > 0;
+    const avance = conLote && opsTotal > 0 ? Math.round((opsHechas / opsTotal) * 100) : null;
 
     const duplicar = () => {
         if (enCurso) return;
@@ -231,10 +244,16 @@ export default function ReferenceShow({ reference, comparison }: Props) {
 
     const panel = (
         <ReferenceEconomicsPanel paymentPerUnit={pago} productionCostPerUnit={costo} lote={lote} currency={currency}>
-            <ReferenceEconomicsBlock kicker="Producción registrada">
+            <ReferenceEconomicsBlock kicker="Operaciones completadas">
                 <p className="text-[15px]" style={{ color: 'var(--ref-text)' }}>
-                    {producidas.toLocaleString('es-CO')}
-                    {lote > 0 ? <span style={{ color: 'var(--ref-muted)' }}> de {lote.toLocaleString('es-CO')}</span> : null}
+                    {conLote ? (
+                        <>
+                            {opsHechas.toLocaleString('es-CO')}
+                            <span style={{ color: 'var(--ref-muted)' }}> de {opsTotal.toLocaleString('es-CO')}</span>
+                        </>
+                    ) : (
+                        <span style={{ color: 'var(--ref-muted)' }}>Sin lote definido</span>
+                    )}
                 </p>
                 {avance !== null ? (
                     <>
@@ -242,12 +261,12 @@ export default function ReferenceShow({ reference, comparison }: Props) {
                             <span className="block h-full rounded-full" style={{ width: `${avance}%`, backgroundColor: 'var(--ref-accent)' }} />
                         </div>
                         <p className="mt-1.5 text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
-                            {avance}% del lote, contando la operación más avanzada.
+                            {avance}% de las operaciones cubre el lote · {producidas.toLocaleString('es-CO')} u. en la más avanzada.
                         </p>
                     </>
                 ) : (
                     <p className="mt-1.5 text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
-                        Sin lote definido, no hay avance que calcular.
+                        Sin lote definido, no hay meta contra la cual medir las operaciones.
                     </p>
                 )}
             </ReferenceEconomicsBlock>
@@ -263,7 +282,8 @@ export default function ReferenceShow({ reference, comparison }: Props) {
                             ['Pago por unidad', pagoSinDefinir ? 'Sin definir' : formatCurrency(pago, currency)],
                             ['Costo operacional', formatCurrency(costo, currency)],
                             ['Margen del lote', pagoSinDefinir ? '—' : formatCurrency(margen * lote, currency)],
-                            ['Producción registrada', `${producidas.toLocaleString('es-CO')}${lote > 0 ? ` de ${lote.toLocaleString('es-CO')}` : ''}`],
+                            ['Operaciones completadas', conLote ? `${opsHechas} de ${opsTotal}` : 'Sin lote definido'],
+                            ['Producción (op. más avanzada)', `${producidas.toLocaleString('es-CO')} u.`],
                         ].map(([k, v]) => (
                             <div key={k} className="flex items-center justify-between gap-3">
                                 <dt style={{ color: 'var(--ref-muted)' }}>{k}</dt>
