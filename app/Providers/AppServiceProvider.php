@@ -42,8 +42,11 @@ use App\Services\Files\MediaUrlResolver;
 use App\Services\Files\StoredFileDeleter;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\ServiceProvider;
+use Symfony\Component\Mailer\Bridge\Brevo\Transport\BrevoTransportFactory;
+use Symfony\Component\Mailer\Transport\Dsn;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -73,6 +76,8 @@ class AppServiceProvider extends ServiceProvider
     {
         Model::shouldBeStrict(false);
 
+        $this->registerBrevoMailer();
+
         Employee::observe(EmployeeObserver::class);
         Production::observe(ProductionObserver::class);
         User::observe(UserObserver::class);
@@ -100,5 +105,27 @@ class AppServiceProvider extends ServiceProvider
         if (config('app.env') === 'production') {
             URL::forceScheme('https');
         }
+    }
+
+    /**
+     * Registra el transporte de correo de Brevo (API HTTP).
+     *
+     * Laravel no trae Brevo de fabrica —solo conoce ses, postmark, resend, smtp y poco
+     * mas—, asi que aqui se engancha el puente oficial de Symfony: con esto
+     * MAIL_MAILER=brevo se comporta como cualquier otro transporte y el codigo que envia
+     * correos (recuperar contrasena, solicitudes de plan) no se entera del cambio.
+     *
+     * Se usa la API y no el relay SMTP porque muchos hostings bloquean la salida por el
+     * puerto 587; sobre HTTPS el correo sale por donde ya sale todo lo demas.
+     */
+    protected function registerBrevoMailer(): void
+    {
+        Mail::extend('brevo', function (array $config = []) {
+            $key = $config['key'] ?? config('services.brevo.key');
+
+            // La clave viaja en la parte de usuario del DSN (brevo+api://CLAVE@default):
+            // es de donde la lee BrevoTransportFactory.
+            return (new BrevoTransportFactory)->create(new Dsn('brevo+api', 'default', $key));
+        });
     }
 }

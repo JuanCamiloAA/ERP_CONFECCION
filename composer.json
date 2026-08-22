@@ -13,6 +13,8 @@
         "laravel/tinker": "^2.10.1",
         "league/csv": "^9.28",
         "spatie/laravel-permission": "6.16",
+        "symfony/brevo-mailer": "^7.4",
+        "symfony/http-client": "^7.4",
         "tightenco/ziggy": "2.4"
     },
     "require-dev": {
