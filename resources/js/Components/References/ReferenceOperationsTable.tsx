@@ -349,10 +349,12 @@ export function ReferenceOperationsTable({
         />
     );
 
+    // step 0.01: los minutos se guardan con dos decimales (decimal(8,2)), y con un paso
+    // mas grueso el navegador rechazaba «1,25» antes de que el formulario se enviara.
     const campoMinutos = (
         <input
             type="number"
-            step="0.1"
+            step="0.01"
             min={0}
             inputMode="decimal"
             value={minutos}
@@ -428,7 +430,7 @@ export function ReferenceOperationsTable({
                                             <span className="flex items-center gap-1">
                                                 <input
                                                     type="number"
-                                                    step="0.1"
+                                                    step="0.01"
                                                     min={0}
                                                     value={l.estimated_minutes}
                                                     aria-label={`Minutos de ${l.name}`}
@@ -538,7 +540,7 @@ export function ReferenceOperationsTable({
                                         <span className="flex items-center gap-1">
                                             <input
                                                 type="number"
-                                                step="0.1"
+                                                step="0.01"
                                                 min={0}
                                                 inputMode="decimal"
                                                 value={l.estimated_minutes}
