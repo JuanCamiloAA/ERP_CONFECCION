@@ -15,7 +15,7 @@ import {
     UserCircleIcon,
     UserPlusIcon,
 } from '@heroicons/react/24/outline';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { toast } from 'sonner';
 import {
     AccessPasswordData,
@@ -39,6 +39,7 @@ import { Can } from '@/Components/UI/Can';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatDate, formatDateTime, formatRoleSelectLabel } from '@/lib/utils';
 import type { Advance, Employee, PayrollEmployee, Production } from '@/types';
+import '../../../css/employee-form.css';
 
 function maskAccountDisplay(num: string | null | undefined): string {
     if (!num) return '—';
@@ -50,6 +51,39 @@ function maskKeyDisplay(key: string | null | undefined): string {
     if (!key) return '—';
     if (key.length <= 4) return '****';
     return `${'*'.repeat(Math.min(4, key.length - 4))}${key.slice(-4)}`;
+}
+
+const DAY_LABELS: Record<number, string> = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' };
+
+/** Dias ISO a etiquetas legibles: [1,2,3] -> "Lun, Mar, Mié". */
+function scheduledDaysLabel(days: number[] | undefined): string {
+    if (!days || days.length === 0) return '—';
+
+    return days
+        .slice()
+        .sort((a, b) => a - b)
+        .map((iso) => DAY_LABELS[iso] ?? String(iso))
+        .join(', ');
+}
+
+/** Fila de dato de la ficha: mismo rotulo y mismo valor en las cuatro secciones. */
+function Dato({
+    label,
+    children,
+    wide = false,
+    mono = false,
+}: {
+    label: string;
+    children: ReactNode;
+    wide?: boolean;
+    mono?: boolean;
+}) {
+    return (
+        <div className={wide ? 'sm:col-span-2' : undefined}>
+            <dt className="text-xs uppercase text-slate-500">{label}</dt>
+            <dd className={`mt-1 text-sm text-slate-700 dark:text-slate-300 ${mono ? 'font-mono' : ''}`}>{children}</dd>
+        </div>
+    );
 }
 
 interface MonthSummary {
@@ -239,50 +273,96 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                 />
 
                 {tab === 'info' && (
-                    <Card>
-                        <CardHeader title="Informacion personal" />
-                        <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div>
-                                <dt className="text-xs uppercase text-slate-500">Modalidad nomina</dt>
-                                <dd className="mt-1 text-sm capitalize text-slate-700 dark:text-slate-300">
+                    // Mismo orden que el formulario de edicion —identidad, contacto,
+                    // nomina, datos para pago— para que ver y editar se lean igual.
+                    <div className="space-y-4">
+                        <Card>
+                            <CardHeader title="Identidad" />
+                            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Dato label="Documento">
+                                    {employee.document_type} {employee.document_number}
+                                </Dato>
+                                <Dato label="Fecha de ingreso">{formatDate(employee.hire_date)}</Dato>
+                                <Dato label="Estado">{employee.is_active ? 'Activo' : 'Inactivo'}</Dato>
+                            </dl>
+                        </Card>
+
+                        <Card>
+                            <CardHeader title="Contacto" />
+                            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Dato label="Telefono">{employee.phone ?? '-'}</Dato>
+                                <Dato label="Correo personal">{employee.email ?? '-'}</Dato>
+                                <Dato label="Direccion" wide>
+                                    {employee.address ?? '-'}
+                                </Dato>
+                            </dl>
+                        </Card>
+
+                        <Card>
+                            <CardHeader title="Nomina" />
+                            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Dato label="Modalidad">
                                     {employee.payroll_mode === 'fixed_daily'
-                                        ? 'Salario diario'
+                                        ? 'Salario diario fijo'
                                         : employee.payroll_mode === 'hourly_legal'
-                                          ? 'Por horas (legal)'
+                                          ? 'Por horas - legal'
                                           : 'Por operaciones'}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs uppercase text-slate-500">Banco</dt>
-                                <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">
-                                    {employee.bank?.name ?? '—'}
+                                </Dato>
+                                <Dato label="Salario base">{formatCurrency(employee.base_salary)}</Dato>
+
+                                {employee.payroll_mode === 'fixed_daily' ? (
+                                    <>
+                                        <Dato label="Salario diario">{formatCurrency(employee.daily_salary ?? 0)}</Dato>
+                                        <Dato label="Minutos jornada completa">
+                                            {employee.minutes_per_full_workday ?? 480}
+                                        </Dato>
+                                    </>
+                                ) : null}
+
+                                {employee.payroll_mode === 'hourly_legal' ? (
+                                    <>
+                                        <Dato label="Jornada ordinaria diaria">
+                                            {employee.ordinary_hours_per_day ?? 8} horas
+                                        </Dato>
+                                        <Dato label="Horas extra">
+                                            {employee.is_exempt_from_overtime ? 'Exento (art. 162 CST)' : 'Aplica'}
+                                        </Dato>
+                                    </>
+                                ) : null}
+
+                                {employee.payroll_mode !== 'operations' ? (
+                                    <Dato label="Dias habiles esperados" wide>
+                                        {scheduledDaysLabel(employee.scheduled_work_days)}
+                                    </Dato>
+                                ) : null}
+                            </dl>
+                        </Card>
+
+                        <Card>
+                            <CardHeader title="Datos para pago" />
+                            <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                                <Dato label="Banco">
+                                    {employee.bank?.name ?? '-'}
                                     {employee.bank && !employee.bank.is_active ? (
                                         <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">(inactivo)</span>
                                     ) : null}
-                                </dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs uppercase text-slate-500">Cuenta (enmascarada)</dt>
-                                <dd className="mt-1 font-mono text-sm text-slate-700 dark:text-slate-300">{maskAccountDisplay(employee.bank_account_number ?? undefined)}</dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs uppercase text-slate-500">Llave bancaria (enmascarada)</dt>
-                                <dd className="mt-1 font-mono text-sm text-slate-700 dark:text-slate-300">{maskKeyDisplay(employee.bank_key ?? undefined)}</dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs uppercase text-slate-500">Direccion</dt>
-                                <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{employee.address ?? '-'}</dd>
-                            </div>
-                            <div>
-                                <dt className="text-xs uppercase text-slate-500">Salario base</dt>
-                                <dd className="mt-1 text-sm text-slate-700 dark:text-slate-300">{formatCurrency(employee.base_salary)}</dd>
-                            </div>
-                            <div className="sm:col-span-2">
-                                <dt className="text-xs uppercase text-slate-500">Notas</dt>
-                                <dd className="mt-1 whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">{employee.notes ?? '-'}</dd>
-                            </div>
-                        </dl>
-                    </Card>
+                                </Dato>
+                                <Dato label="Cuenta (enmascarada)" mono>
+                                    {maskAccountDisplay(employee.bank_account_number ?? undefined)}
+                                </Dato>
+                                <Dato label="Llave bancaria (enmascarada)" mono>
+                                    {maskKeyDisplay(employee.bank_key ?? undefined)}
+                                </Dato>
+                            </dl>
+                        </Card>
+
+                        <Card>
+                            <CardHeader title="Notas" />
+                            <p className="mt-4 whitespace-pre-line text-sm text-slate-700 dark:text-slate-300">
+                                {employee.notes ?? '-'}
+                            </p>
+                        </Card>
+                    </div>
                 )}
 
                 {tab === 'production' && (
@@ -510,7 +590,9 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                     </>
                 }
             >
-                <div className="space-y-4">
+                {/* emp-scope: los campos de contrasena son del modulo de empleados y el
+                    modal se pinta en un portal, fuera del arbol de la pagina. */}
+                <div className="emp-scope space-y-4">
                     <FormErrorAlert
                         messages={collectUnmappedErrors(accessErrors, ACCESS_FIELD_KEYS)}
                         title="No se pudo crear el acceso"

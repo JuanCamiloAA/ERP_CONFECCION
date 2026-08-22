@@ -1,9 +1,7 @@
-import { ArrowPathIcon, EyeIcon, EyeSlashIcon, KeyIcon } from '@heroicons/react/24/outline';
-import { useId, useState } from 'react';
-import { Button } from '@/Components/UI/Button';
-import { Checkbox } from '@/Components/UI/Checkbox';
-import { PasswordInput } from '@/Components/UI/PasswordInput';
-import { cn, generatePassword } from '@/lib/utils';
+import { ArrowsClockwise, Copy, Eye, EyeSlash, Key } from '@phosphor-icons/react';
+import { useState } from 'react';
+import { toast } from 'sonner';
+import { generatePassword } from '@/lib/utils';
 
 export type AccessPasswordMode = 'auto' | 'manual';
 
@@ -51,16 +49,67 @@ interface Props {
     errors?: AccessPasswordErrors;
 }
 
+/** Campo de contrasena del panel: mismo alto y tokens que el resto del modulo. */
+function SecretField({
+    label,
+    value,
+    onChange,
+    error,
+    help,
+}: {
+    label: string;
+    value: string;
+    onChange: (v: string) => void;
+    error?: string;
+    help?: string;
+}) {
+    const [visible, setVisible] = useState(true);
+
+    return (
+        <div>
+            <span className="emp-label">
+                {label} <span className="emp-req">*</span>
+            </span>
+            <div className="relative">
+                <input
+                    type={visible ? 'text' : 'password'}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    autoComplete="new-password"
+                    className={`emp-field pr-9 ${error ? 'emp-field-error' : ''}`}
+                />
+                <button
+                    type="button"
+                    onClick={() => setVisible((v) => !v)}
+                    aria-label={visible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                    className="absolute right-1.5 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded"
+                    style={{ color: 'var(--emp-subtle)' }}
+                >
+                    {visible ? <EyeSlash size={15} /> : <Eye size={15} />}
+                </button>
+            </div>
+            {help ? <p className="emp-help">{help}</p> : null}
+            {error ? <p className="emp-error">{error}</p> : null}
+        </div>
+    );
+}
+
+/**
+ * Contrasena de la cuenta de acceso.
+ *
+ * La forma de elegirla es un segmentado de dos opciones —autogenerar o escribirla— y no
+ * dos tarjetas de radio: es una decision binaria y no merece dos parrafos. El valor
+ * generado se ve, se regenera y se copia sin salir del panel, porque despues de guardar
+ * ya no vuelve a mostrarse.
+ *
+ * El contrato con el formulario no cambia: mismas claves, mismos errores.
+ */
 export function AccessPasswordFields({ value, onChange, errors }: Props) {
-    const modeGroupId = useId();
     const [generatedVisible, setGeneratedVisible] = useState(true);
     const isManual = value.password_mode === 'manual';
-    const generatedToggleLabel = generatedVisible ? 'Ocultar contrasena' : 'Mostrar contrasena';
 
     const selectMode = (mode: AccessPasswordMode) => {
-        if (mode === value.password_mode) {
-            return;
-        }
+        if (mode === value.password_mode) return;
 
         if (mode === 'manual') {
             onChange({ password_mode: 'manual', user_password: '', user_password_confirmation: '' });
@@ -77,127 +126,133 @@ export function AccessPasswordFields({ value, onChange, errors }: Props) {
         onChange({ user_password: generated, user_password_confirmation: generated });
     };
 
-    const modes: { key: AccessPasswordMode; label: string; hint: string }[] = [
-        { key: 'auto', label: 'Autogenerar', hint: 'El sistema propone una contrasena segura' },
-        { key: 'manual', label: 'Definir manualmente', hint: 'Usted digita la contrasena' },
-    ];
+    // El portapapeles falla en contextos no seguros y si el usuario niega el permiso; en
+    // ese caso hay que decirlo, porque esta contrasena no se vuelve a mostrar.
+    const copyPassword = async () => {
+        try {
+            await navigator.clipboard.writeText(value.user_password);
+            toast.success('Contraseña copiada.');
+        } catch {
+            toast.error('No se pudo copiar. Selecciónela y cópiela a mano antes de guardar.');
+        }
+    };
 
     return (
-        <div className="space-y-3">
+        <div className="space-y-2.5">
             <div>
-                <span className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Contrasena</span>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                    {modes.map((mode) => (
-                        <label
+                <span className="emp-label">Contraseña</span>
+                <div className="emp-seg" role="radiogroup" aria-label="Cómo definir la contraseña">
+                    {(
+                        [
+                            { key: 'auto', label: 'Autogenerar' },
+                            { key: 'manual', label: 'Definir manual' },
+                        ] as { key: AccessPasswordMode; label: string }[]
+                    ).map((mode) => (
+                        <button
                             key={mode.key}
-                            className={cn(
-                                'flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition-colors',
-                                value.password_mode === mode.key
-                                    ? 'border-indigo-500 bg-indigo-50 dark:border-indigo-400 dark:bg-indigo-950/40'
-                                    : 'border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:hover:bg-slate-800',
-                            )}
+                            type="button"
+                            role="radio"
+                            aria-checked={value.password_mode === mode.key}
+                            onClick={() => selectMode(mode.key)}
+                            className={`emp-seg-item ${value.password_mode === mode.key ? 'emp-seg-on' : ''}`}
                         >
-                            <input
-                                type="radio"
-                                name={`password-mode-${modeGroupId}`}
-                                value={mode.key}
-                                checked={value.password_mode === mode.key}
-                                onChange={() => selectMode(mode.key)}
-                                className="mt-0.5 h-4 w-4 border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500/40 dark:border-slate-600"
-                            />
-                            <span className="min-w-0">
-                                <span className="block text-sm font-medium text-slate-800 dark:text-slate-100">
-                                    {mode.label}
-                                </span>
-                                <span className="block text-xs text-slate-500 dark:text-slate-400">{mode.hint}</span>
-                            </span>
-                        </label>
+                            {mode.label}
+                        </button>
                     ))}
                 </div>
-                {errors?.password_mode && <p className="mt-1.5 text-xs text-rose-500">{errors.password_mode}</p>}
+                {errors?.password_mode ? <p className="emp-error">{errors.password_mode}</p> : null}
             </div>
 
             {isManual ? (
-                <div className="space-y-3">
-                    <PasswordInput
-                        defaultVisible
-                        label="Contrasena"
+                <div className="emp-reveal space-y-2.5">
+                    <SecretField
+                        label="Contraseña"
                         value={value.user_password}
-                        onChange={(e) => onChange({ user_password: e.target.value })}
+                        onChange={(v) => onChange({ user_password: v })}
                         error={errors?.user_password}
-                        description="Minimo 8 caracteres, con mayusculas, minusculas, numeros y un caracter especial."
-                        autoComplete="new-password"
-                        required
+                        help="Mínimo 8 caracteres, con mayúsculas, minúsculas, números y un carácter especial."
                     />
-                    <PasswordInput
-                        defaultVisible
-                        label="Confirmar contrasena"
+                    <SecretField
+                        label="Confirmar contraseña"
                         value={value.user_password_confirmation}
-                        onChange={(e) => onChange({ user_password_confirmation: e.target.value })}
+                        onChange={(v) => onChange({ user_password_confirmation: v })}
                         error={errors?.user_password_confirmation}
-                        autoComplete="new-password"
-                        required
                     />
-                    <div className="flex flex-wrap items-center gap-2">
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            icon={<ArrowPathIcon className="h-4 w-4" />}
-                            onClick={fillGeneratedPassword}
-                        >
-                            Generar sugerencia
-                        </Button>
-                        <span className="text-xs text-slate-500 dark:text-slate-400">
-                            La contrasena queda activa de inmediato. Compartala de forma segura con el empleado.
-                        </span>
-                    </div>
+                    <button type="button" onClick={fillGeneratedPassword} className="emp-btn emp-btn-sm w-full">
+                        <ArrowsClockwise size={14} />
+                        Generar sugerencia
+                    </button>
                 </div>
             ) : (
-                <div>
-                    <div className="flex gap-2">
-                        <div className="flex flex-1 items-center gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-                            <span className="min-w-0 flex-1 font-mono text-sm break-all text-slate-900 dark:text-slate-100">
+                <div className="emp-reveal">
+                    <div className="flex gap-1.5">
+                        <div
+                            className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2.5"
+                            style={{
+                                border: '1px solid var(--emp-border)',
+                                backgroundColor: 'var(--emp-field-alt)',
+                                minHeight: '38px',
+                            }}
+                        >
+                            <span
+                                className="min-w-0 flex-1 break-all font-mono text-[12.5px]"
+                                style={{ color: 'var(--emp-text)' }}
+                            >
                                 {generatedVisible ? value.user_password : '•'.repeat(value.user_password.length)}
                             </span>
                             <button
                                 type="button"
-                                onClick={() => setGeneratedVisible((current) => !current)}
-                                aria-label={generatedToggleLabel}
+                                onClick={() => setGeneratedVisible((v) => !v)}
+                                aria-label={generatedVisible ? 'Ocultar contraseña' : 'Mostrar contraseña'}
                                 aria-pressed={generatedVisible}
-                                title={generatedToggleLabel}
-                                className="rounded p-1 text-slate-400 transition-colors hover:text-slate-600 focus-visible:ring-2 focus-visible:ring-indigo-500/40 focus-visible:outline-none dark:text-slate-500 dark:hover:text-slate-200"
+                                className="shrink-0 rounded p-1"
+                                style={{ color: 'var(--emp-subtle)' }}
                             >
-                                {generatedVisible ? (
-                                    <EyeSlashIcon className="h-4 w-4" />
-                                ) : (
-                                    <EyeIcon className="h-4 w-4" />
-                                )}
+                                {generatedVisible ? <EyeSlash size={15} /> : <Eye size={15} />}
                             </button>
                         </div>
-                        <Button
+                        <button
                             type="button"
-                            variant="outline"
+                            onClick={copyPassword}
+                            aria-label="Copiar contraseña"
+                            title="Copiar contraseña"
+                            className="emp-btn emp-btn-sm shrink-0 px-2"
+                        >
+                            <Copy size={15} />
+                        </button>
+                        <button
+                            type="button"
                             onClick={fillGeneratedPassword}
-                            aria-label="Regenerar contrasena"
-                            icon={<ArrowPathIcon className="h-4 w-4" />}
-                        />
+                            aria-label="Regenerar contraseña"
+                            title="Regenerar contraseña"
+                            className="emp-btn emp-btn-sm shrink-0 px-2"
+                        >
+                            <ArrowsClockwise size={15} />
+                        </button>
                     </div>
-                    <p className="mt-1.5 flex items-start gap-1 text-xs text-amber-600 dark:text-amber-400">
-                        <KeyIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                        Esta contrasena se mostrara una vez despues de guardar. Anotela antes de continuar.
+
+                    <p className="emp-note mt-2 flex items-start gap-1.5">
+                        <Key size={14} className="mt-0.5 shrink-0" style={{ color: 'var(--emp-accent-line)' }} />
+                        <span>Se muestra una sola vez al guardar. Anótela o cópiela antes de continuar.</span>
                     </p>
-                    {errors?.user_password && <p className="mt-1.5 text-xs text-rose-500">{errors.user_password}</p>}
+
+                    {errors?.user_password ? <p className="emp-error">{errors.user_password}</p> : null}
                 </div>
             )}
 
-            <Checkbox
-                checked={value.require_password_change}
-                onChange={(e) => onChange({ require_password_change: e.target.checked })}
-                label="Requerir cambio de contrasena en el primer inicio de sesion"
-                description="El usuario debera establecer una nueva contrasena antes de acceder al sistema."
-                error={errors?.require_password_change}
-            />
+            <label className="flex cursor-pointer items-start gap-2 py-1.5">
+                <input
+                    type="checkbox"
+                    checked={value.require_password_change}
+                    onChange={(e) => onChange({ require_password_change: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 rounded"
+                    style={{ accentColor: 'var(--emp-accent)' }}
+                />
+                <span className="min-w-0 text-[12px]" style={{ color: 'var(--emp-muted)' }}>
+                    Pedir cambio de contraseña en el primer ingreso
+                </span>
+            </label>
+            {errors?.require_password_change ? <p className="emp-error">{errors.require_password_change}</p> : null}
         </div>
     );
 }

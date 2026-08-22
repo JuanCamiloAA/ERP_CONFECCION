@@ -82,6 +82,9 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::post('/employees/{employee}/deactivate', [EmployeeController::class, 'deactivate'])
             ->name('employees.deactivate')
             ->middleware('permission:employees.index.edit');
+        Route::post('/employees/{employee}/reactivate', [EmployeeController::class, 'reactivate'])
+            ->name('employees.reactivate')
+            ->middleware('permission:employees.index.edit');
     });
 
     // Bancos (catalogo empresa)

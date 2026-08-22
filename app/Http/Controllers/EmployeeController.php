@@ -38,6 +38,9 @@ class EmployeeController extends Controller
 
         $query = Employee::query()->with([
             'user:id,email,is_active',
+            // El listado muestra el rol con que entra cada persona, no un «tiene cuenta»:
+            // saber que es «Operaria» o «Aux. contable» es justo lo que se va a buscar.
+            'user.roles:id,name,display_name',
             'bank:id,name,is_active',
             'company:id,name',
         ]);
@@ -56,14 +59,64 @@ class EmployeeController extends Controller
             $query->where('is_active', false);
         }
 
+        // Filtro por modalidad de pago: el listado ahora muestra esa columna, y quien
+        // revisa jornadas o produccion necesita ver un grupo a la vez.
+        $mode = (string) $request->input('mode', 'all');
+        $modes = [
+            Employee::PAYROLL_MODE_OPERATIONS,
+            Employee::PAYROLL_MODE_FIXED_DAILY,
+            Employee::PAYROLL_MODE_HOURLY_LEGAL,
+        ];
+
+        if (in_array($mode, $modes, true)) {
+            $query->where('payroll_mode', $mode);
+        } else {
+            $mode = 'all';
+        }
+
         $employees = $query->orderBy('first_name')
             ->paginate(15)
             ->withQueryString();
 
         return Inertia::render('Employees/Index', [
             'employees' => $employees,
-            'filters' => ['search' => $search, 'status' => $status],
+            'filters' => ['search' => $search, 'status' => $status, 'mode' => $mode],
+            'metrics' => $this->indexMetrics(),
         ]);
+    }
+
+    /**
+     * Cifras de cabecera del listado.
+     *
+     * Se cuentan sobre toda la empresa, no sobre la pagina ni sobre el filtro: dos de
+     * ellas son «Activos» e «Inactivos», y filtrarlas por el estado seleccionado las
+     * dejaria siempre en cero. El conteo del resultado ya lo da la paginacion.
+     *
+     * Una sola consulta agregada: cuatro `count()` serian cuatro viajes a la base para
+     * pintar una fila de tarjetas.
+     *
+     * @return array{active: int, with_access: int, missing_payment: int, inactive: int}
+     */
+    protected function indexMetrics(): array
+    {
+        $row = Employee::query()
+            ->selectRaw('
+                SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active,
+                SUM(CASE WHEN is_active = 0 THEN 1 ELSE 0 END) as inactive,
+                SUM(CASE WHEN user_id IS NOT NULL THEN 1 ELSE 0 END) as with_access,
+                SUM(CASE WHEN bank_id IS NULL
+                          OR bank_account_number IS NULL OR bank_account_number = \'\'
+                          OR bank_key IS NULL OR bank_key = \'\'
+                     THEN 1 ELSE 0 END) as missing_payment
+            ')
+            ->first();
+
+        return [
+            'active' => (int) ($row->active ?? 0),
+            'with_access' => (int) ($row->with_access ?? 0),
+            'missing_payment' => (int) ($row->missing_payment ?? 0),
+            'inactive' => (int) ($row->inactive ?? 0),
+        ];
     }
 
     public function create(): Response
@@ -211,9 +264,17 @@ class EmployeeController extends Controller
     public function edit(Employee $employee): Response
     {
         return Inertia::render('Employees/Edit', [
-            'employee' => $employee->load(['user', 'bank']),
+            // Los roles del usuario alimentan el estado de la cuenta en el panel lateral:
+            // «Con acceso · Operaria» dice mas que un simple «tiene cuenta».
+            'employee' => $employee->load(['user.roles', 'bank']),
             'roles' => $this->companyRoles($employee->company_id),
             'banks' => $this->banksOptionsForEmployee($employee),
+            // Cambiar la modalidad de nomina de alguien que ya produjo afecta lo que se
+            // le liquide de aqui en adelante; el formulario lo advierte antes de guardar.
+            'hasProductions' => Production::query()
+                ->withoutGlobalScopes()
+                ->where('employee_id', $employee->id)
+                ->exists(),
         ]);
     }
 
@@ -252,6 +313,24 @@ class EmployeeController extends Controller
         $employee->update(['is_active' => false]);
 
         return back()->with('success', 'Empleado inactivado. Si tenia acceso al sistema, quedo deshabilitado.');
+    }
+
+    /**
+     * Vuelve a activar a un empleado inactivado.
+     *
+     * Espejo exacto de deactivate(). Antes solo existia el camino de ida: para revertirlo
+     * habia que abrir el formulario completo y guardar, con todo lo que eso puede tocar
+     * de paso; desde el listado, reactivar es un solo campo.
+     */
+    public function reactivate(Employee $employee): RedirectResponse
+    {
+        if ($employee->is_active) {
+            return back()->with('warning', 'El empleado ya esta activo.');
+        }
+
+        $employee->update(['is_active' => true]);
+
+        return back()->with('success', 'Empleado reactivado.');
     }
 
     public function destroy(Employee $employee): RedirectResponse
