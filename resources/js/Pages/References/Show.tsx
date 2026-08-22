@@ -1,7 +1,8 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowLeftIcon, DocumentDuplicateIcon, PencilSquareIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ArrowDownTrayIcon, ArrowLeftIcon, DocumentDuplicateIcon, PencilSquareIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useMemo, useState } from 'react';
 import { ReferenceEconomicsBlock, ReferenceEconomicsPanel } from '@/Components/References/ReferenceEconomicsPanel';
+import { ReferenceExportMenu } from '@/Components/References/ReferenceExportMenu';
 import { ReferenceFormLayout } from '@/Components/References/ReferenceFormLayout';
 import { ReferenceFormSection } from '@/Components/References/ReferenceFormSection';
 import { ReferenceOperationsTable, type RefOperation } from '@/Components/References/ReferenceOperationsTable';
@@ -95,36 +96,48 @@ export default function ReferenceShow({ reference, comparison }: Props) {
             style={{ backgroundColor: 'var(--ref-surface-head)', borderBottom: '1px solid var(--ref-border)' }}
         >
             <div className="hidden items-center justify-between gap-4 sm:flex">
-                <div className="min-w-0">
-                    <nav className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--ref-subtle)' }}>
-                        <Link href={route('references.index')} className="hover:underline">
-                            Referencias
-                        </Link>
-                        <span>/</span>
-                        <span>{reference.code}</span>
-                    </nav>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-2">
-                        <h1 className="text-[19px]" style={{ color: 'var(--ref-text)' }}>
-                            {reference.code} · {reference.name}
-                        </h1>
-                        <span
-                            className="rounded-full px-2 py-0.5 text-[11px]"
-                            style={{
-                                border: '1px solid var(--ref-border)',
-                                color: reference.is_active ? 'var(--ref-ok)' : 'var(--ref-muted)',
-                            }}
-                        >
-                            {reference.is_active ? 'Activa' : 'Inactiva'}
-                        </span>
+                <div className="flex min-w-0 items-center gap-3">
+                    {/* Volver al listado: la miga de pan sola no se lee como salida. */}
+                    <Link href={route('references.index')} className="ref-btn shrink-0" aria-label="Volver a la lista de referencias">
+                        <ArrowLeftIcon className="h-4 w-4" />
+                        Volver
+                    </Link>
+                    <div className="min-w-0">
+                        <nav className="flex items-center gap-1.5 text-[12px]" style={{ color: 'var(--ref-subtle)' }}>
+                            <Link href={route('references.index')} className="hover:underline">
+                                Referencias
+                            </Link>
+                            <span>/</span>
+                            <span>{reference.code}</span>
+                        </nav>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-2">
+                            <h1 className="text-[19px]" style={{ color: 'var(--ref-text)' }}>
+                                {reference.code} · {reference.name}
+                            </h1>
+                            <span
+                                className="rounded-full px-2 py-0.5 text-[11px]"
+                                style={{
+                                    border: '1px solid var(--ref-border)',
+                                    color: reference.is_active ? 'var(--ref-ok)' : 'var(--ref-muted)',
+                                }}
+                            >
+                                {reference.is_active ? 'Activa' : 'Inactiva'}
+                            </span>
+                        </div>
+                        {editada ? (
+                            <p className="mt-0.5 text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
+                                Editada el {editada}
+                            </p>
+                        ) : null}
                     </div>
-                    {editada ? (
-                        <p className="mt-0.5 text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
-                            Editada el {editada}
-                        </p>
-                    ) : null}
                 </div>
 
                 <div className="flex shrink-0 items-center gap-2">
+                    <ReferenceExportMenu
+                        ids={[reference.id]}
+                        hint={`Ficha completa de ${reference.code}: imagen, operaciones y costo operacional.`}
+                        buttonClassName="ref-btn"
+                    />
                     <Can permission="references.index.create">
                         <button type="button" onClick={() => setConfirmarDuplicar(true)} disabled={enCurso} className="ref-btn">
                             <DocumentDuplicateIcon className="h-4 w-4" />
@@ -170,6 +183,12 @@ export default function ReferenceShow({ reference, comparison }: Props) {
                         {reference.name}
                     </p>
                 </div>
+                <ReferenceExportMenu
+                    ids={[reference.id]}
+                    hint={`Ficha completa de ${reference.code}: imagen, operaciones y costo operacional.`}
+                    buttonClassName="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+                    trigger={<ArrowDownTrayIcon className="h-5 w-5" style={{ color: 'var(--ref-muted)' }} />}
+                />
                 <Can permission="references.index.create">
                     <button
                         type="button"

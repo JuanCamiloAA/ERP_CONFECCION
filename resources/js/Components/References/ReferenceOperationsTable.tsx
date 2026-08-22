@@ -1,5 +1,5 @@
 import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { difficultyLabel, levelFromMinutes } from '@/lib/difficulty';
 import { cn, formatCurrency } from '@/lib/utils';
 
@@ -87,6 +87,16 @@ export function ReferenceOperationsTable({
     const [resaltada, setResaltada] = useState(0);
     const [hojaMovil, setHojaMovil] = useState(false);
 
+    /**
+     * Caja del desplegable, en coordenadas de pantalla.
+     *
+     * La lista se posiciona `fixed` y no `absolute` porque el campo vive dentro de la
+     * tabla, y esa tabla lleva `overflow-hidden` para redondear sus esquinas: en
+     * absoluto, el desplegable quedaba recortado a la altura que sobraba de la fila.
+     */
+    const [caja, setCaja] = useState<{ left: number; top: number; width: number; haciaArriba: boolean } | null>(null);
+    const campoActivo = useRef<HTMLInputElement | null>(null);
+
     const buscadorEscritorio = useRef<HTMLInputElement>(null);
     const buscadorMovil = useRef<HTMLInputElement>(null);
     const precioEscritorio = useRef<HTMLInputElement>(null);
@@ -95,6 +105,39 @@ export function ReferenceOperationsTable({
     /** La hoja movil solo existe mientras esta abierta: si esta, es la que tiene el foco. */
     const enfocarBuscador = () => (buscadorMovil.current ?? buscadorEscritorio.current)?.focus();
     const enfocarPrecio = () => (precioMovil.current ?? precioEscritorio.current)?.focus();
+
+    const ALTO_LISTA = 224;
+
+    const medir = useCallback((campo?: HTMLInputElement | null) => {
+        const nodo = campo ?? campoActivo.current;
+        if (!nodo) return;
+
+        campoActivo.current = nodo;
+        const r = nodo.getBoundingClientRect();
+        // Si no cabe debajo, se abre hacia arriba en vez de salirse de la ventana.
+        const haciaArriba = window.innerHeight - r.bottom < ALTO_LISTA + 16 && r.top > ALTO_LISTA + 16;
+
+        setCaja({
+            left: r.left,
+            top: haciaArriba ? r.top - 4 : r.bottom + 4,
+            width: r.width,
+            haciaArriba,
+        });
+    }, []);
+
+    // Mientras esta abierto sigue al campo: la pagina puede desplazarse por debajo.
+    useEffect(() => {
+        if (!abierto) return;
+
+        const alMover = () => medir();
+        window.addEventListener('scroll', alMover, true);
+        window.addEventListener('resize', alMover);
+
+        return () => {
+            window.removeEventListener('scroll', alMover, true);
+            window.removeEventListener('resize', alMover);
+        };
+    }, [abierto, medir]);
 
     const total = useMemo(() => lineas.reduce((s, l) => s + Number(l.price), 0), [lineas]);
 
@@ -221,8 +264,12 @@ export function ReferenceOperationsTable({
                     setBusqueda(e.target.value);
                     setElegida(null);
                     setAbierto(true);
+                    medir(e.currentTarget);
                 }}
-                onFocus={() => setAbierto(true)}
+                onFocus={(e) => {
+                    setAbierto(true);
+                    medir(e.currentTarget);
+                }}
                 onBlur={() => window.setTimeout(() => setAbierto(false), 120)}
                 onKeyDown={alTeclearEnBuscador}
                 className="ref-field"
@@ -232,8 +279,17 @@ export function ReferenceOperationsTable({
                     <ul
                         id={id}
                         role="listbox"
-                        className="absolute left-0 right-0 top-full z-20 mt-1 max-h-56 overflow-y-auto rounded-lg py-1 shadow-lg"
-                        style={{ backgroundColor: 'var(--ref-surface)', border: '1px solid var(--ref-border)' }}
+                        className="scrollbar-thin fixed z-50 overflow-y-auto overscroll-contain rounded-lg py-1 shadow-xl"
+                        style={{
+                            backgroundColor: 'var(--ref-surface)',
+                            border: '1px solid var(--ref-border)',
+                            left: caja?.left ?? 0,
+                            width: caja?.width ?? 0,
+                            maxHeight: ALTO_LISTA,
+                            ...(caja?.haciaArriba
+                                ? { bottom: window.innerHeight - (caja?.top ?? 0) }
+                                : { top: caja?.top ?? 0 }),
+                        }}
                     >
                         {filtradas.map((op, i) => (
                             <li key={op.id}>
@@ -244,7 +300,7 @@ export function ReferenceOperationsTable({
                                     onMouseDown={(e) => e.preventDefault()}
                                     onClick={() => tomar(op)}
                                     onMouseEnter={() => setResaltada(i)}
-                                    className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px]"
+                                    className="flex min-h-9 w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px]"
                                     style={{
                                         backgroundColor: i === resaltada ? 'var(--ref-accent-soft)' : 'transparent',
                                         color: 'var(--ref-text)',
@@ -260,8 +316,15 @@ export function ReferenceOperationsTable({
                     </ul>
                 ) : (
                     <div
-                        className="absolute left-0 right-0 top-full z-20 mt-1 rounded-lg px-3 py-2 text-[12px]"
-                        style={{ backgroundColor: 'var(--ref-surface)', border: '1px solid var(--ref-border)', color: 'var(--ref-muted)' }}
+                        className="fixed z-50 rounded-lg px-3 py-2 text-[12px] shadow-xl"
+                        style={{
+                            backgroundColor: 'var(--ref-surface)',
+                            border: '1px solid var(--ref-border)',
+                            color: 'var(--ref-muted)',
+                            left: caja?.left ?? 0,
+                            top: caja?.top ?? 0,
+                            width: caja?.width ?? 0,
+                        }}
                     >
                         {sinUsar.length === 0 ? 'Ya agregaste todas las operaciones.' : 'Ninguna operación coincide.'}
                     </div>

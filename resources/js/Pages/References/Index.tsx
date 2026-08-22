@@ -1,6 +1,7 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { ArrowPathIcon, ArrowRightIcon, PencilSquareIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { ReferenceExportMenu } from '@/Components/References/ReferenceExportMenu';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
@@ -56,12 +57,43 @@ export default function ReferencesIndex({ references, filters }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
     const [confirmDelete, setConfirmDelete] = useState<Reference | null>(null);
     const [confirmRecalc, setConfirmRecalc] = useState(false);
+    /**
+     * Referencias marcadas para exportar. El estado activo no entra en la cuenta: se
+     * exporta lo que se marque, activo o inactivo, que es justo lo que se necesita para
+     * archivar una referencia cerrada o volver a cotizarla.
+     */
+    const [selected, setSelected] = useState<number[]>([]);
+
+    const pageIds = useMemo(() => references.data.map((ref) => ref.id), [references.data]);
+    const allPageSelected = pageIds.length > 0 && pageIds.every((id) => selected.includes(id));
+    const somePageSelected = pageIds.some((id) => selected.includes(id));
+
+    const toggleOne = (id: number) => {
+        setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+    };
+
+    const togglePage = () => {
+        setSelected((prev) => (allPageSelected ? prev.filter((id) => !pageIds.includes(id)) : [...new Set([...prev, ...pageIds])]));
+    };
 
     const updateFilters = (s: string) => {
         const params: Record<string, string> = {};
         if (s) params.search = s;
+        // La busqueda cambia el universo de la lista; arrastrar marcas de un resultado
+        // anterior haria exportar referencias que ya no se ven en pantalla.
+        setSelected([]);
         router.get(route('references.index'), params, { preserveState: true, preserveScroll: true, replace: true });
     };
+
+    const exportHint =
+        selected.length > 0
+            ? `Se exportan las ${selected.length} referencias marcadas.`
+            : search
+              ? 'Sin marcar ninguna se exporta todo lo que coincide con la búsqueda.'
+              : 'Sin marcar ninguna se exporta el catálogo completo (activas e inactivas).';
+
+    const checkboxClass =
+        'h-4 w-4 shrink-0 cursor-pointer rounded border-slate-300 text-indigo-600 focus:ring-2 focus:ring-indigo-500/40 dark:border-slate-600 dark:bg-slate-800';
 
     const rowActions = (ref: ReferenceRow): RowAction[] => {
         const actions: RowAction[] = [];
@@ -100,6 +132,12 @@ export default function ReferencesIndex({ references, filters }: Props) {
                     description="Catalogo de prendas con sus operaciones y precios."
                     action={
                         <div className="flex items-center gap-2">
+                            <ReferenceExportMenu
+                                ids={selected}
+                                search={search}
+                                hint={exportHint}
+                                label={selected.length > 0 ? `Exportar (${selected.length})` : 'Exportar'}
+                            />
                             <Can permission="references.index.edit">
                                 <Button
                                     variant="outline"
@@ -130,6 +168,26 @@ export default function ReferencesIndex({ references, filters }: Props) {
                     className="sm:max-w-md [&_input]:h-11 lg:[&_input]:h-10"
                 />
 
+                {/* Barra de seleccion: aparece al marcar la primera referencia. */}
+                {selected.length > 0 ? (
+                    <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 dark:border-indigo-800 dark:bg-indigo-900/20">
+                        <p className="text-sm text-indigo-900 dark:text-indigo-200">
+                            <span className="font-semibold">
+                                {selected.length} {selected.length === 1 ? 'referencia marcada' : 'referencias marcadas'}
+                            </span>
+                            <span className="ml-1 text-indigo-700/80 dark:text-indigo-300/80">
+                                · se exportan con imagen, operaciones y costo operacional
+                            </span>
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <ReferenceExportMenu ids={selected} hint={exportHint} label="Exportar selección" />
+                            <Button variant="ghost" className="min-h-11" onClick={() => setSelected([])}>
+                                Limpiar
+                            </Button>
+                        </div>
+                    </div>
+                ) : null}
+
                 {/* Movil: tarjeta con avance del lote y las dos cifras clave legibles. */}
                 <div className="space-y-3 lg:hidden">
                     {references.data.length === 0 ? (
@@ -146,6 +204,13 @@ export default function ReferencesIndex({ references, filters }: Props) {
                                     className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-800"
                                 >
                                     <div className="flex items-start gap-3">
+                                        <input
+                                            type="checkbox"
+                                            className={`${checkboxClass} mt-1`}
+                                            checked={selected.includes(ref.id)}
+                                            onChange={() => toggleOne(ref.id)}
+                                            aria-label={`Seleccionar ${ref.code} para exportar`}
+                                        />
                                         <div className="flex h-13 w-13 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
                                             {ref.image ? (
                                                 <ZoomableImage src={ref.image} alt={ref.name} title={`${ref.code} — ${ref.name}`} className="h-full w-full object-cover" />
@@ -227,6 +292,19 @@ export default function ReferencesIndex({ references, filters }: Props) {
                     <Table>
                         <TableHead>
                             <TableRow>
+                                <TableHeader className="w-10 pr-0">
+                                    <input
+                                        type="checkbox"
+                                        className={checkboxClass}
+                                        checked={allPageSelected}
+                                        ref={(el) => {
+                                            // Marca «hay algo, pero no todo» en la casilla del encabezado.
+                                            if (el) el.indeterminate = !allPageSelected && somePageSelected;
+                                        }}
+                                        onChange={togglePage}
+                                        aria-label="Seleccionar todas las referencias de esta página"
+                                    />
+                                </TableHeader>
                                 <TableHeader>Referencia</TableHeader>
                                 <TableHeader align="right">Pago u.</TableHeader>
                                 <TableHeader align="right">Costo op.</TableHeader>
@@ -240,13 +318,22 @@ export default function ReferencesIndex({ references, filters }: Props) {
                         <TableBody>
                             {references.data.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="px-4 py-12 text-center text-sm text-slate-500">
+                                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500">
                                         No hay referencias.
                                     </td>
                                 </tr>
                             ) : (
                                 references.data.map((ref) => (
-                                    <TableRow key={ref.id}>
+                                    <TableRow key={ref.id} className={selected.includes(ref.id) ? 'bg-indigo-50/60 dark:bg-indigo-900/10' : undefined}>
+                                        <TableCell className="w-10 pr-0">
+                                            <input
+                                                type="checkbox"
+                                                className={checkboxClass}
+                                                checked={selected.includes(ref.id)}
+                                                onChange={() => toggleOne(ref.id)}
+                                                aria-label={`Seleccionar ${ref.code} para exportar`}
+                                            />
+                                        </TableCell>
                                         <TableCell>
                                             <div className="flex items-center gap-3">
                                                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40">

@@ -13,10 +13,10 @@ use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\LandingPlanInquiryController;
 use App\Http\Controllers\OperationController;
-use App\Http\Controllers\PayrollLegalParameterController;
 use App\Http\Controllers\PayrollConceptController;
 use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollEmployeeAdjustmentController;
+use App\Http\Controllers\PayrollLegalParameterController;
 use App\Http\Controllers\PayrollPeriodicityController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\ProfileController;
@@ -93,6 +93,8 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     Route::middleware('permission:references.index.view')->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {reference}.
         Route::post('/references/recalculate-difficulty', [ReferenceController::class, 'recalculateAllDifficulties'])->name('references.recalculate-difficulty');
+        Route::get('/references/export/excel', [ReferenceController::class, 'exportExcel'])->name('references.export.excel');
+        Route::get('/references/export/pdf', [ReferenceController::class, 'exportPdf'])->name('references.export.pdf');
         Route::resource('references', ReferenceController::class);
         Route::post('/references/{reference}/duplicate', [ReferenceController::class, 'duplicate'])->name('references.duplicate');
         Route::post('/references/{reference}/recalculate-difficulty', [ReferenceController::class, 'recalculateDifficulties'])->name('references.operations.recalculate');

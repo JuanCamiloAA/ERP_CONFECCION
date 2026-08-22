@@ -40,6 +40,22 @@ class OperationDifficulty
     }
 
     /**
+     * Etiquetas de los grados 1 a 5; espejo de DIFFICULTY_LABELS en resources/js/lib/difficulty.ts.
+     */
+    public const LABELS = [
+        1 => 'Muy baja',
+        2 => 'Baja',
+        3 => 'Media',
+        4 => 'Alta',
+        5 => 'Muy alta',
+    ];
+
+    public static function label(?int $level): string
+    {
+        return $level !== null ? (self::LABELS[$level] ?? (string) $level) : '—';
+    }
+
+    /**
      * @param  array<int, float>  $thresholds  Ascendente, tal como retorna thresholdsFor().
      */
     public static function levelFromMinutes(float $minutes, array $thresholds): int

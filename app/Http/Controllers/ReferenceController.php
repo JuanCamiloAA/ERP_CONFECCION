@@ -5,24 +5,35 @@ namespace App\Http\Controllers;
 use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Reference\StoreReferenceRequest;
 use App\Http\Requests\Reference\UpdateReferenceRequest;
-use App\Models\Company;
 use App\Models\Operation;
 use App\Models\Production;
 use App\Models\Reference;
 use App\Services\Files\StoredFileDeleter;
 use App\Services\References\ReferenceDifficultySync;
+use App\Services\References\ReferenceExportData;
+use App\Services\References\ReferenceXlsxExport;
 use App\Support\OperationDifficulty;
 use App\Support\ReferenceLotCompletion;
 use App\Support\TenantContext;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class ReferenceController extends Controller
 {
+    /**
+     * Tope de referencias por exportacion.
+     *
+     * Cada ficha trae su foto incrustada, asi que una seleccion enorme produce un archivo
+     * que ni se descarga bien ni se abre comodo; es preferible decirlo que entregarlo.
+     */
+    public const EXPORT_MAX = 100;
+
     public function __construct(
         protected ObjectStorageInterface $objectStorage,
         protected StoredFileDeleter $storedFileDeleter,
@@ -78,6 +89,94 @@ class ReferenceController extends Controller
             'references' => $references,
             'filters' => ['search' => $search],
         ]);
+    }
+
+    /**
+     * Descarga en Excel la ficha completa de las referencias seleccionadas.
+     */
+    public function exportExcel(Request $request, ReferenceXlsxExport $export): HttpResponse|RedirectResponse
+    {
+        $references = $this->exportSelection($request);
+
+        if ($references instanceof RedirectResponse) {
+            return $references;
+        }
+
+        return response($export->build($references), 200, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'Content-Disposition' => 'attachment; filename="'.$export->filename($references).'"',
+            // Un catalogo que cambia cada dia no debe quedar cacheado en el navegador.
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
+    /**
+     * Version imprimible (PDF desde el navegador) de las referencias seleccionadas.
+     *
+     * Se sigue el mismo camino que la nomina: una pantalla pensada para papel que el
+     * navegador convierte en PDF. Evita meter un motor de PDF al servidor y deja al
+     * usuario elegir tamano, margenes y destino.
+     */
+    public function exportPdf(Request $request, ReferenceExportData $data): Response|RedirectResponse
+    {
+        $references = $this->exportSelection($request);
+
+        if ($references instanceof RedirectResponse) {
+            return $references;
+        }
+
+        return Inertia::render('References/Print', $data->build($references));
+    }
+
+    /**
+     * Referencias que pide la exportacion: las marcadas o, sin marcar ninguna, todas las
+     * que coinciden con la busqueda del listado.
+     *
+     * Activas e inactivas por igual —una referencia cerrada es justamente la que se
+     * quiere archivar o cotizar de nuevo—; el unico filtro que queda es el de empresa,
+     * que aplica el scope global.
+     *
+     * @return EloquentCollection<int, Reference>|RedirectResponse
+     */
+    protected function exportSelection(Request $request): EloquentCollection|RedirectResponse
+    {
+        $raw = $request->input('ids');
+        $ids = collect(is_string($raw) ? explode(',', $raw) : (is_array($raw) ? $raw : []))
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        $query = Reference::query()->with(['operations', 'company']);
+
+        if ($ids->isNotEmpty()) {
+            $query->whereIn('id', $ids);
+        } else {
+            $search = trim((string) $request->input('search', ''));
+
+            if ($search !== '') {
+                $query->where(function ($q) use ($search) {
+                    $q->where('code', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%");
+                });
+            }
+        }
+
+        // Se pide uno mas que el tope para poder distinguir "justo el tope" de "se pasó".
+        $references = $query->orderBy('code')->limit(self::EXPORT_MAX + 1)->get();
+
+        if ($references->isEmpty()) {
+            return back()->with('error', 'No hay referencias que exportar con esa selección.');
+        }
+
+        if ($references->count() > self::EXPORT_MAX) {
+            return back()->with('error', sprintf(
+                'Puedes exportar hasta %d referencias a la vez (cada ficha lleva su imagen). Afina la búsqueda o marca menos referencias.',
+                self::EXPORT_MAX,
+            ));
+        }
+
+        return $references;
     }
 
     public function create(): Response
