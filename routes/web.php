@@ -145,11 +145,19 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Nomina
     Route::middleware('permission:payrolls.index.view')->group(function () {
+        // Antes del resource: un segmento literal no puede quedar detras de {payroll}.
+        Route::get('/payrolls/export-list', [PayrollController::class, 'exportList'])->name('payrolls.export-list');
         Route::resource('payrolls', PayrollController::class)->except(['edit', 'update']);
         Route::post('/payrolls/{payroll}/calculate', [PayrollController::class, 'calculate'])->name('payrolls.calculate');
         Route::post('/payrolls/{payroll}/approve', [PayrollController::class, 'approve'])->name('payrolls.approve');
         Route::post('/payrolls/{payroll}/pay', [PayrollController::class, 'pay'])->name('payrolls.pay');
         Route::get('/payrolls/{payroll}/export', [PayrollController::class, 'export'])->name('payrolls.export');
+        // Ficha y comprobante de un empleado dentro de la nomina. El permiso fino lo aplica
+        // la policy (`payrolls.show.view`) igual que en el detalle del periodo.
+        Route::get('/payrolls/{payroll}/empleados/{payrollEmployee}', [PayrollController::class, 'employee'])
+            ->name('payrolls.payroll-employees.show');
+        Route::get('/payrolls/{payroll}/empleados/{payrollEmployee}/comprobante', [PayrollController::class, 'receipt'])
+            ->name('payrolls.payroll-employees.receipt');
     });
 
     Route::middleware('permission:payrolls.show.manage_adjustments')->group(function () {

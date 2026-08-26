@@ -362,7 +362,12 @@ export interface Payroll {
     notes: string | null;
     payroll_employees?: PayrollEmployee[];
     payroll_employees_count?: number;
+    created_by?: number | null;
+    /** Quien creo el periodo; el detalle lo muestra junto al ultimo movimiento. */
+    creator?: { id: number; name: string; last_name: string | null } | null;
     created_at: string;
+    /** Cambia con cada paso del flujo: es el «hace cuanto» del listado y de la cabecera. */
+    updated_at?: string;
 }
 
 export interface LegalHoursDailyDetail {

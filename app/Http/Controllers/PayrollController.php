@@ -16,11 +16,16 @@ use App\Models\WorkDaySession;
 use App\Services\PayrollCalculationService;
 use App\Support\CompanyContext;
 use App\Support\TenantContext;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
+use League\Csv\Bom;
+use League\Csv\Writer;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PayrollController extends Controller
 {
@@ -28,36 +33,215 @@ class PayrollController extends Controller
 
     public function index(Request $request): Response
     {
-        $user = $request->user();
-        $status = $request->input('status', 'all');
+        $search = trim((string) $request->input('search', ''));
+
+        // El estado util del listado no es el crudo de la base sino el del flujo: una nomina
+        // esta abierta mientras se pueda tocar (borrador/calculado) y cerrada cuando ya se
+        // aprobo o pago. Cuatro casillas de estado obligaban a conocer el vocabulario interno.
+        $state = (string) $request->input('state', 'open');
+        if (! in_array($state, ['open', 'closed', 'all'], true)) {
+            $state = 'open';
+        }
+
         $year = (int) $request->input('year', now()->year);
+        if ($year < 2000 || $year > 2100) {
+            $year = (int) now()->year;
+        }
+
+        $type = $request->input('type');
+        $type = is_string($type) && $type !== '' ? $type : null;
+
+        $query = $this->indexBaseQuery($request)
+            ->with(['company:id,name', 'creator:id,name,last_name'])
+            ->withCount('payrollEmployees');
+
+        $this->applyIndexFilters($query, $search, $state, $year, $type);
+
+        $payrolls = $query->orderByDesc('period_start')->orderByDesc('id')->paginate(15)->withQueryString();
+
+        return Inertia::render('Payrolls/Index', [
+            'payrolls' => $payrolls,
+            'filters' => [
+                'search' => $search,
+                'state' => $state,
+                'year' => $year,
+                'type' => $type,
+            ],
+            'metrics' => $this->indexMetrics($request, $year, $search, $type),
+            'periodicities' => PayrollPeriodicity::query()->active()->ordered()->get(['code', 'name']),
+            'years' => $this->availableYears($request, $year),
+        ]);
+    }
+
+    /**
+     * Descarga en CSV lo que muestra el listado, con el filtro aplicado.
+     *
+     * Un CSV que no coincida con lo que se ve en pantalla es peor que no tener CSV, asi que
+     * reutiliza los mismos filtros que `index()`.
+     */
+    public function exportList(Request $request): StreamedResponse
+    {
+        $search = trim((string) $request->input('search', ''));
+
+        $state = (string) $request->input('state', 'open');
+        if (! in_array($state, ['open', 'closed', 'all'], true)) {
+            $state = 'open';
+        }
+
+        $year = (int) $request->input('year', now()->year);
+        if ($year < 2000 || $year > 2100) {
+            $year = (int) now()->year;
+        }
+
+        $type = $request->input('type');
+        $type = is_string($type) && $type !== '' ? $type : null;
+
+        $query = $this->indexBaseQuery($request)
+            ->with('company:id,name')
+            ->withCount('payrollEmployees');
+
+        $this->applyIndexFilters($query, $search, $state, $year, $type);
+
+        $filename = 'nomina-'.now()->format('Ymd-Hi').'.csv';
+
+        return response()->streamDownload(function () use ($query) {
+            $writer = Writer::createFromStream(fopen('php://output', 'w'));
+            $writer->setOutputBOM(Bom::Utf8);
+            $writer->insertOne([
+                'Nomina', 'Periodicidad', 'Inicio', 'Fin', 'Estado', 'Empleados', 'Neto',
+            ]);
+
+            $query->orderByDesc('period_start')->orderByDesc('id')->chunk(500, function ($rows) use ($writer) {
+                foreach ($rows as $payroll) {
+                    $writer->insertOne([
+                        $payroll->name,
+                        $payroll->type,
+                        $payroll->period_start?->format('Y-m-d'),
+                        $payroll->period_end?->format('Y-m-d'),
+                        $payroll->status,
+                        (int) ($payroll->payroll_employees_count ?? 0),
+                        (float) $payroll->total_amount,
+                    ]);
+                }
+            });
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
+    /**
+     * Alcance comun del listado: empresa activa y, para un empleado sin rol administrativo,
+     * solo las nominas donde aparece. Lo comparten la tabla y las metricas: si divergieran,
+     * la cabecera diria una cosa y la lista otra.
+     */
+    protected function indexBaseQuery(Request $request): Builder
+    {
+        $user = $request->user();
         $companyId = CompanyContext::id($user);
 
-        $query = Payroll::query()
-            ->with(['company:id,name'])
-            ->withCount('payrollEmployees');
+        $query = Payroll::query();
 
         if ($companyId) {
             $query->where('company_id', $companyId);
         }
 
-        if ($status !== 'all') {
-            $query->where('status', $status);
-        }
-        if ($year) {
-            $query->whereYear('period_start', $year);
-        }
-
-        if ($user->isEmployee() && ! $user->isAdmin()) {
+        if ($user && $user->isEmployee() && ! $user->isAdmin()) {
             $query->whereHas('payrollEmployees', fn ($q) => $q->where('employee_id', $user->employee_id));
         }
 
-        $payrolls = $query->orderByDesc('period_start')->paginate(15)->withQueryString();
+        return $query;
+    }
 
-        return Inertia::render('Payrolls/Index', [
-            'payrolls' => $payrolls,
-            'filters' => ['status' => $status, 'year' => $year],
-        ]);
+    protected function applyIndexFilters(Builder $query, string $search, string $state, int $year, ?string $type): void
+    {
+        if ($search !== '') {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                    ->orWhere('notes', 'like', "%{$search}%")
+                    ->orWhere('type', 'like', "%{$search}%")
+                    ->orWhere('period_start', 'like', "%{$search}%")
+                    ->orWhere('period_end', 'like', "%{$search}%");
+            });
+        }
+
+        if ($state === 'open') {
+            $query->whereIn('status', [Payroll::STATUS_DRAFT, Payroll::STATUS_CALCULATED]);
+        } elseif ($state === 'closed') {
+            $query->whereIn('status', [Payroll::STATUS_APPROVED, Payroll::STATUS_PAID]);
+        }
+
+        $query->whereYear('period_start', $year);
+
+        if ($type !== null) {
+            $query->where('type', $type);
+        }
+    }
+
+    /**
+     * Las tres cifras de la cabecera: que hay abierto ahora mismo, cuanto se pago en el ano
+     * y cuanto cuesta en promedio un empleado del periodo abierto.
+     */
+    protected function indexMetrics(Request $request, int $year, string $search, ?string $type): array
+    {
+        // Cuantas abiertas hay con el filtro puesto (sin contar el segmentado de estado):
+        // es lo que da sentido al contador «N nominas · M abiertas» de la barra.
+        $filteredOpen = $this->indexBaseQuery($request);
+        $this->applyIndexFilters($filteredOpen, $search, 'open', $year, $type);
+
+        $open = $this->indexBaseQuery($request)
+            ->withCount('payrollEmployees')
+            ->whereIn('status', [Payroll::STATUS_DRAFT, Payroll::STATUS_CALCULATED])
+            ->orderByDesc('period_start')
+            ->orderByDesc('id')
+            ->first();
+
+        $openEmployees = (int) ($open->payroll_employees_count ?? 0);
+        $openNet = (float) ($open->total_amount ?? 0);
+
+        return [
+            'open_net' => $openNet,
+            'open_employees' => $openEmployees,
+            'open_status' => $open?->status,
+            'open_period_end' => $open?->period_end?->toDateString(),
+            'open_type' => $open?->type,
+            'year_paid' => (float) $this->indexBaseQuery($request)
+                ->whereYear('period_start', $year)
+                ->where('status', Payroll::STATUS_PAID)
+                ->sum('total_amount'),
+            'year_closed_count' => $this->indexBaseQuery($request)
+                ->whereYear('period_start', $year)
+                ->whereIn('status', [Payroll::STATUS_APPROVED, Payroll::STATUS_PAID])
+                ->count(),
+            'year_approved_unpaid' => $this->indexBaseQuery($request)
+                ->whereYear('period_start', $year)
+                ->where('status', Payroll::STATUS_APPROVED)
+                ->count(),
+            'average_per_employee' => $openEmployees > 0 ? round($openNet / $openEmployees, 2) : 0.0,
+            'filtered_open_count' => $filteredOpen->count(),
+        ];
+    }
+
+    /**
+     * Anos con nomina registrada, para que el desplegable no ofrezca anos vacios. Siempre
+     * incluye el ano en curso y el que se este filtrando, aunque no tengan nada todavia.
+     */
+    protected function availableYears(Request $request, int $selected): array
+    {
+        $years = $this->indexBaseQuery($request)
+            ->selectRaw('YEAR(period_start) as y')
+            ->distinct()
+            ->pluck('y')
+            ->map(fn ($y) => (int) $y)
+            ->all();
+
+        $years[] = (int) now()->year;
+        $years[] = $selected;
+
+        $years = array_values(array_unique(array_filter($years, fn ($y) => $y > 0)));
+        rsort($years);
+
+        return $years;
     }
 
     public function create(Request $request): Response
@@ -74,9 +258,122 @@ class PayrollController extends Controller
             $default = PayrollPeriodicity::query()->active()->ordered()->value('code') ?? 'quincenal';
         }
 
+        $last = $companyId
+            ? Payroll::query()
+                ->withoutGlobalScope(CompanyScope::class)
+                ->where('company_id', $companyId)
+                ->orderByDesc('period_end')
+                ->orderByDesc('id')
+                ->first()
+            : null;
+
+        $codes = PayrollPeriodicity::query()->active()->ordered()->pluck('code')->all();
+        if (! in_array($default, $codes, true)) {
+            $codes[] = $default;
+        }
+
+        $suggestions = [];
+        foreach ($codes as $code) {
+            $suggestions[$code] = $this->suggestPeriodFor((string) $code, $last?->period_end);
+        }
+
+        // El aviso de solape se resuelve antes de enviar: el servidor lo rechaza igual
+        // (StorePayrollRequest), pero enterarse tras el envio obliga a rehacer el formulario.
+        $existing = $companyId
+            ? Payroll::query()
+                ->withoutGlobalScope(CompanyScope::class)
+                ->where('company_id', $companyId)
+                ->orderByDesc('period_start')
+                ->limit(40)
+                ->get(['id', 'name', 'period_start', 'period_end', 'type'])
+                ->map(fn (Payroll $p) => [
+                    'id' => $p->id,
+                    'name' => $p->name,
+                    'period_start' => $p->period_start?->toDateString(),
+                    'period_end' => $p->period_end?->toDateString(),
+                    'type' => $p->type,
+                ])
+                ->all()
+            : [];
+
         return Inertia::render('Payrolls/Create', [
             'defaultPayrollType' => $default,
+            'suggestions' => $suggestions,
+            'lastPeriod' => $last ? [
+                'name' => $last->name,
+                'period_end' => $last->period_end?->toDateString(),
+                'type' => $last->type,
+            ] : null,
+            'existingPeriods' => $existing,
         ]);
+    }
+
+    /**
+     * Largo del periodo en dias para las periodicidades de paso fijo. `null` marca las que
+     * se resuelven por calendario (quincenal y mensual), que no tienen largo constante.
+     */
+    protected function periodLengthDays(string $code): ?int
+    {
+        return match ($code) {
+            'diario' => 1,
+            'semanal' => 7,
+            'decadal' => 10,
+            'catorcenal' => 14,
+            default => null,
+        };
+    }
+
+    /**
+     * Siguiente periodo a partir del cierre anterior. Sin nominas previas se propone el
+     * periodo en curso, que es lo que hace quien empieza a usar el modulo a mitad de mes.
+     */
+    protected function suggestPeriodFor(string $code, ?Carbon $lastEnd): array
+    {
+        $start = $lastEnd ? $lastEnd->copy()->addDay()->startOfDay() : now()->startOfDay();
+
+        if ($code === 'mensual') {
+            if (! $lastEnd) {
+                $start = now()->startOfMonth();
+            }
+            $end = $start->copy()->endOfMonth();
+        } elseif ($code === 'quincenal') {
+            if (! $lastEnd) {
+                $start = now()->day <= 15 ? now()->startOfMonth() : now()->startOfMonth()->addDays(15);
+            }
+            $end = $start->day <= 15 ? $start->copy()->day(15) : $start->copy()->endOfMonth();
+            if ($end->lt($start)) {
+                $end = $start->copy()->endOfMonth();
+            }
+        } else {
+            $days = $this->periodLengthDays($code) ?? 15;
+            $end = $start->copy()->addDays($days - 1);
+        }
+
+        return [
+            'type' => $code,
+            'period_start' => $start->toDateString(),
+            'period_end' => $end->toDateString(),
+            'name' => $this->suggestName($code, $start, $end),
+        ];
+    }
+
+    protected function suggestName(string $code, Carbon $start, Carbon $end): string
+    {
+        $months = [
+            'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+            'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
+        ];
+        $month = $months[$start->month - 1] ?? '';
+
+        if ($code === 'mensual') {
+            return 'Nomina '.$month.' '.$start->year;
+        }
+
+        if ($start->month === $end->month && $start->year === $end->year) {
+            return 'Nomina '.$start->day.'-'.$end->day.' '.$month.' '.$start->year;
+        }
+
+        return 'Nomina '.$start->format('d/m').' - '.$end->format('d/m/Y');
     }
 
     public function store(StorePayrollRequest $request): RedirectResponse
@@ -108,6 +405,8 @@ class PayrollController extends Controller
         $user = $request->user();
         $this->authorize('view', $payroll);
         $this->ensurePayrollBelongsToActiveCompany($request, $payroll);
+
+        $payroll->load('creator:id,name,last_name');
 
         $payrollConcepts = collect();
         if ($user->can('payrolls.show.manage_adjustments')) {
@@ -157,7 +456,7 @@ class PayrollController extends Controller
 
         $payrollEmployeeRows = (clone $peBase)
             ->with([
-                'employee:id,first_name,last_name,document_number,payroll_mode,daily_salary,minutes_per_full_workday,ordinary_hours_per_day,is_exempt_from_overtime,scheduled_work_days',
+                'employee:id,first_name,last_name,document_type,document_number,payroll_mode,base_salary,daily_salary,minutes_per_full_workday,ordinary_hours_per_day,is_exempt_from_overtime,scheduled_work_days',
                 'advances',
                 'adjustments.payrollConcept:id,name,code',
             ])
@@ -185,48 +484,6 @@ class PayrollController extends Controller
 
         $idsForDetail = $payrollEmployeeRows->pluck('employee_id')->filter()->values()->all();
 
-        $workSessionsByEmployee = [];
-        if ($idsForDetail !== []) {
-            $workSessionsByEmployee = WorkDaySession::query()
-                ->withoutGlobalScopes()
-                ->where('company_id', $payroll->company_id)
-                ->whereBetween('work_date', [
-                    $payroll->period_start->format('Y-m-d'),
-                    $payroll->period_end->format('Y-m-d'),
-                ])
-                ->whereIn('employee_id', $idsForDetail)
-                ->orderBy('work_date')
-                ->orderBy('id')
-                ->get()
-                ->groupBy(fn ($s) => (string) $s->employee_id)
-                ->map(fn ($sessions) => $sessions->values()->all())
-                ->all();
-        }
-
-        $productionsByEmployee = [];
-        if ($idsForDetail !== []) {
-            $productionsByEmployee = Production::query()
-                ->withoutGlobalScope(CompanyScope::class)
-                ->with(['reference:id,code,name', 'operation:id,name'])
-                ->whereBetween('date', [
-                    $payroll->period_start->format('Y-m-d'),
-                    $payroll->period_end->format('Y-m-d'),
-                ])
-                ->whereIn('status', Production::PAYABLE_STATUSES)
-                ->where(function ($q) use ($payroll) {
-                    $cid = (int) $payroll->company_id;
-                    $q->where('company_id', $cid)
-                        ->orWhereHas('reference', fn ($r) => $r->where('company_id', $cid));
-                })
-                ->whereIn('employee_id', $idsForDetail)
-                ->orderBy('date')
-                ->orderBy('id')
-                ->get()
-                ->groupBy(fn ($p) => (string) $p->employee_id)
-                ->map(fn ($rows) => $rows->values()->all())
-                ->all();
-        }
-
         return Inertia::render('Payrolls/Show', [
             'payroll' => $payroll,
             'payrollEmployees' => $payrollEmployees,
@@ -243,10 +500,217 @@ class PayrollController extends Controller
                 'show_daily_column' => $showDailyColumn,
                 'show_legal_column' => $showLegalColumn,
             ],
-            'workSessionsByEmployee' => $workSessionsByEmployee,
-            'productionsByEmployee' => $productionsByEmployee,
+            'workSessionsByEmployee' => $this->workSessionsFor($payroll, $idsForDetail),
+            'productionsByEmployee' => $this->productionsFor($payroll, $idsForDetail),
             'payrollConcepts' => $payrollConcepts,
+            'periodicityName' => PayrollPeriodicity::query()->where('code', $payroll->type)->value('name'),
         ]);
+    }
+
+    /**
+     * Ficha completa de un empleado dentro de la nomina: jornadas, liquidacion legal o
+     * produccion, conceptos, anticipos e inasistencias, con espacio para editarlos.
+     */
+    public function employee(Request $request, Payroll $payroll, PayrollEmployee $payrollEmployee): Response
+    {
+        $this->authorize('view', $payroll);
+        $this->ensurePayrollBelongsToActiveCompany($request, $payroll);
+        $this->ensurePayrollEmployeeIsVisible($request, $payroll, $payrollEmployee);
+
+        $user = $request->user();
+        $payroll->load('creator:id,name,last_name');
+
+        $payrollEmployee->load([
+            'employee',
+            'employee.bank:id,name,is_active',
+            'advances',
+            'adjustments.payrollConcept:id,name,code',
+        ]);
+
+        $payrollConcepts = collect();
+        if ($user->can('payrolls.show.manage_adjustments')) {
+            $payrollConcepts = PayrollConcept::query()
+                ->where('company_id', $payroll->company_id)
+                ->where('is_active', true)
+                ->orderBy('sort_order')
+                ->orderBy('name')
+                ->get(['id', 'name', 'code']);
+        }
+
+        $employeeId = (int) $payrollEmployee->employee_id;
+
+        return Inertia::render('Payrolls/Employee', [
+            'payroll' => $payroll,
+            'payrollEmployee' => $payrollEmployee,
+            'workSessions' => $this->workSessionsFor($payroll, [$employeeId])[(string) $employeeId] ?? [],
+            'productions' => $this->productionsFor($payroll, [$employeeId])[(string) $employeeId] ?? [],
+            'payrollConcepts' => $payrollConcepts,
+            // Recalcular reevalua las inasistencias de TODA la nomina: sin el estado de los
+            // demas empleados, guardar desde esta ficha revertiria sus exclusiones al valor
+            // por defecto de los parametros legales.
+            'absenceBaseline' => $this->absenceBaseline($payroll),
+            'siblings' => $this->employeeSiblings($payroll, $payrollEmployee),
+            'periodicityName' => PayrollPeriodicity::query()->where('code', $payroll->type)->value('name'),
+        ]);
+    }
+
+    /**
+     * Comprobante individual imprimible. Reusa la misma retícula del informe de nomina.
+     */
+    public function receipt(Request $request, Payroll $payroll, PayrollEmployee $payrollEmployee): Response
+    {
+        $this->authorize('view', $payroll);
+        $this->ensurePayrollBelongsToActiveCompany($request, $payroll);
+        $this->ensurePayrollEmployeeIsVisible($request, $payroll, $payrollEmployee);
+
+        $payroll->load('company:id,name,nit,address,phone,logo');
+        $payrollEmployee->load([
+            'employee',
+            'employee.bank:id,name,is_active',
+            'advances',
+            'adjustments.payrollConcept:id,name,code',
+        ]);
+
+        $employeeId = (int) $payrollEmployee->employee_id;
+
+        return Inertia::render('Payrolls/Receipt', [
+            'payroll' => $payroll,
+            'payrollEmployee' => $payrollEmployee,
+            'workSessions' => $this->workSessionsFor($payroll, [$employeeId])[(string) $employeeId] ?? [],
+            'productions' => $this->productionsFor($payroll, [$employeeId])[(string) $employeeId] ?? [],
+        ]);
+    }
+
+    /**
+     * Una nomina solo muestra los empleados de su propia empresa, y un empleado sin rol
+     * administrativo solo se ve a si mismo.
+     */
+    protected function ensurePayrollEmployeeIsVisible(Request $request, Payroll $payroll, PayrollEmployee $payrollEmployee): void
+    {
+        abort_unless((int) $payrollEmployee->payroll_id === (int) $payroll->id, 404);
+
+        $user = $request->user();
+
+        if ($user && $user->isEmployee() && ! $user->isAdmin()
+            && (int) $payrollEmployee->employee_id !== (int) $user->employee_id) {
+            abort(403, 'Solo puedes consultar tu propia liquidacion.');
+        }
+    }
+
+    /**
+     * Empleado anterior y siguiente en el mismo orden que la lista del detalle, para poder
+     * recorrer la nomina sin volver atras.
+     */
+    protected function employeeSiblings(Payroll $payroll, PayrollEmployee $current): array
+    {
+        $rows = PayrollEmployee::query()
+            ->where('payroll_id', $payroll->id)
+            ->join('employees', 'payroll_employees.employee_id', '=', 'employees.id')
+            ->orderBy('employees.first_name')
+            ->orderBy('employees.last_name')
+            ->get([
+                'payroll_employees.id',
+                'employees.first_name',
+                'employees.last_name',
+            ]);
+
+        $index = $rows->search(fn ($row) => (int) $row->id === (int) $current->id);
+
+        $map = fn ($row) => $row === null ? null : [
+            'id' => (int) $row->id,
+            'name' => trim(($row->first_name ?? '').' '.($row->last_name ?? '')),
+        ];
+
+        return [
+            'position' => $index === false ? 0 : $index + 1,
+            'total' => $rows->count(),
+            'previous' => $index === false ? null : $map($rows->get($index - 1)),
+            'next' => $index === false ? null : $map($rows->get($index + 1)),
+        ];
+    }
+
+    /**
+     * Estado actual de las inasistencias de todos los empleados de la nomina, en el mismo
+     * formato que espera `absence_confirmations` al recalcular.
+     */
+    protected function absenceBaseline(Payroll $payroll): array
+    {
+        return PayrollEmployee::query()
+            ->where('payroll_id', $payroll->id)
+            ->get(['employee_id', 'absence_discount_detail'])
+            ->map(function (PayrollEmployee $row) {
+                $detail = is_array($row->absence_discount_detail) ? $row->absence_discount_detail : [];
+
+                return [
+                    'employee_id' => (int) $row->employee_id,
+                    'dates' => array_values(array_map(fn ($item) => [
+                        'date' => (string) ($item['work_date'] ?? ''),
+                        'discount' => (bool) ($item['confirmed'] ?? false),
+                        'note' => $item['note'] ?? null,
+                    ], $detail)),
+                ];
+            })
+            ->filter(fn ($block) => $block['dates'] !== [])
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  int[]  $employeeIds
+     * @return array<string, mixed>
+     */
+    protected function workSessionsFor(Payroll $payroll, array $employeeIds): array
+    {
+        if ($employeeIds === []) {
+            return [];
+        }
+
+        return WorkDaySession::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $payroll->company_id)
+            ->whereBetween('work_date', [
+                $payroll->period_start->format('Y-m-d'),
+                $payroll->period_end->format('Y-m-d'),
+            ])
+            ->whereIn('employee_id', $employeeIds)
+            ->orderBy('work_date')
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn ($s) => (string) $s->employee_id)
+            ->map(fn ($sessions) => $sessions->values()->all())
+            ->all();
+    }
+
+    /**
+     * @param  int[]  $employeeIds
+     * @return array<string, mixed>
+     */
+    protected function productionsFor(Payroll $payroll, array $employeeIds): array
+    {
+        if ($employeeIds === []) {
+            return [];
+        }
+
+        return Production::query()
+            ->withoutGlobalScope(CompanyScope::class)
+            ->with(['reference:id,code,name', 'operation:id,name'])
+            ->whereBetween('date', [
+                $payroll->period_start->format('Y-m-d'),
+                $payroll->period_end->format('Y-m-d'),
+            ])
+            ->whereIn('status', Production::PAYABLE_STATUSES)
+            ->where(function ($q) use ($payroll) {
+                $cid = (int) $payroll->company_id;
+                $q->where('company_id', $cid)
+                    ->orWhereHas('reference', fn ($r) => $r->where('company_id', $cid));
+            })
+            ->whereIn('employee_id', $employeeIds)
+            ->orderBy('date')
+            ->orderBy('id')
+            ->get()
+            ->groupBy(fn ($p) => (string) $p->employee_id)
+            ->map(fn ($rows) => $rows->values()->all())
+            ->all();
     }
 
     public function calculate(CalculatePayrollRequest $request, Payroll $payroll): RedirectResponse
