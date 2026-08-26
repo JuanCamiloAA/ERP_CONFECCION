@@ -61,10 +61,22 @@ class StorePayrollLegalParameterRequest extends FormRequest
                             $q2->whereNull('effective_to')->orWhere('effective_to', '>=', $from);
                         });
                 })
-                ->exists();
+                ->orderBy('effective_from')
+                ->first();
 
             if ($overlap) {
-                $validator->errors()->add('effective_from', 'El rango se solapa con otro tramo existente para este alcance (global o de la empresa).');
+                // Se nombra el tramo en conflicto: «se solapa con otro» obliga a salir de
+                // la pantalla a buscar cual, y con dos o tres tramos eso ya no es obvio.
+                $hasta = $overlap->effective_to
+                    ? $overlap->effective_to->format('d/m/Y')
+                    : 'indefinido';
+
+                $validator->errors()->add('effective_from', sprintf(
+                    'El rango se solapa con el tramo del %s al %s (%s). Cierra la vigencia de ese tramo o elige otras fechas.',
+                    $overlap->effective_from->format('d/m/Y'),
+                    $hasta,
+                    $overlap->company_id === null ? 'global' : 'de esta empresa',
+                ));
             }
         });
     }

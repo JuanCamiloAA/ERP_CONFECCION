@@ -23,6 +23,7 @@ class Expense extends Model
         'receipt_original_name',
         'receipt_mime',
         'notes',
+        'needs_detail',
         'created_by',
     ];
 
@@ -31,6 +32,7 @@ class Expense extends Model
         return [
             'amount' => 'decimal:2',
             'expense_date' => 'date',
+            'needs_detail' => 'boolean',
         ];
     }
 

@@ -1,12 +1,10 @@
 import { router } from '@inertiajs/react';
-import { ClockIcon } from '@heroicons/react/24/outline';
+import { CaretDown, Clock } from '@phosphor-icons/react';
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
-import { Card } from '@/Components/UI/Card';
-import { Select } from '@/Components/UI/Select';
 import type { Employee } from '@/types';
+import '../../../css/module-ui.css';
 
 type SessionJson = {
     id: number;
@@ -32,18 +30,49 @@ interface Props {
     /** Estado del dia para el empleado enlazado (servidor). */
     initialSelf?: WorkDayBannerPayload | null;
     selectableEmployees?: Pick<Employee, 'id' | 'first_name' | 'last_name'>[];
+    /** Nota al pie de la tarjeta; la usa el formulario de registro. */
+    note?: string;
 }
 
 function formatTime(iso: string | null | undefined): string {
     if (!iso) return '—';
     try {
-        return new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+        return new Date(iso).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
     } catch {
         return '—';
     }
 }
 
-export function WorkDayBanner({ variant, initialSelf, selectableEmployees = [] }: Props) {
+/** Cabecera comun de las dos variantes: reloj, titulo y fecha. */
+function BannerHead({ title, meta }: { title: string; meta?: string }) {
+    return (
+        <div className="flex items-start gap-2.5">
+            <Clock size={19} className="mt-0.5 shrink-0" style={{ color: 'var(--emp-accent-line)' }} />
+            <div className="min-w-0">
+                <p className="text-[13px]" style={{ color: 'var(--emp-text)' }}>
+                    {title}
+                </p>
+                {meta ? (
+                    <p className="mt-0.5 text-[12px] tabular-nums" style={{ color: 'var(--emp-muted)' }}>
+                        {meta}
+                    </p>
+                ) : null}
+            </div>
+        </div>
+    );
+}
+
+/**
+ * Control de jornada.
+ *
+ * `self` es la jornada del propio operario y vive arriba de su listado: es su primera
+ * accion del dia. `admin` abre o cierra la jornada de otra persona y vive solo en el
+ * formulario de registro, que es donde esa accion tiene contexto; en el listado ocupaba
+ * la primera pantalla sin decir nada de la produccion del dia.
+ *
+ * La logica no cambia: mismo `TodayResponse`, mismo `axios.get` y mismos `router.post`.
+ */
+export function WorkDayBanner({ variant, initialSelf, selectableEmployees = [], note }: Props) {
     const [adminEmployeeId, setAdminEmployeeId] = useState('');
     const [adminState, setAdminState] = useState<TodayResponse | null>(null);
 
@@ -60,15 +89,19 @@ export function WorkDayBanner({ variant, initialSelf, selectableEmployees = [] }
         }
         if (!adminEmployeeId) {
             setAdminState(null);
+
             return;
         }
         loadAdmin(Number(adminEmployeeId)).catch(() => setAdminState(null));
     }, [variant, adminEmployeeId, loadAdmin]);
 
+    /* --------------------------------------------------------- jornada propia */
+
     if (variant === 'self') {
         if (!initialSelf) {
             return null;
         }
+
         const { work_date, open, closed, long_shift_warning } = initialSelf;
 
         const start = () => {
@@ -80,53 +113,47 @@ export function WorkDayBanner({ variant, initialSelf, selectableEmployees = [] }
             router.post(route('work-day-sessions.close', open.id), {}, { preserveScroll: true });
         };
 
+        const meta = [
+            work_date,
+            open ? `abierta ${formatTime(open.clock_in_at)}` : null,
+            closed ? `cerrada · ${closed.duration_minutes ?? 0} min` : null,
+        ]
+            .filter(Boolean)
+            .join(' · ');
+
         return (
-            <Card className="border-indigo-200 bg-indigo-50/80 p-4 dark:border-indigo-900 dark:bg-indigo-950/40">
+            <div className="emp-form emp-card p-[17px]">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="flex items-start gap-3">
-                        <ClockIcon className="mt-0.5 h-8 w-8 shrink-0 text-indigo-600 dark:text-indigo-400" />
-                        <div>
-                            <p className="text-sm font-semibold text-indigo-950 dark:text-indigo-100">Jornada de hoy</p>
-                            <p className="text-xs text-indigo-800/80 dark:text-indigo-200/80">Fecha: {work_date}</p>
-                            {open && (
-                                <p className="mt-1 text-sm text-indigo-900 dark:text-indigo-100">
-                                    Entrada: {formatTime(open.clock_in_at)}
-                                </p>
-                            )}
-                            {closed && (
-                                <p className="mt-1 text-sm text-indigo-900 dark:text-indigo-100">
-                                    Cerrada — {closed.duration_minutes ?? 0} min
-                                </p>
-                            )}
-                            {long_shift_warning && (
-                                <p className="mt-2 text-xs font-medium text-amber-800 dark:text-amber-200">
-                                    Jornada muy larga (&gt;12 h). Verifica las horas con supervisor.
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
+                    <BannerHead title="Jornada de hoy" meta={meta} />
+
+                    <div className="flex shrink-0 flex-wrap gap-2">
                         <Can permission="productions.index.workday_start">
-                            <Button type="button" onClick={start} disabled={!!open || !!closed}>
+                            <button type="button" onClick={start} disabled={!!open || !!closed} className="emp-btn emp-btn-sm emp-btn-primary">
                                 Iniciar jornada
-                            </Button>
+                            </button>
                         </Can>
                         <Can permission="productions.index.workday_close">
-                            <Button type="button" variant="outline" onClick={close} disabled={!open}>
+                            <button type="button" onClick={close} disabled={!open} className="emp-btn emp-btn-sm">
                                 Cerrar jornada
-                            </Button>
+                            </button>
                         </Can>
                     </div>
                 </div>
-            </Card>
+
+                {long_shift_warning ? (
+                    <p className="emp-note mt-3">Jornada muy larga (más de 12 h). Verifica las horas con supervisor.</p>
+                ) : null}
+
+                {note ? <p className="emp-note mt-3">{note}</p> : null}
+            </div>
         );
     }
 
+    /* ------------------------------------------------------ jornada de otro */
+
     const state = adminState;
-    const workDate = state?.work_date;
     const open = state?.open ?? null;
     const closed = state?.closed ?? null;
-    const longShift = state?.long_shift_warning;
 
     const startAdmin = () => {
         if (!adminEmployeeId) return;
@@ -138,54 +165,77 @@ export function WorkDayBanner({ variant, initialSelf, selectableEmployees = [] }
         router.post(route('work-day-sessions.close', open.id), {}, { preserveScroll: true });
     };
 
+    const meta = state
+        ? [
+              state.work_date,
+              open ? `abierta ${formatTime(open.clock_in_at)}` : null,
+              closed ? `cerrada · ${closed.duration_minutes ?? 0} min` : null,
+          ]
+              .filter(Boolean)
+              .join(' · ')
+        : undefined;
+
     return (
-        <Card className="border-indigo-200 bg-indigo-50/80 p-4 dark:border-indigo-900 dark:bg-indigo-950/40">
-            <div className="space-y-3">
-                <div className="flex flex-wrap items-end gap-3">
-                    <div className="min-w-[220px] flex-1">
-                        <Select
-                            label="Empleado (salario diario)"
+        <div className="emp-form emp-card p-[17px]">
+            <BannerHead title="Control de jornada" meta={meta} />
+
+            <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                    <label className="emp-label" htmlFor="workday-employee">
+                        Empleado (salario diario)
+                    </label>
+                    <div className="relative">
+                        <select
+                            id="workday-employee"
                             value={adminEmployeeId}
                             onChange={(e) => setAdminEmployeeId(e.target.value)}
-                            options={selectableEmployees.map((e) => ({
-                                value: e.id,
-                                label: `${e.first_name} ${e.last_name}`,
-                            }))}
-                            placeholder="Seleccionar…"
+                            className="emp-field"
+                        >
+                            <option value="">Seleccionar…</option>
+                            {selectableEmployees.map((e) => (
+                                <option key={e.id} value={e.id}>
+                                    {e.first_name} {e.last_name}
+                                </option>
+                            ))}
+                        </select>
+                        <CaretDown
+                            size={13}
+                            className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
+                            style={{ color: 'var(--emp-subtle)' }}
                         />
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                        <Can permission="productions.index.workday_start">
-                            <Button type="button" onClick={startAdmin} disabled={!adminEmployeeId || !!open || !!closed}>
-                                Iniciar
-                            </Button>
-                        </Can>
-                        <Can permission="productions.index.workday_close">
-                            <Button type="button" variant="outline" onClick={closeAdmin} disabled={!open}>
-                                Cerrar
-                            </Button>
-                        </Can>
-                    </div>
                 </div>
-                {adminEmployeeId && state && workDate && (
-                    <div className="flex items-start gap-2 text-sm text-indigo-900 dark:text-indigo-100">
-                        <ClockIcon className="h-5 w-5 shrink-0" />
-                        <div>
-                            <p className="text-xs text-indigo-800/90 dark:text-indigo-200/90">Fecha: {workDate}</p>
-                            {open && <p>Entrada: {formatTime(open.clock_in_at)}</p>}
-                            {closed && <p>Cerrada — {closed.duration_minutes ?? 0} min</p>}
-                            {longShift && (
-                                <p className="mt-1 text-xs text-amber-800 dark:text-amber-200">
-                                    Jornada muy larga (&gt;12 h).
-                                </p>
-                            )}
-                        </div>
-                    </div>
-                )}
-                {adminEmployeeId && !state && (
-                    <p className="text-xs text-slate-600 dark:text-slate-400">Sin datos de jornada para esta seleccion.</p>
-                )}
+
+                <div className="flex shrink-0 gap-2">
+                    <Can permission="productions.index.workday_start">
+                        <button
+                            type="button"
+                            onClick={startAdmin}
+                            disabled={!adminEmployeeId || !!open || !!closed}
+                            className="emp-btn emp-btn-sm emp-btn-primary"
+                        >
+                            Iniciar
+                        </button>
+                    </Can>
+                    <Can permission="productions.index.workday_close">
+                        <button type="button" onClick={closeAdmin} disabled={!open} className="emp-btn emp-btn-sm">
+                            Cerrar
+                        </button>
+                    </Can>
+                </div>
             </div>
-        </Card>
+
+            {adminEmployeeId && state?.long_shift_warning ? (
+                <p className="emp-note mt-3">Jornada muy larga (más de 12 h).</p>
+            ) : null}
+
+            {adminEmployeeId && !state ? (
+                <p className="mt-2 text-[12px]" style={{ color: 'var(--emp-subtle)' }}>
+                    Sin datos de jornada para esta selección.
+                </p>
+            ) : null}
+
+            {note ? <p className="emp-note mt-3">{note}</p> : null}
+        </div>
     );
 }

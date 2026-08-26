@@ -39,7 +39,7 @@ import { Can } from '@/Components/UI/Can';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatDate, formatDateTime, formatRoleSelectLabel } from '@/lib/utils';
 import type { Advance, Employee, PayrollEmployee, Production } from '@/types';
-import '../../../css/employee-form.css';
+import '../../../css/module-ui.css';
 
 function maskAccountDisplay(num: string | null | undefined): string {
     if (!num) return '—';

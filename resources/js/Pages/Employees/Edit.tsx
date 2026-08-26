@@ -2,7 +2,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { CaretRight, Key, Warning } from '@phosphor-icons/react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { EmpDocumentField, EmpInput, EmpSelect, EmpSwitch, EmpTextarea } from '@/Components/Employees/EmployeeFields';
+import { EmpDocumentField, EmpInput, EmpSelect, EmpSwitch, EmpTextarea } from '@/Components/UI/ModuleFields';
 import {
     EmployeeAsideCard,
     EmployeeFormLayout,

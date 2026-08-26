@@ -22,7 +22,7 @@ import { usePermissions } from '@/contexts/PermissionsContext';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatNumber } from '@/lib/utils';
 import type { Employee, PaginatedResponse } from '@/types';
-import '../../../css/employee-form.css';
+import '../../../css/module-ui.css';
 
 interface Props {
     employees: PaginatedResponse<Employee>;

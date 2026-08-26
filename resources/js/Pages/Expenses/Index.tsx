@@ -1,235 +1,363 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowTopRightOnSquareIcon, EyeIcon, PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
-import { Badge } from '@/Components/UI/Badge';
-import { Button } from '@/Components/UI/Button';
+import { Camera, CaretLeft, CaretRight, DownloadSimple, Plus } from '@phosphor-icons/react';
+import { useMemo, useState } from 'react';
+import { ExpenseCard } from '@/Components/Expenses/ExpenseCard';
+import {
+    ExpenseFilterBar,
+    type CategoryOption,
+    type ExpenseFilters,
+} from '@/Components/Expenses/ExpenseFilterBar';
+import { ExpenseMonthGroup } from '@/Components/Expenses/ExpenseMonthGroup';
+import { EXPENSE_GRID, ExpenseRow, type ExpenseRowData } from '@/Components/Expenses/ExpenseRow';
+import { QuickCaptureSheet } from '@/Components/Expenses/QuickCaptureSheet';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
-import { PageHeader } from '@/Components/UI/PageHeader';
-import { Pagination } from '@/Components/UI/Pagination';
-import { SearchInput } from '@/Components/UI/SearchInput';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import AppLayout from '@/Layouts/AppLayout';
-import { formatCurrency, formatDate, formatDateTime } from '@/lib/utils';
-import type { ExpenseListRow, PaginatedResponse } from '@/types';
-
-interface CategoryOption {
-    id: number;
-    name: string;
-}
+import { groupExpensesByMonth, monthName, variationPercent } from '@/lib/expenses';
+import { formatCurrency, formatNumber } from '@/lib/utils';
+import type { PaginatedResponse } from '@/types';
+import '../../../css/module-ui.css';
 
 interface Props {
-    expenses: PaginatedResponse<ExpenseListRow>;
+    expenses: PaginatedResponse<ExpenseRowData>;
     categoryOptions: CategoryOption[];
-    filters: {
-        search: string;
-        category_id: string | number | null;
-        date_from: string | null;
-        date_to: string | null;
+    filters: ExpenseFilters;
+    filteredTotal: number;
+    metrics: {
+        month_total: number;
+        month_count: number;
+        month_categories: number;
+        prev_month_total: number;
+        year_total: number;
+        year_months: number;
     };
 }
 
-export default function ExpensesIndex({ expenses, categoryOptions, filters }: Props) {
-    const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
-    const [search, setSearch] = useState(filters.search ?? '');
-    const [categoryId, setCategoryId] = useState(filters.category_id === null ? '' : String(filters.category_id));
-    const [dateFrom, setDateFrom] = useState(filters.date_from ?? '');
-    const [dateTo, setDateTo] = useState(filters.date_to ?? '');
-    const [confirmDelete, setConfirmDelete] = useState<ExpenseListRow | null>(null);
+/** Etiqueta de pagina de Laravel, sin entidades ni las palabras de navegacion. */
+function pageLabel(label: string): string {
+    return label
+        .replace('&laquo;', '')
+        .replace('&raquo;', '')
+        .replace('Previous', '')
+        .replace('Next', '')
+        .replace('Anterior', '')
+        .replace('Siguiente', '')
+        .trim();
+}
 
-    const applyFilters = (next: Partial<{ search: string; category_id: string; date_from: string; date_to: string }>) => {
+export default function ExpensesIndex({ expenses, categoryOptions, filters, filteredTotal, metrics }: Props) {
+    const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
+    const [confirmDelete, setConfirmDelete] = useState<ExpenseRowData | null>(null);
+    const [captureOpen, setCaptureOpen] = useState(false);
+
+    const rows = expenses.data;
+    const total = expenses.total ?? rows.length;
+    const buckets = useMemo(() => groupExpensesByMonth(rows), [rows]);
+    const activeCategories = useMemo(() => categoryOptions.filter((c) => c.is_active), [categoryOptions]);
+
+    const now = new Date();
+    const currentMonth = monthName(now.getMonth());
+    const previousMonth = monthName((now.getMonth() + 11) % 12);
+    const variation = variationPercent(metrics.month_total, metrics.prev_month_total);
+    const monthlyAverage = metrics.year_months > 0 ? metrics.year_total / metrics.year_months : 0;
+
+    const applyFilters = (next: ExpenseFilters) => {
         const params: Record<string, string> = {};
-        const s = next.search ?? search;
-        const c = next.category_id !== undefined ? next.category_id : categoryId;
-        const df = next.date_from !== undefined ? next.date_from : dateFrom;
-        const dt = next.date_to !== undefined ? next.date_to : dateTo;
-        if (s) params.search = s;
-        if (c) params.category_id = c;
-        if (df) params.date_from = df;
-        if (dt) params.date_to = dt;
+        if (next.search) params.search = next.search;
+        if (next.category_id) params.category_id = String(next.category_id);
+        if (next.period && next.period !== 'mes') params.period = next.period;
+        if (next.date_from) params.date_from = next.date_from;
+        if (next.date_to) params.date_to = next.date_to;
+
         router.get(route('expenses.index'), params, { preserveState: true, preserveScroll: true, replace: true });
     };
 
-    const receiptLabel = (mime: string | null) => {
-        if (!mime) return '—';
-        if (mime.includes('pdf')) return 'PDF';
-        return 'Imagen';
-    };
+    const hasFilters = Boolean(
+        filters.search || filters.category_id || filters.period !== 'mes' || filters.date_from || filters.date_to,
+    );
 
-    const handleDelete = () => {
-        if (!confirmDelete) return;
-        router.delete(route('expenses.destroy', confirmDelete.id), {
-            onFinish: () => setConfirmDelete(null),
-        });
-    };
+    /** Exportar reutiliza el filtro vigente: lo que se ve es lo que se descarga. */
+    const exportUrl = useMemo(() => {
+        const params: Record<string, string> = {};
+        if (filters.search) params.search = filters.search;
+        if (filters.category_id) params.category_id = String(filters.category_id);
+        if (filters.period) params.period = filters.period;
+        if (filters.date_from) params.date_from = filters.date_from;
+        if (filters.date_to) params.date_to = filters.date_to;
+
+        return route('expenses.export', params);
+    }, [filters]);
+
+    const metricCards = [
+        {
+            label: `Gasto de ${currentMonth}`,
+            value: formatCurrency(metrics.month_total),
+            accent: true,
+            meta: `${formatNumber(metrics.month_count)} ${metrics.month_count === 1 ? 'gasto' : 'gastos'} · ${formatNumber(
+                metrics.month_categories,
+            )} ${metrics.month_categories === 1 ? 'categoría' : 'categorías'} con movimiento`,
+        },
+        {
+            label: 'Mes anterior',
+            value: formatCurrency(metrics.prev_month_total),
+            accent: false,
+            meta:
+                variation === null
+                    ? `Sin gastos en ${previousMonth}`
+                    : `${variation > 0 ? '+' : ''}${variation}% frente a ${previousMonth}`,
+        },
+        {
+            label: `Acumulado ${now.getFullYear()}`,
+            value: formatCurrency(metrics.year_total),
+            accent: false,
+            meta: `Promedio mensual ${formatCurrency(monthlyAverage)} · ${formatNumber(metrics.year_months)} ${
+                metrics.year_months === 1 ? 'mes' : 'meses'
+            } con movimiento`,
+        },
+    ];
+
+    const tableHeader = (
+        <div
+            className="grid items-center gap-2.5 px-3 pb-2"
+            style={{ gridTemplateColumns: EXPENSE_GRID, borderBottom: '1px solid var(--emp-border)' }}
+        >
+            {[
+                { label: 'Fecha', right: false },
+                { label: 'Categoría', right: false },
+                { label: 'Descripción', right: false },
+                { label: 'Monto', right: true },
+                { label: 'Comprobante', right: false },
+                { label: 'Registró', right: false },
+                { label: '', right: false },
+            ].map((column, index) => (
+                <span
+                    key={column.label || `col-${index}`}
+                    className={`text-[11px] uppercase tracking-[0.09em] ${column.right ? 'text-right' : ''}`}
+                    style={{ color: 'var(--emp-subtle)' }}
+                >
+                    {column.label}
+                </span>
+            ))}
+        </div>
+    );
 
     return (
         <AppLayout title="Gastos">
             <Head title="Gastos" />
-            <div className="space-y-6">
-                <PageHeader
-                    title="Gastos"
-                    description="Registro de gastos con comprobante y categoría por empresa."
-                    action={
-                        !isConsolidatedView ? (
+
+            <div className="emp-form -m-4 min-h-screen px-4 pb-28 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8 lg:pb-8">
+                {/* -------------------------------------------------- cabecera */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h1 className="text-[24px]" style={{ color: 'var(--emp-text)' }}>
+                            Gastos
+                        </h1>
+                        <p className="mt-1 text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                            Todo lo que sale de la caja del taller, con su comprobante. Lo que se registra aquí alimenta
+                            el costo del mes.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <a href={exportUrl} className="emp-btn emp-btn-sm">
+                            <DownloadSimple size={15} />
+                            Exportar
+                        </a>
+                        {!isConsolidatedView ? (
                             <Can permission="expenses.index.create">
-                                <Link href={route('expenses.create')}>
-                                    <Button icon={<PlusIcon className="h-4 w-4" />}>Registrar gasto</Button>
+                                <Link href={route('expenses.create')} className="emp-btn emp-btn-sm emp-btn-primary max-sm:hidden">
+                                    <Plus size={15} />
+                                    Registrar gasto
                                 </Link>
                             </Can>
-                        ) : undefined
-                    }
-                />
-
-                <div className="flex flex-col gap-3 lg:flex-row lg:flex-wrap lg:items-end">
-                    <SearchInput
-                        value={search}
-                        onChange={(v) => {
-                            setSearch(v);
-                            applyFilters({ search: v });
-                        }}
-                        placeholder="Buscar en descripcion..."
-                        className="max-w-md"
-                    />
-                    <select
-                        value={categoryId}
-                        onChange={(e) => {
-                            const v = e.target.value;
-                            setCategoryId(v);
-                            applyFilters({ category_id: v });
-                        }}
-                        className="h-10 max-w-xs rounded-lg border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100"
-                    >
-                        <option value="">Todas las categorias</option>
-                        {categoryOptions.map((o) => (
-                            <option key={o.id} value={o.id}>
-                                {o.name}
-                            </option>
-                        ))}
-                    </select>
-                    <div className="flex flex-wrap items-center gap-2">
-                        <label className="text-xs text-slate-500 dark:text-slate-400">
-                            Desde
-                            <input
-                                type="date"
-                                value={dateFrom}
-                                onChange={(e) => {
-                                    setDateFrom(e.target.value);
-                                    applyFilters({ date_from: e.target.value });
-                                }}
-                                className="ml-1 h-10 rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            />
-                        </label>
-                        <label className="text-xs text-slate-500 dark:text-slate-400">
-                            Hasta
-                            <input
-                                type="date"
-                                value={dateTo}
-                                onChange={(e) => {
-                                    setDateTo(e.target.value);
-                                    applyFilters({ date_to: e.target.value });
-                                }}
-                                className="ml-1 h-10 rounded-lg border border-slate-300 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-800"
-                            />
-                        </label>
+                        ) : null}
                     </div>
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-700 dark:bg-slate-900">
-                    <Table>
-                        <TableHead>
-                            <TableRow>
-                                <TableHeader>Fecha gasto</TableHeader>
-                                <TableHeader>Registrado</TableHeader>
-                                {isConsolidatedView ? <TableHeader>Empresa</TableHeader> : null}
-                                <TableHeader>Categoria</TableHeader>
-                                <TableHeader>Monto</TableHeader>
-                                <TableHeader>Descripcion</TableHeader>
-                                <TableHeader>Comprobante</TableHeader>
-                                <TableHeader className="text-right">Acciones</TableHeader>
-                            </TableRow>
-                        </TableHead>
-                        <TableBody>
-                            {expenses.data.length === 0 ? (
-                                <TableRow>
-                                    <TableCell colSpan={isConsolidatedView ? 8 : 7} className="py-8 text-center text-slate-500">
-                                        No hay gastos con los filtros actuales.
-                                    </TableCell>
-                                </TableRow>
-                            ) : (
-                                expenses.data.map((row) => (
-                                    <TableRow key={row.id}>
-                                        <TableCell className="whitespace-nowrap">{formatDate(row.expense_date)}</TableCell>
-                                        <TableCell className="whitespace-nowrap text-sm text-slate-500">
-                                            {row.created_at ? formatDateTime(row.created_at) : '—'}
-                                        </TableCell>
-                                        {isConsolidatedView ? (
-                                            <TableCell className="text-sm text-slate-600 dark:text-slate-400">
-                                                {row.company?.name ?? '—'}
-                                            </TableCell>
-                                        ) : null}
-                                        <TableCell>{row.category?.name ?? '—'}</TableCell>
-                                        <TableCell className="font-medium">{formatCurrency(row.amount)}</TableCell>
-                                        <TableCell className="max-w-xs truncate">{row.description}</TableCell>
-                                        <TableCell>
-                                            {row.receipt_url ? (
-                                                <div className="flex items-center gap-2">
-                                                    <Badge variant="info">{receiptLabel(row.receipt_mime)}</Badge>
-                                                    <a
-                                                        href={row.receipt_url}
-                                                        target="_blank"
-                                                        rel="noopener noreferrer"
-                                                        className="text-indigo-600 hover:underline dark:text-indigo-400"
-                                                    >
-                                                        <ArrowTopRightOnSquareIcon className="h-4 w-4" />
-                                                    </a>
-                                                </div>
-                                            ) : (
-                                                '—'
-                                            )}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-1">
-                                                <Can permission="expenses.index.view">
-                                                    <Link href={route('expenses.show', row.id)}>
-                                                        <Button variant="ghost" size="sm" icon={<EyeIcon className="h-4 w-4" />} />
-                                                    </Link>
-                                                </Can>
-                                                <Can permission="expenses.index.edit">
-                                                    {!isConsolidatedView ? (
-                                                        <Link href={route('expenses.edit', row.id)}>
-                                                            <Button variant="ghost" size="sm" icon={<PencilSquareIcon className="h-4 w-4" />} />
-                                                        </Link>
-                                                    ) : null}
-                                                </Can>
-                                                <Can permission="expenses.index.delete">
-                                                    {!isConsolidatedView ? (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            icon={<TrashIcon className="h-4 w-4 text-rose-600" />}
-                                                            onClick={() => setConfirmDelete(row)}
-                                                        />
-                                                    ) : null}
-                                                </Can>
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))
-                            )}
-                        </TableBody>
-                    </Table>
-                    <Pagination links={expenses.links} from={expenses.from} to={expenses.to} total={expenses.total} />
+                {/* Hoy los botones desaparecen sin decir por que; ahora se dice. */}
+                {isConsolidatedView ? (
+                    <p className="emp-note mt-4">
+                        Vista consolidada de super administrador: se listan los gastos de todas las empresas y las
+                        acciones de escritura quedan deshabilitadas. Selecciona una empresa en el encabezado para
+                        registrar o editar.
+                    </p>
+                ) : null}
+
+                {/* -------------------------------------------------- metricas */}
+                <div className="mt-5 -mx-4 flex gap-2.5 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">
+                    {metricCards.map((card) => (
+                        <div key={card.label} className="emp-card min-w-[212px] shrink-0 p-[17px] sm:min-w-0">
+                            <p className="emp-kicker">{card.label}</p>
+                            <p
+                                className="mt-1 text-[27px] leading-none tabular-nums"
+                                style={{ color: card.accent ? 'var(--emp-accent-on)' : 'var(--emp-text)' }}
+                            >
+                                {card.value}
+                            </p>
+                            <p className="mt-1 text-[11px]" style={{ color: 'var(--emp-subtle)' }}>
+                                {card.meta}
+                            </p>
+                        </div>
+                    ))}
                 </div>
+
+                {/* --------------------------------------------------- filtros */}
+                <div
+                    className="sticky top-16 z-10 -mx-4 mt-4 bg-[color:var(--emp-bg)] px-4 py-3 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0"
+                    style={{ borderBottom: '1px solid var(--emp-border)' }}
+                >
+                    <ExpenseFilterBar
+                        filters={filters}
+                        onChange={applyFilters}
+                        categories={categoryOptions}
+                        total={total}
+                        filteredTotal={filteredTotal}
+                    />
+                </div>
+
+                {/* ----------------------------------------------- por mes */}
+                {rows.length === 0 ? (
+                    <div className="emp-card mt-4 p-6 text-center text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                        No hay gastos con este filtro.
+                        {hasFilters ? (
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    applyFilters({
+                                        search: '',
+                                        category_id: null,
+                                        period: 'mes',
+                                        date_from: null,
+                                        date_to: null,
+                                    })
+                                }
+                                className="ml-1 underline underline-offset-2"
+                                style={{ color: 'var(--emp-accent-on)' }}
+                            >
+                                Limpiar filtros
+                            </button>
+                        ) : null}
+                    </div>
+                ) : (
+                    <div className="mt-4 flex flex-col gap-[22px]">
+                        {buckets.map((bucket) => (
+                            <ExpenseMonthGroup key={bucket.key} bucket={bucket}>
+                                {/* Escritorio: tabla. */}
+                                <div className="hidden lg:block">
+                                    {tableHeader}
+                                    {bucket.rows.map((expense) => (
+                                        <ExpenseRow
+                                            key={expense.id}
+                                            expense={expense}
+                                            onDelete={setConfirmDelete}
+                                            showCompany={isConsolidatedView}
+                                            readOnly={isConsolidatedView}
+                                        />
+                                    ))}
+                                </div>
+
+                                {/* Movil: tarjetas. */}
+                                <div className="flex flex-col gap-2 lg:hidden">
+                                    {bucket.rows.map((expense) => (
+                                        <ExpenseCard
+                                            key={expense.id}
+                                            expense={expense}
+                                            onDelete={setConfirmDelete}
+                                            showCompany={isConsolidatedView}
+                                            readOnly={isConsolidatedView}
+                                        />
+                                    ))}
+                                </div>
+                            </ExpenseMonthGroup>
+                        ))}
+                    </div>
+                )}
+
+                {/* ----------------------------------------------- paginacion */}
+                {rows.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-[12px]" style={{ color: 'var(--emp-subtle)' }}>
+                            Mostrando {formatNumber(expenses.from ?? 0)}–{formatNumber(expenses.to ?? 0)} de{' '}
+                            {formatNumber(total)}
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                            {expenses.links.map((link, index) => {
+                                const isPrev = index === 0;
+                                const isNext = index === expenses.links.length - 1;
+
+                                return (
+                                    <Link
+                                        key={index}
+                                        href={link.url ?? '#'}
+                                        preserveScroll
+                                        aria-label={isPrev ? 'Página anterior' : isNext ? 'Página siguiente' : undefined}
+                                        aria-current={link.active ? 'page' : undefined}
+                                        className={`flex h-[30px] min-w-[30px] items-center justify-center rounded-lg px-2 text-[12px] ${
+                                            link.active ? 'emp-seg-on' : ''
+                                        } ${!link.url ? 'pointer-events-none opacity-40' : ''}`}
+                                        style={{
+                                            border: '1px solid var(--emp-border)',
+                                            color: link.active ? 'var(--emp-accent-on)' : 'var(--emp-muted)',
+                                        }}
+                                    >
+                                        {isPrev ? <CaretLeft size={13} /> : isNext ? <CaretRight size={13} /> : pageLabel(link.label)}
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : null}
             </div>
+
+            {/* Movil: capturar con la foto o abrir el formulario completo. */}
+            {!isConsolidatedView ? (
+                <Can permission="expenses.index.create">
+                    <div
+                        className="emp-form fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:hidden"
+                        style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
+                    >
+                        <div className="flex gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setCaptureOpen(true)}
+                                disabled={activeCategories.length === 0}
+                                className="emp-btn flex-1"
+                            >
+                                <Camera size={17} />
+                                Capturar
+                            </button>
+                            <Link href={route('expenses.create')} className="emp-btn emp-btn-primary flex-1">
+                                <Plus size={17} />
+                                Registrar
+                            </Link>
+                        </div>
+                    </div>
+
+                    <QuickCaptureSheet
+                        open={captureOpen}
+                        onClose={() => setCaptureOpen(false)}
+                        categories={activeCategories}
+                    />
+                </Can>
+            ) : null}
 
             <ConfirmDialog
                 open={!!confirmDelete}
                 onClose={() => setConfirmDelete(null)}
-                onConfirm={handleDelete}
-                title="Eliminar gasto"
-                message={confirmDelete ? 'El gasto se archivara (eliminacion suave). ¿Continuar?' : ''}
-                confirmText="Eliminar"
+                onConfirm={() => {
+                    if (!confirmDelete) return;
+                    router.delete(route('expenses.destroy', confirmDelete.id), {
+                        preserveScroll: true,
+                        onFinish: () => setConfirmDelete(null),
+                    });
+                }}
+                title="Archivar gasto"
+                message={
+                    confirmDelete
+                        ? `El gasto «${confirmDelete.description}» se archiva (eliminación suave): deja de sumar en los reportes pero queda en la auditoría con su comprobante.`
+                        : ''
+                }
+                confirmText="Archivar"
                 variant="danger"
             />
         </AppLayout>

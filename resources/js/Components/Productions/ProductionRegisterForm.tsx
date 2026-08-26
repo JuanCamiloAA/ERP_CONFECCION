@@ -1,14 +1,10 @@
 import { useForm } from '@inertiajs/react';
+import { CaretDown, CaretUpDown, Image as ImageIcon, Minus, Plus } from '@phosphor-icons/react';
 import { FormEvent, ReactNode, useEffect, useMemo, useState } from 'react';
-import { ChevronUpDownIcon, MinusIcon, PhotoIcon, PlusIcon } from '@heroicons/react/24/outline';
-import { Button } from '@/Components/UI/Button';
-import { Card, CardHeader } from '@/Components/UI/Card';
-import { Input } from '@/Components/UI/Input';
 import { SearchSheet, type SearchSheetItem } from '@/Components/UI/SearchSheet';
-import { Select } from '@/Components/UI/Select';
-import { Textarea } from '@/Components/UI/Textarea';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/utils';
 import type { Employee, ReferenceOperationPivot } from '@/types';
+import '../../../css/module-ui.css';
 
 export interface ReferenceWithOps {
     id: number;
@@ -30,6 +26,7 @@ function readCachedReferenceId(): number | '' {
     }
     const raw = window.localStorage.getItem(LAST_REFERENCE_STORAGE_KEY);
     const parsed = raw ? Number(raw) : NaN;
+
     return Number.isFinite(parsed) && parsed > 0 ? parsed : '';
 }
 
@@ -39,6 +36,7 @@ function readRecentReferenceIds(): number[] {
     }
     try {
         const parsed = JSON.parse(window.localStorage.getItem(RECENT_REFERENCES_STORAGE_KEY) ?? '[]');
+
         return Array.isArray(parsed) ? parsed.filter((id) => Number.isFinite(id)).slice(0, 3) : [];
     } catch {
         return [];
@@ -50,6 +48,7 @@ function pushRecentReferenceId(id: number): number[] {
     if (typeof window !== 'undefined') {
         window.localStorage.setItem(RECENT_REFERENCES_STORAGE_KEY, JSON.stringify(next));
     }
+
     return next;
 }
 
@@ -60,6 +59,8 @@ interface ProductionRegisterFormProps {
     lockedEmployeeId?: number;
     lockedEmployeeName?: string;
     submitButtonText?: string;
+    /** Enlace del boton «Cancelar» de la barra inferior; sin el, no se pinta. */
+    cancelHref?: string;
 }
 
 /** Campo de una linea que abre una hoja de busqueda (referencias / operaciones pueden ser cientos). */
@@ -85,41 +86,44 @@ function PickerField({
     onOpen: () => void;
 }) {
     return (
-        <div className="w-full">
-            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                {label}
-                {required && <span className="ml-0.5 text-rose-500">*</span>}
+        <div className="w-full min-w-0">
+            <label className="emp-label">
+                {label} {required ? <span className="emp-req">*</span> : null}
             </label>
             <button
                 type="button"
                 onClick={onOpen}
                 disabled={disabled}
-                className={[
-                    'flex min-h-14 w-full items-center gap-3 rounded-lg border bg-white px-3 py-2 text-left transition-colors',
-                    'border-slate-300 hover:border-indigo-400 focus-visible:border-indigo-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/20',
-                    'disabled:cursor-not-allowed disabled:bg-slate-50 disabled:opacity-60',
-                    'dark:border-slate-700 dark:bg-slate-800 dark:disabled:bg-slate-900',
-                    error ? 'border-rose-500' : '',
-                ].join(' ')}
+                className={`flex w-full items-center gap-2.5 rounded-lg px-2.5 text-left ${error ? 'emp-field-error' : ''}`}
+                style={{
+                    minHeight: '56px',
+                    border: `1px solid ${error ? 'var(--emp-danger)' : 'var(--emp-border)'}`,
+                    backgroundColor: 'var(--emp-field)',
+                    opacity: disabled ? 0.55 : 1,
+                }}
             >
                 {leading}
                 <span className="min-w-0 flex-1">
                     {primary ? (
                         <>
-                            <span className="block truncate text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+                            <span className="block truncate text-[14px]" style={{ color: 'var(--emp-text)' }}>
                                 {primary}
                             </span>
-                            {secondary && (
-                                <span className="mt-0.5 block truncate text-xs text-slate-500 dark:text-slate-400">{secondary}</span>
-                            )}
+                            {secondary ? (
+                                <span className="mt-0.5 block truncate text-[11px]" style={{ color: 'var(--emp-muted)' }}>
+                                    {secondary}
+                                </span>
+                            ) : null}
                         </>
                     ) : (
-                        <span className="text-[15px] text-slate-400 dark:text-slate-500">{placeholder}</span>
+                        <span className="text-[14px]" style={{ color: 'var(--emp-subtle)' }}>
+                            {placeholder}
+                        </span>
                     )}
                 </span>
-                <ChevronUpDownIcon className="h-5 w-5 shrink-0 text-slate-400" />
+                <CaretUpDown size={16} className="shrink-0" style={{ color: 'var(--emp-subtle)' }} />
             </button>
-            {error && <p className="mt-1.5 text-xs text-rose-500">{error}</p>}
+            {error ? <p className="emp-error">{error}</p> : null}
         </div>
     );
 }
@@ -130,11 +134,13 @@ export function ProductionRegisterForm({
     lockedEmployeeId,
     lockedEmployeeName,
     submitButtonText = 'Guardar registro',
+    cancelHref,
 }: ProductionRegisterFormProps) {
     const isWorkerLocked = Boolean(lockedEmployeeId && lockedEmployeeName);
 
     const initialReferenceId = useMemo(() => {
         const cached = readCachedReferenceId();
+
         return cached !== '' && references.some((r) => r.id === cached) ? cached : '';
     }, [references]);
 
@@ -153,7 +159,10 @@ export function ProductionRegisterForm({
         notes: '',
     });
 
-    const selectedReference = useMemo(() => references.find((r) => r.id === Number(data.reference_id)), [data.reference_id, references]);
+    const selectedReference = useMemo(
+        () => references.find((r) => r.id === Number(data.reference_id)),
+        [data.reference_id, references],
+    );
     const availableOperations = selectedReference?.operations ?? [];
     const selectedOperation = availableOperations.find((o) => o.id === Number(data.operation_id));
 
@@ -173,6 +182,7 @@ export function ProductionRegisterForm({
             return { cap, registeredThisOperation: null, remaining: null };
         }
         const registered = Number(byOp[String(opId)] ?? 0);
+
         return {
             cap,
             registeredThisOperation: registered,
@@ -222,6 +232,7 @@ export function ProductionRegisterForm({
             r.lot_total_quantity != null
                 ? r.operations.filter((o) => Number(byOp[String(o.id)] ?? 0) < Number(r.lot_total_quantity)).length
                 : null;
+
         return {
             id: r.id,
             title: `${r.code} · ${r.name}`,
@@ -233,10 +244,13 @@ export function ProductionRegisterForm({
                 .join(' · '),
             keywords: r.code,
             leading: r.image ? (
-                <img src={r.image} alt="" className="h-11 w-11 rounded-lg border border-slate-200 object-cover dark:border-slate-600" />
+                <img src={r.image} alt="" className="h-11 w-11 rounded-lg object-cover" style={{ border: '1px solid var(--emp-border)' }} />
             ) : (
-                <span className="flex h-11 w-11 items-center justify-center rounded-lg bg-slate-100 text-slate-400 dark:bg-slate-700 dark:text-slate-500">
-                    <PhotoIcon className="h-5 w-5" />
+                <span
+                    className="flex h-11 w-11 items-center justify-center rounded-lg"
+                    style={{ backgroundColor: 'var(--emp-field-alt)', color: 'var(--emp-subtle)' }}
+                >
+                    <ImageIcon size={18} />
                 </span>
             ),
         };
@@ -254,6 +268,7 @@ export function ProductionRegisterForm({
             return true;
         }
         const registered = Number((selectedReference?.productions_quantity_by_operation ?? {})[String(o.id)] ?? 0);
+
         return registered < Number(lot);
     });
 
@@ -266,7 +281,7 @@ export function ProductionRegisterForm({
             id: o.id,
             title: o.name,
             subtitle: pending != null ? `faltan ${pending} · registradas ${registered}` : `registradas ${registered}`,
-            trailing: <span className="text-slate-700 dark:text-slate-300">{formatCurrency(o.pivot.price)}</span>,
+            trailing: <span style={{ color: 'var(--emp-text)' }}>{formatCurrency(o.pivot.price)}</span>,
         };
     });
 
@@ -292,287 +307,317 @@ export function ProductionRegisterForm({
     };
 
     return (
-        <>
-            <form id="production-register-form" onSubmit={submit} className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-                <Card className="lg:col-span-2">
-                    <CardHeader
-                        title="Registrar produccion"
-                        description={
-                            isWorkerLocked
-                                ? 'Al guardar, el registro queda pendiente hasta que un administrador lo confirme para nomina.'
-                                : 'Completa los datos del trabajo realizado.'
-                        }
-                    />
-                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <PickerField
-                            label="Referencia"
-                            required
-                            error={errors.reference_id}
-                            placeholder="Buscar referencia…"
-                            primary={selectedReference ? `${selectedReference.code} · ${selectedReference.name}` : undefined}
-                            secondary={
-                                selectedReference && lotCapInfo.cap != null
-                                    ? `Lote ${lotCapInfo.cap}${lotCapInfo.remaining != null ? ` · disponibles ${lotCapInfo.remaining}` : ''}`
-                                    : undefined
-                            }
-                            leading={
-                                selectedReference?.image ? (
-                                    <img
-                                        src={selectedReference.image}
-                                        alt=""
-                                        className="h-10 w-10 shrink-0 rounded-lg border border-slate-200 object-cover dark:border-slate-600"
-                                    />
-                                ) : (
-                                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400">
-                                        <PhotoIcon className="h-5 w-5" />
-                                    </span>
-                                )
-                            }
-                            onOpen={() => setReferenceSheetOpen(true)}
-                        />
-                        <PickerField
-                            label="Operacion"
-                            required
-                            error={errors.operation_id}
-                            disabled={!data.reference_id || allOperationsDone}
-                            placeholder={
-                                !data.reference_id
-                                    ? 'Primero elige referencia'
-                                    : allOperationsDone
-                                      ? 'Todas las operaciones completaron el lote'
-                                      : 'Buscar operacion…'
-                            }
-                            primary={selectedOperation?.name}
-                            secondary={selectedOperation ? `${formatCurrency(selectedOperation.pivot.price)} / und` : undefined}
-                            onOpen={() => setOperationSheetOpen(true)}
-                        />
+        <div className="emp-form">
+            <form id="production-register-form" onSubmit={submit} className="flex w-full max-w-[640px] flex-col gap-3.5">
+                {isWorkerLocked ? (
+                    <p className="emp-note">
+                        Al guardar, el registro queda pendiente hasta que un administrador lo confirme para nómina.
+                    </p>
+                ) : null}
 
-                        {lockedEmployeeId && lockedEmployeeName ? (
-                            <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm sm:col-span-2 dark:border-slate-600 dark:bg-slate-900/40">
-                                <span className="font-medium text-slate-600 dark:text-slate-400">Empleado: </span>
-                                <span className="text-slate-900 dark:text-slate-100">{lockedEmployeeName}</span>
-                            </div>
-                        ) : (
-                            <Select
-                                label="Empleado"
+                {lockedEmployeeId && lockedEmployeeName ? (
+                    <div
+                        className="rounded-lg px-3 py-2.5 text-[13px]"
+                        style={{ border: '1px solid var(--emp-border)', backgroundColor: 'var(--emp-field-alt)' }}
+                    >
+                        <span style={{ color: 'var(--emp-muted)' }}>Empleado: </span>
+                        <span style={{ color: 'var(--emp-text)' }}>{lockedEmployeeName}</span>
+                    </div>
+                ) : (
+                    <div className="min-w-0">
+                        <label className="emp-label" htmlFor="production-employee">
+                            Empleado <span className="emp-req">*</span>
+                        </label>
+                        <div className="relative">
+                            <select
+                                id="production-employee"
                                 value={data.employee_id}
                                 onChange={(e) => setData('employee_id', Number(e.target.value))}
-                                error={errors.employee_id}
-                                options={employees.map((e) => ({
-                                    value: e.id,
-                                    label: `${e.first_name} ${e.last_name} (${e.document_number})`,
-                                }))}
-                                placeholder="Selecciona empleado"
                                 required
-                            />
-                        )}
-                        <Input
-                            label="Fecha"
-                            type="date"
-                            value={data.date}
-                            onChange={(e) => setData('date', e.target.value)}
-                            error={errors.date}
-                            required
-                            max={new Date().toISOString().split('T')[0]}
-                        />
-
-                        {lotCapInfo.cap != null && (
-                            <div
-                                className={`rounded-lg border px-3 py-2 text-sm sm:col-span-2 ${
-                                    lotCapInfo.remaining === 0
-                                        ? 'border-rose-200 bg-rose-50 text-rose-900 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-100'
-                                        : 'border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300'
-                                }`}
+                                className={`emp-field ${errors.employee_id ? 'emp-field-error' : ''}`}
                             >
-                                Tope del lote (por operacion): <strong>{lotCapInfo.cap}</strong> unidades.
-                                {lotCapInfo.registeredThisOperation != null ? (
-                                    <>
-                                        {' '}
-                                        Esta operacion: registradas <strong>{lotCapInfo.registeredThisOperation}</strong> · Disponibles:{' '}
-                                        <strong>{lotCapInfo.remaining}</strong>
-                                        {lotCapInfo.remaining === 0 &&
-                                            ' · No puedes registrar mas produccion para esta operacion en esta referencia.'}
-                                    </>
-                                ) : (
-                                    <> Selecciona una operacion para ver el saldo disponible de esa operacion.</>
-                                )}
-                            </div>
+                                <option value="">Selecciona empleado</option>
+                                {employees.map((e) => (
+                                    <option key={e.id} value={e.id}>
+                                        {e.first_name} {e.last_name} ({e.document_number})
+                                    </option>
+                                ))}
+                            </select>
+                            <CaretDown
+                                size={13}
+                                className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
+                                style={{ color: 'var(--emp-subtle)' }}
+                            />
+                        </div>
+                        {errors.employee_id ? <p className="emp-error">{errors.employee_id}</p> : null}
+                    </div>
+                )}
+
+                <PickerField
+                    label="Referencia"
+                    required
+                    error={errors.reference_id}
+                    placeholder="Buscar referencia…"
+                    primary={selectedReference ? `${selectedReference.code} · ${selectedReference.name}` : undefined}
+                    secondary={
+                        selectedReference && lotCapInfo.cap != null
+                            ? `Lote ${formatNumber(lotCapInfo.cap)}${
+                                  lotCapInfo.remaining != null ? ` · disponibles ${formatNumber(lotCapInfo.remaining)}` : ''
+                              }`
+                            : undefined
+                    }
+                    leading={
+                        selectedReference?.image ? (
+                            <img
+                                src={selectedReference.image}
+                                alt=""
+                                className="h-10 w-10 shrink-0 rounded-lg object-cover"
+                                style={{ border: '1px solid var(--emp-border)' }}
+                            />
+                        ) : (
+                            <span
+                                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                                style={{ backgroundColor: 'var(--emp-accent-fill)', color: 'var(--emp-accent-line)' }}
+                            >
+                                <ImageIcon size={17} />
+                            </span>
+                        )
+                    }
+                    onOpen={() => setReferenceSheetOpen(true)}
+                />
+
+                <PickerField
+                    label="Operación"
+                    required
+                    error={errors.operation_id}
+                    disabled={!data.reference_id || allOperationsDone}
+                    placeholder={
+                        !data.reference_id
+                            ? 'Primero elige referencia'
+                            : allOperationsDone
+                              ? 'Todas las operaciones completaron el lote'
+                              : 'Buscar operación…'
+                    }
+                    primary={selectedOperation?.name}
+                    secondary={selectedOperation ? `${formatCurrency(selectedOperation.pivot.price)} / und` : undefined}
+                    onOpen={() => setOperationSheetOpen(true)}
+                />
+
+                {lotCapInfo.cap != null ? (
+                    <p className="emp-note">
+                        Tope del lote (por operación): <strong>{formatNumber(lotCapInfo.cap)}</strong> unidades.
+                        {lotCapInfo.registeredThisOperation != null ? (
+                            <>
+                                {' '}
+                                Esta operación: registradas <strong>{formatNumber(lotCapInfo.registeredThisOperation)}</strong> ·
+                                disponibles <strong>{formatNumber(lotCapInfo.remaining ?? 0)}</strong>
+                                {lotCapInfo.remaining === 0
+                                    ? ' · no puedes registrar más producción para esta operación en esta referencia.'
+                                    : ''}
+                            </>
+                        ) : (
+                            <> Selecciona una operación para ver el saldo disponible.</>
                         )}
+                    </p>
+                ) : null}
 
-                        {/* Cantidad: stepper de 56px + atajos, pensado para uso en planta con guantes. */}
-                        <div className="sm:col-span-2">
-                            <div className="mb-1.5 flex items-baseline justify-between">
-                                <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
-                                    Cantidad<span className="ml-0.5 text-rose-500">*</span>
-                                </label>
-                                {maxQuantity && <span className="text-xs text-slate-500 dark:text-slate-400">max. {maxQuantity}</span>}
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => bumpQuantity(-1)}
-                                    disabled={lotClosed}
-                                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700/50"
-                                    aria-label="Restar una unidad"
-                                >
-                                    <MinusIcon className="h-5 w-5" />
-                                </button>
-                                <Input
-                                    type="number"
-                                    min={1}
-                                    max={maxQuantity}
-                                    value={data.quantity}
-                                    onChange={(e) => setData('quantity', Number(e.target.value))}
-                                    error={errors.quantity}
-                                    required
-                                    disabled={lotClosed}
-                                    className="h-14 text-center text-2xl font-bold"
-                                    containerClassName="min-w-0 flex-1"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => bumpQuantity(1)}
-                                    disabled={lotClosed}
-                                    className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700/50"
-                                    aria-label="Sumar una unidad"
-                                >
-                                    <PlusIcon className="h-5 w-5" />
-                                </button>
-                            </div>
-                            <div className="mt-2 flex gap-2">
-                                {[10, 50, 100].map((step) => (
-                                    <button
-                                        key={step}
-                                        type="button"
-                                        onClick={() => bumpQuantity(step)}
-                                        disabled={lotClosed}
-                                        className="h-10 flex-1 rounded-full bg-slate-100 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-                                    >
-                                        +{step}
-                                    </button>
-                                ))}
-                                {maxQuantity && (
-                                    <button
-                                        type="button"
-                                        onClick={() => setData('quantity', maxQuantity)}
-                                        disabled={lotClosed}
-                                        className="h-10 flex-1 rounded-full bg-slate-100 text-xs font-semibold text-slate-700 hover:bg-slate-200 disabled:opacity-50 dark:bg-slate-700 dark:text-slate-200 dark:hover:bg-slate-600"
-                                    >
-                                        Todo
-                                    </button>
-                                )}
-                            </div>
-                        </div>
-
-                        <Input
-                            label="Precio unitario"
-                            type="number"
-                            step="0.01"
-                            value={data.unit_price}
-                            onChange={(e) => setData('unit_price', e.target.value)}
-                            error={errors.unit_price}
-                            prefix="$"
-                            disabled={isWorkerLocked}
-                            description={
-                                isWorkerLocked
-                                    ? 'Valor fijado segun la operacion seleccionada (no editable).'
-                                    : 'Auto-calculado segun la referencia; puedes ajustarlo si aplica.'
-                            }
-                        />
-
-                        {/* Turno como control segmentado: tres opciones cortas, un toque. */}
-                        <div className="w-full">
-                            <label className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">
-                                Turno<span className="ml-0.5 text-rose-500">*</span>
+                {/* Cantidad y turno en una fila; los pasos rapidos quedan debajo. */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="min-w-0">
+                        <div className="flex items-baseline justify-between">
+                            <label className="emp-label" htmlFor="production-quantity">
+                                Cantidad <span className="emp-req">*</span>
                             </label>
-                            <div className="flex overflow-hidden rounded-lg border border-slate-300 dark:border-slate-600">
-                                {[
-                                    { value: 'manana', label: 'Manana' },
-                                    { value: 'tarde', label: 'Tarde' },
-                                    { value: 'noche', label: 'Noche' },
-                                ].map((opt) => (
-                                    <button
-                                        key={opt.value}
-                                        type="button"
-                                        onClick={() => setData('shift', opt.value)}
-                                        className={`h-11 flex-1 text-[13px] transition-colors ${
-                                            data.shift === opt.value
-                                                ? 'bg-indigo-600 font-semibold text-white'
-                                                : 'bg-white text-slate-700 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700/50'
-                                        }`}
-                                    >
-                                        {opt.label}
-                                    </button>
-                                ))}
-                            </div>
-                            {errors.shift && <p className="mt-1.5 text-xs text-rose-500">{errors.shift}</p>}
+                            {maxQuantity ? (
+                                <span className="text-[11px] tabular-nums" style={{ color: 'var(--emp-subtle)' }}>
+                                    máx. {formatNumber(maxQuantity)}
+                                </span>
+                            ) : null}
                         </div>
+                        <div className="flex items-center gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => bumpQuantity(-1)}
+                                disabled={lotClosed}
+                                aria-label="Restar una unidad"
+                                className="emp-btn shrink-0 px-0"
+                                style={{ width: '44px' }}
+                            >
+                                <Minus size={15} />
+                            </button>
+                            <input
+                                id="production-quantity"
+                                type="number"
+                                min={1}
+                                max={maxQuantity}
+                                value={data.quantity}
+                                onChange={(e) => setData('quantity', Number(e.target.value))}
+                                required
+                                disabled={lotClosed}
+                                className={`emp-field text-center tabular-nums ${errors.quantity ? 'emp-field-error' : ''}`}
+                                style={{ fontSize: '16px' }}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => bumpQuantity(1)}
+                                disabled={lotClosed}
+                                aria-label="Sumar una unidad"
+                                className="emp-btn shrink-0 px-0"
+                                style={{ width: '44px' }}
+                            >
+                                <Plus size={15} />
+                            </button>
+                        </div>
+                        {errors.quantity ? <p className="emp-error">{errors.quantity}</p> : null}
 
-                        <Textarea
-                            label="Observaciones"
-                            value={data.notes}
-                            onChange={(e) => setData('notes', e.target.value)}
-                            error={errors.notes}
-                            className="sm:col-span-2"
-                            rows={3}
-                        />
+                        <div className="mt-1.5 flex gap-1.5">
+                            {[10, 50, 100].map((step) => (
+                                <button
+                                    key={step}
+                                    type="button"
+                                    onClick={() => bumpQuantity(step)}
+                                    disabled={lotClosed}
+                                    className="emp-btn emp-btn-sm flex-1"
+                                >
+                                    +{step}
+                                </button>
+                            ))}
+                            {maxQuantity ? (
+                                <button
+                                    type="button"
+                                    onClick={() => setData('quantity', maxQuantity)}
+                                    disabled={lotClosed}
+                                    className="emp-btn emp-btn-sm flex-1"
+                                >
+                                    Todo
+                                </button>
+                            ) : null}
+                        </div>
                     </div>
-                    <div className="mt-6 hidden justify-end border-t border-slate-200 pt-4 lg:flex dark:border-slate-700">
-                        <Button type="submit" loading={processing} disabled={lotClosed}>
-                            {submitButtonText}
-                        </Button>
-                    </div>
-                </Card>
 
-                <Card className="hidden lg:block">
-                    <CardHeader title="Resumen" />
-                    <dl className="mt-4 space-y-3">
-                        <div>
-                            <dt className="text-xs uppercase text-slate-500">Cantidad</dt>
-                            <dd className="text-lg font-semibold text-slate-900 dark:text-slate-100">{data.quantity}</dd>
+                    <div className="min-w-0">
+                        <span className="emp-label">
+                            Turno <span className="emp-req">*</span>
+                        </span>
+                        <div className="emp-seg" role="radiogroup" aria-label="Turno">
+                            {[
+                                { value: 'manana', label: 'Mañana' },
+                                { value: 'tarde', label: 'Tarde' },
+                                { value: 'noche', label: 'Noche' },
+                            ].map((opt) => (
+                                <button
+                                    key={opt.value}
+                                    type="button"
+                                    role="radio"
+                                    aria-checked={data.shift === opt.value}
+                                    onClick={() => setData('shift', opt.value)}
+                                    className={`emp-seg-item ${data.shift === opt.value ? 'emp-seg-on' : ''}`}
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
                         </div>
-                        <div>
-                            <dt className="text-xs uppercase text-slate-500">Precio unitario</dt>
-                            <dd className="text-lg font-semibold text-slate-900 dark:text-slate-100">{formatCurrency(data.unit_price)}</dd>
+                        {errors.shift ? <p className="emp-error">{errors.shift}</p> : null}
+
+                        <div className="mt-3">
+                            <label className="emp-label" htmlFor="production-date">
+                                Fecha <span className="emp-req">*</span>
+                            </label>
+                            <input
+                                id="production-date"
+                                type="date"
+                                value={data.date}
+                                onChange={(e) => setData('date', e.target.value)}
+                                required
+                                max={new Date().toISOString().split('T')[0]}
+                                className={`emp-field ${errors.date ? 'emp-field-error' : ''}`}
+                            />
+                            {errors.date ? <p className="emp-error">{errors.date}</p> : null}
                         </div>
-                        <div className="rounded-lg bg-indigo-50 p-3 dark:bg-indigo-900/30">
-                            <dt className="text-xs font-semibold uppercase text-indigo-700 dark:text-indigo-300">Valor a pagar</dt>
-                            <dd className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{formatCurrency(total)}</dd>
+                    </div>
+                </div>
+
+                {/* El precio lo fija la operacion; el administrador puede ajustarlo. */}
+                {isWorkerLocked ? null : (
+                    <div className="min-w-0">
+                        <label className="emp-label" htmlFor="production-price">
+                            Precio unitario
+                        </label>
+                        <div className="relative">
+                            <span
+                                className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-[13px]"
+                                style={{ color: 'var(--emp-subtle)' }}
+                            >
+                                $
+                            </span>
+                            <input
+                                id="production-price"
+                                type="number"
+                                step="0.01"
+                                value={data.unit_price}
+                                onChange={(e) => setData('unit_price', e.target.value)}
+                                className={`emp-field pl-6 tabular-nums ${errors.unit_price ? 'emp-field-error' : ''}`}
+                            />
                         </div>
-                    </dl>
-                </Card>
+                        <p className="emp-help">Se calcula con la operación elegida; ajústalo solo si aplica.</p>
+                        {errors.unit_price ? <p className="emp-error">{errors.unit_price}</p> : null}
+                    </div>
+                )}
+
+                <div className="min-w-0">
+                    <label className="emp-label" htmlFor="production-notes">
+                        Observaciones
+                    </label>
+                    <textarea
+                        id="production-notes"
+                        rows={3}
+                        value={data.notes}
+                        onChange={(e) => setData('notes', e.target.value)}
+                        className={`emp-field ${errors.notes ? 'emp-field-error' : ''}`}
+                    />
+                    {errors.notes ? <p className="emp-error">{errors.notes}</p> : null}
+                </div>
             </form>
 
             {/*
-              * Barra de movil: total vivo + accion primaria al alcance del pulgar.
+              * Resumen y accion.
               *
-              * Es `sticky`, no `fixed`, y ahi esta la diferencia: al ocupar su lugar en el
-              * flujo, justo despues del formulario, flota sobre el borde inferior mientras
-              * ese lugar queda por debajo de la pantalla —es decir, mientras se esta
-              * llenando el formulario— y aterriza en el en cuanto se llega a el. De ahi en
-              * adelante sube con el resto del contenido y deja la lista de registros
-              * completamente a la vista.
-              *
-              * Los margenes negativos cancelan el relleno de <main> para que llegue a los
-              * bordes de la pantalla, como cuando era fija.
+              * Es `sticky`, no `fixed`: al ocupar su lugar en el flujo flota sobre el borde
+              * inferior mientras se llena el formulario y aterriza en el en cuanto se llega,
+              * dejando ver lo que sigue en la pagina. Los margenes negativos cancelan el
+              * relleno del contenedor para que llegue a los bordes de la pantalla.
               */}
-            <div className="sticky bottom-0 z-30 -mx-4 border-t border-slate-200 bg-white px-4 pb-5 pt-3.5 sm:-mx-6 sm:px-6 lg:hidden dark:border-slate-700 dark:bg-slate-800">
-                <div className="mb-3 flex items-center justify-between">
-                    <span className="text-[13px] font-semibold uppercase tracking-wide text-indigo-700 dark:text-indigo-300">
-                        Valor a pagar
-                    </span>
-                    <span className="text-2xl font-bold text-indigo-700 dark:text-indigo-300">{formatCurrency(total)}</span>
+            <div
+                className="sticky bottom-0 z-30 -mx-4 mt-3.5 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 sm:-mx-[34px] sm:px-[34px] lg:static lg:mx-0 lg:max-w-[640px] lg:px-0 lg:pb-0"
+                style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
+            >
+                <div className="flex items-end justify-between gap-3">
+                    <div className="min-w-0">
+                        <p className="emp-kicker">Valor del registro</p>
+                        <p className="mt-0.5 text-[12px] tabular-nums" style={{ color: 'var(--emp-muted)' }}>
+                            {formatNumber(data.quantity || 0)} und × {formatCurrency(data.unit_price || 0)}
+                        </p>
+                    </div>
+                    <p className="shrink-0 text-[24px] leading-none tabular-nums" style={{ color: 'var(--emp-text)' }}>
+                        {formatCurrency(total)}
+                    </p>
                 </div>
-                <Button
-                    type="submit"
-                    form="production-register-form"
-                    loading={processing}
-                    disabled={lotClosed}
-                    fullWidth
-                    className="min-h-13 text-base"
-                >
-                    {submitButtonText}
-                </Button>
+
+                <div className="mt-3 flex gap-2">
+                    {cancelHref ? (
+                        <a href={cancelHref} className="emp-btn shrink-0" style={{ width: '96px', color: 'var(--emp-muted)' }}>
+                            Cancelar
+                        </a>
+                    ) : null}
+                    <button
+                        type="submit"
+                        form="production-register-form"
+                        disabled={processing || lotClosed}
+                        className="emp-btn emp-btn-primary flex-1"
+                    >
+                        {processing ? 'Guardando…' : submitButtonText}
+                    </button>
+                </div>
             </div>
 
             <SearchSheet
@@ -603,6 +648,6 @@ export function ProductionRegisterForm({
                 countLabel={(shown, total) => `${shown} de ${total} operaciones con unidades pendientes`}
                 onSelect={(id) => setData('operation_id', Number(id))}
             />
-        </>
+        </div>
     );
 }

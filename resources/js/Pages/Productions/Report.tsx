@@ -5,7 +5,6 @@ import { Button } from '@/Components/UI/Button';
 import { Card, CardHeader } from '@/Components/UI/Card';
 import { Input } from '@/Components/UI/Input';
 import { Modal } from '@/Components/UI/Modal';
-import { PageHeader } from '@/Components/UI/PageHeader';
 import { StatCard } from '@/Components/UI/StatCard';
 import { Tabs } from '@/Components/UI/Tabs';
 import AppLayout from '@/Layouts/AppLayout';
@@ -13,6 +12,7 @@ import { Pagination } from '@/Components/UI/Pagination';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import type { PaginatedResponse } from '@/types';
+import '../../../css/module-ui.css';
 
 interface Summary {
     total_quantity: number;
@@ -254,8 +254,18 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
     return (
         <AppLayout title="Reporte de Produccion">
             <Head title="Reporte de Produccion" />
-            <div className="space-y-6">
-                <PageHeader title="Reporte de Produccion" description="Resumen de produccion en el rango seleccionado." />
+            <div className="emp-form -m-4 min-h-screen space-y-5 p-4 sm:-m-6 sm:p-6 lg:-m-8 lg:p-8">
+                <header
+                    className="-mx-4 mb-1 px-4 py-3 sm:-mx-6 sm:px-6"
+                    style={{ backgroundColor: 'var(--emp-bar)', borderBottom: '1px solid var(--emp-border)' }}
+                >
+                    <h1 className="text-[24px]" style={{ color: 'var(--emp-text)' }}>
+                        Reporte de producción
+                    </h1>
+                    <p className="mt-1 text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                        Resumen de producción en el rango seleccionado.
+                    </p>
+                </header>
 
                 {/* Movil: atajos de rango; escritorio conserva los dos campos de fecha. */}
                 <div className="flex flex-wrap gap-2 lg:hidden">
@@ -273,15 +283,36 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
                     </button>
                 </div>
 
-                <Card className="hidden lg:block">
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <Input label="Desde" type="date" value={start} onChange={(e) => setStart(e.target.value)} />
-                        <Input label="Hasta" type="date" value={end} onChange={(e) => setEnd(e.target.value)} />
-                        <div className="flex items-end">
-                            <Button onClick={() => apply()}>Aplicar</Button>
-                        </div>
+                {/* Escritorio: el mismo rango, con los campos del modulo. */}
+                <div className="hidden items-end gap-2 lg:flex">
+                    <div className="w-44">
+                        <label className="emp-label" htmlFor="report-start">
+                            Desde
+                        </label>
+                        <input
+                            id="report-start"
+                            type="date"
+                            value={start}
+                            onChange={(e) => setStart(e.target.value)}
+                            className="emp-field"
+                        />
                     </div>
-                </Card>
+                    <div className="w-44">
+                        <label className="emp-label" htmlFor="report-end">
+                            Hasta
+                        </label>
+                        <input
+                            id="report-end"
+                            type="date"
+                            value={end}
+                            onChange={(e) => setEnd(e.target.value)}
+                            className="emp-field"
+                        />
+                    </div>
+                    <button type="button" onClick={() => apply()} className="emp-btn emp-btn-sm emp-btn-primary">
+                        Aplicar
+                    </button>
+                </div>
 
                 <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
                     <StatCard title="Valor producido" value={formatCurrency(summary.total_value)} color="indigo" />

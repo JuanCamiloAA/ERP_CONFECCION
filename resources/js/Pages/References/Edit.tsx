@@ -725,6 +725,7 @@ export default function ReferenceEdit({ reference, operations, comparison, produ
                 open={showOperationModal}
                 onClose={() => setShowOperationModal(false)}
                 onCreated={handleOperationCreated}
+                contextLabel={`Referencia ${reference.code} · ${reference.name}`}
             />
 
             <ConfirmDialog

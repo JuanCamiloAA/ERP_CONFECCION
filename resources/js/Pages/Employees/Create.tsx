@@ -8,7 +8,7 @@ import {
     createAccessPasswordData,
     stripAccessPasswordData,
 } from '@/Components/Employees/AccessPasswordFields';
-import { EmpDocumentField, EmpInput, EmpSelect, EmpSwitch, EmpTextarea } from '@/Components/Employees/EmployeeFields';
+import { EmpDocumentField, EmpInput, EmpSelect, EmpSwitch, EmpTextarea } from '@/Components/UI/ModuleFields';
 import {
     EmployeeAsideCard,
     EmployeeFormLayout,

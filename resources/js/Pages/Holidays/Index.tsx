@@ -1,170 +1,270 @@
 import { Head, router } from '@inertiajs/react';
-import { ArrowPathIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
-import { Badge } from '@/Components/UI/Badge';
-import { Button } from '@/Components/UI/Button';
+import { ArrowsClockwise, CaretLeft, CaretRight, Check } from '@phosphor-icons/react';
+import { useMemo, useState } from 'react';
+import { EmployeeAsideCard } from '@/Components/Employees/EmployeeFormLayout';
+import { HolidayDetailCard } from '@/Components/Holidays/HolidayDetailCard';
+import { HolidayList } from '@/Components/Holidays/HolidayList';
+import { HolidayManualForm } from '@/Components/Holidays/HolidayManualForm';
+import { HolidayYearCalendar } from '@/Components/Holidays/HolidayYearCalendar';
 import { Can } from '@/Components/UI/Can';
-import { Card, CardHeader } from '@/Components/UI/Card';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
-import { Input } from '@/Components/UI/Input';
-import { PageHeader } from '@/Components/UI/PageHeader';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import AppLayout from '@/Layouts/AppLayout';
-import { formatDate } from '@/lib/utils';
-
-interface HolidayRow {
-    id: number;
-    country_code: string;
-    date: string;
-    name: string;
-    is_emiliani_shifted: boolean;
-    source: 'calculated' | 'manual';
-}
+import { workdayHolidays, type HolidayRow } from '@/lib/holidays';
+import { formatDateTime, formatNumber } from '@/lib/utils';
+import '../../../css/module-ui.css';
 
 interface Props {
     holidays: HolidayRow[];
     filters: { year: number };
+    lastSyncedAt: string | null;
 }
 
-export default function HolidaysIndex({ holidays, filters }: Props) {
-    const [year, setYear] = useState(String(filters.year));
-    const [newDate, setNewDate] = useState('');
-    const [newName, setNewName] = useState('');
+export default function HolidaysIndex({ holidays, filters, lastSyncedAt }: Props) {
+    const [view, setView] = useState<'calendario' | 'lista'>('calendario');
+    const [selected, setSelected] = useState<string | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<HolidayRow | null>(null);
     const [syncing, setSyncing] = useState(false);
+    const [justSynced, setJustSynced] = useState(false);
 
-    const applyYear = () => {
+    const summary = useMemo(
+        () => ({
+            total: holidays.length,
+            shifted: holidays.filter((holiday) => holiday.is_emiliani_shifted).length,
+            manual: holidays.filter((holiday) => holiday.source === 'manual').length,
+            workdays: workdayHolidays(holidays),
+        }),
+        [holidays],
+    );
+
+    const selectedHoliday = useMemo(
+        () => holidays.find((holiday) => holiday.date === selected) ?? null,
+        [holidays, selected],
+    );
+
+    const goToYear = (year: number) => {
+        setSelected(null);
         router.get(route('holidays.index'), { year }, { preserveState: true, replace: true });
     };
 
     const sync = () => {
         setSyncing(true);
-        router.post(route('holidays.sync'), { year }, {
-            preserveScroll: true,
-            onFinish: () => setSyncing(false),
-        });
-    };
-
-    const addManual = () => {
-        if (!newDate || !newName.trim()) return;
-        router.post(route('holidays.store'), { date: newDate, name: newName.trim() }, {
-            preserveScroll: true,
-            onSuccess: () => {
-                setNewDate('');
-                setNewName('');
+        router.post(
+            route('holidays.sync'),
+            { year: filters.year },
+            {
+                preserveScroll: true,
+                onSuccess: () => {
+                    setJustSynced(true);
+                    window.setTimeout(() => setJustSynced(false), 2500);
+                },
+                onFinish: () => setSyncing(false),
             },
-        });
+        );
     };
 
-    const handleDelete = () => {
-        if (!confirmDelete) return;
-        router.delete(route('holidays.destroy', confirmDelete.id), {
-            preserveScroll: true,
-            onSuccess: () => setConfirmDelete(null),
-        });
-    };
+    const legend = [
+        { label: 'Festivo de ley', style: { backgroundColor: 'var(--emp-accent-fill)', border: '1px solid var(--emp-accent)' } },
+        {
+            label: 'Trasladado al lunes',
+            style: {
+                backgroundColor: 'var(--emp-accent-fill)',
+                border: '1px solid var(--emp-accent)',
+                boxShadow: 'inset 0 -2px 0 var(--emp-accent-line)',
+            },
+        },
+        {
+            label: 'Agregado a mano',
+            style: { backgroundColor: 'var(--emp-accent-fill)', border: '1px dashed var(--emp-accent)' },
+        },
+    ];
 
     return (
         <AppLayout title="Festivos">
             <Head title="Festivos" />
-            <div className="space-y-6">
-                <PageHeader
-                    title="Festivos"
-                    description="Calendario de festivos colombianos (Ley 51/1983 'Ley Emiliani'), usado para el recargo dominical/festivo de la nomina por horas."
-                />
 
-                <Card>
-                    <div className="flex flex-wrap items-end gap-3">
-                        <Input label="Año" type="number" value={year} onChange={(e) => setYear(e.target.value)} containerClassName="w-32" />
-                        <Button variant="outline" onClick={applyYear}>Ver año</Button>
-                        <Can permission="holidays.index.sync">
-                            <Button
-                                variant="secondary"
-                                icon={<ArrowPathIcon className="h-4 w-4" />}
-                                onClick={sync}
-                                loading={syncing}
+            <div className="emp-form -m-4 min-h-screen px-4 pb-10 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8">
+                {/* -------------------------------------------------- cabecera */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h1 className="text-[24px]" style={{ color: 'var(--emp-text)' }}>
+                            Festivos
+                        </h1>
+                        <p className="mt-1 text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                            Calendario colombiano con la Ley Emiliani aplicada. De aquí sale el recargo dominical y
+                            festivo de la nómina por horas.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div
+                            className="flex items-center rounded-[10px]"
+                            style={{ border: '1px solid var(--emp-border)', backgroundColor: 'var(--emp-field-alt)' }}
+                        >
+                            <button
+                                type="button"
+                                onClick={() => goToYear(filters.year - 1)}
+                                aria-label="Año anterior"
+                                className="flex h-[34px] w-[34px] items-center justify-center"
+                                style={{ color: 'var(--emp-muted)' }}
                             >
-                                Sincronizar año
-                            </Button>
-                        </Can>
-                    </div>
-                </Card>
-
-                <Can permission="holidays.index.create">
-                    <Card>
-                        <CardHeader title="Agregar festivo manual" description="Para casos puntuales fuera del patron habitual (ej. una ley que agrega un festivo especifico)." />
-                        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-[200px_1fr_auto]">
-                            <Input label="Fecha" type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
-                            <Input label="Nombre" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Ej. Virgen de Chiquinquira" />
-                            <div className="flex items-end">
-                                <Button icon={<PlusIcon className="h-4 w-4" />} onClick={addManual} disabled={!newDate || !newName.trim()}>
-                                    Agregar
-                                </Button>
-                            </div>
+                                <CaretLeft size={14} />
+                            </button>
+                            <span
+                                className="min-w-[60px] text-center text-[14px] tabular-nums"
+                                style={{ color: 'var(--emp-text)' }}
+                            >
+                                {filters.year}
+                            </span>
+                            <button
+                                type="button"
+                                onClick={() => goToYear(filters.year + 1)}
+                                aria-label="Año siguiente"
+                                className="flex h-[34px] w-[34px] items-center justify-center"
+                                style={{ color: 'var(--emp-muted)' }}
+                            >
+                                <CaretRight size={14} />
+                            </button>
                         </div>
-                    </Card>
-                </Can>
 
-                <Card>
-                    <CardHeader title={`Festivos ${filters.year}`} />
-                    <div className="mt-4">
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableHeader>Fecha</TableHeader>
-                                    <TableHeader>Nombre</TableHeader>
-                                    <TableHeader align="center">Trasladado</TableHeader>
-                                    <TableHeader align="center">Origen</TableHeader>
-                                    <TableHeader></TableHeader>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {holidays.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={5} align="center">
-                                            No hay festivos para este año. Usa &quot;Sincronizar año&quot;.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    holidays.map((h) => (
-                                        <TableRow key={h.id}>
-                                            <TableCell>{formatDate(h.date)}</TableCell>
-                                            <TableCell>{h.name}</TableCell>
-                                            <TableCell align="center">
-                                                {h.is_emiliani_shifted ? <Badge variant="info">Sí</Badge> : <Badge variant="neutral">No</Badge>}
-                                            </TableCell>
-                                            <TableCell align="center">
-                                                <Badge variant={h.source === 'manual' ? 'primary' : 'neutral'}>
-                                                    {h.source === 'manual' ? 'Manual' : 'Calculado'}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell align="right" data-label="">
-                                                {h.source === 'manual' && (
-                                                    <Can permission="holidays.index.delete">
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
-                                                            onClick={() => setConfirmDelete(h)}
-                                                        />
-                                                    </Can>
-                                                )}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))
-                                )}
-                            </TableBody>
-                        </Table>
+                        <div className="emp-seg w-[190px]">
+                            {(['calendario', 'lista'] as const).map((option) => (
+                                <button
+                                    key={option}
+                                    type="button"
+                                    onClick={() => setView(option)}
+                                    className={`emp-seg-item ${view === option ? 'emp-seg-on' : ''}`}
+                                >
+                                    {option === 'calendario' ? 'Calendario' : 'Lista'}
+                                </button>
+                            ))}
+                        </div>
                     </div>
-                </Card>
+                </div>
+
+                {/* --------------------------------------------------- resumen */}
+                <div className="emp-card mt-5 grid gap-3 p-[14px_17px] sm:grid-cols-4">
+                    {[
+                        { label: `Festivos ${filters.year}`, value: formatNumber(summary.total) },
+                        { label: 'Trasladados (Emiliani)', value: formatNumber(summary.shifted) },
+                        { label: 'Manuales', value: formatNumber(summary.manual) },
+                        { label: 'Caen en jornada', value: formatNumber(summary.workdays) },
+                    ].map((cell) => (
+                        <div key={cell.label} className="min-w-0">
+                            <p className="emp-kicker">{cell.label}</p>
+                            <p className="mt-0.5 text-[18px] tabular-nums" style={{ color: 'var(--emp-text)' }}>
+                                {cell.value}
+                            </p>
+                        </div>
+                    ))}
+                </div>
+
+                {/* ------------------------------------------------- contenido */}
+                <div className="mt-5 flex flex-col items-start gap-6 lg:flex-row lg:gap-[26px]">
+                    <div className="w-full min-w-0 flex-1">
+                        {/* Leyenda: el color no es lo unico que distingue los tres casos. */}
+                        <div
+                            className="flex flex-wrap items-center gap-x-4 gap-y-1.5 pb-2.5"
+                            style={{ borderBottom: '1px solid var(--emp-border)' }}
+                        >
+                            {legend.map((item) => (
+                                <span key={item.label} className="flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--emp-subtle)' }}>
+                                    <span
+                                        aria-hidden="true"
+                                        className="rounded-[4px]"
+                                        style={{ width: '20px', height: '16px', ...item.style }}
+                                    />
+                                    {item.label}
+                                </span>
+                            ))}
+                        </div>
+
+                        <div className="mt-4">
+                            {view === 'calendario' ? (
+                                <HolidayYearCalendar
+                                    year={filters.year}
+                                    holidays={holidays}
+                                    selected={selected}
+                                    onSelect={setSelected}
+                                />
+                            ) : (
+                                <HolidayList
+                                    holidays={holidays}
+                                    selected={selected}
+                                    onSelect={setSelected}
+                                    onDelete={setConfirmDelete}
+                                />
+                            )}
+                        </div>
+                    </div>
+
+                    {/* ------------------------------------------------ panel */}
+                    <aside className="flex w-full flex-col gap-4 lg:sticky lg:top-[84px] lg:w-[292px] lg:shrink-0 lg:self-start">
+                        {selectedHoliday ? (
+                            <HolidayDetailCard holiday={selectedHoliday} />
+                        ) : (
+                            <EmployeeAsideCard title="Día seleccionado">
+                                <p className="mt-2 text-[12px]" style={{ color: 'var(--emp-subtle)' }}>
+                                    Toca un festivo en el calendario para ver de dónde viene y qué significa en la
+                                    nómina.
+                                </p>
+                            </EmployeeAsideCard>
+                        )}
+
+                        <Can permission="holidays.index.sync">
+                            <EmployeeAsideCard title="Sincronización">
+                                <p className="mt-2 text-[12px]" style={{ color: 'var(--emp-muted)' }}>
+                                    {lastSyncedAt
+                                        ? `Última sincronización: ${formatDateTime(lastSyncedAt)} · ${formatNumber(
+                                              summary.total,
+                                          )} festivos en ${filters.year}`
+                                        : `Todavía no se ha sincronizado ${filters.year}.`}
+                                </p>
+
+                                <button
+                                    type="button"
+                                    onClick={sync}
+                                    disabled={syncing}
+                                    className="emp-btn emp-btn-primary mt-2.5 w-full"
+                                >
+                                    {justSynced ? <Check size={15} /> : <ArrowsClockwise size={15} />}
+                                    {syncing
+                                        ? 'Sincronizando…'
+                                        : justSynced
+                                          ? `Sincronizado ${filters.year}`
+                                          : `Sincronizar ${filters.year}`}
+                                </button>
+
+                                <p className="emp-help">
+                                    Recalcula los festivos de ley y aplica el traslado al lunes cuando la fecha no cae en
+                                    lunes. Los festivos manuales no se tocan.
+                                </p>
+                            </EmployeeAsideCard>
+                        </Can>
+
+                        <Can permission="holidays.index.create">
+                            <HolidayManualForm year={filters.year} />
+                        </Can>
+                    </aside>
+                </div>
             </div>
 
             <ConfirmDialog
-                open={confirmDelete !== null}
-                title="Eliminar festivo"
-                message={`¿Eliminar "${confirmDelete?.name}"?`}
-                onConfirm={handleDelete}
+                open={!!confirmDelete}
                 onClose={() => setConfirmDelete(null)}
+                onConfirm={() => {
+                    if (!confirmDelete) return;
+                    router.delete(route('holidays.destroy', confirmDelete.id), {
+                        preserveScroll: true,
+                        onFinish: () => setConfirmDelete(null),
+                    });
+                }}
+                title="Eliminar festivo"
+                message={
+                    confirmDelete
+                        ? `Se elimina «${confirmDelete.name}». Solo se pueden eliminar los festivos agregados a mano; los de ley vuelven al sincronizar.`
+                        : ''
+                }
+                confirmText="Eliminar"
                 variant="danger"
             />
         </AppLayout>

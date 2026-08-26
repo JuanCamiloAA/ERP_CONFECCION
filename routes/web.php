@@ -108,12 +108,31 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Operaciones
     Route::middleware('permission:operations.index.view')->group(function () {
+        // Antes del resource: un segmento literal no puede quedar detras de {operation}.
+        Route::post('/operations/bulk-status', [OperationController::class, 'bulkStatus'])
+            ->name('operations.bulk-status')
+            ->middleware('permission:operations.index.edit');
         Route::resource('operations', OperationController::class)->except(['show']);
+        Route::get('/operations/{operation}', [OperationController::class, 'show'])->name('operations.show');
+        Route::patch('/operations/{operation}/price', [OperationController::class, 'updatePrice'])
+            ->name('operations.price')
+            ->middleware('permission:operations.index.edit');
+        Route::post('/operations/{operation}/duplicate', [OperationController::class, 'duplicate'])
+            ->name('operations.duplicate')
+            ->middleware('permission:operations.index.edit');
     });
 
     // Produccion
     Route::middleware('permission:productions.index.view')->group(function () {
         Route::get('/productions/report', [ProductionController::class, 'report'])->name('productions.report');
+        // Antes del resource: un segmento literal no puede quedar detras de {production}.
+        Route::get('/productions/export', [ProductionController::class, 'export'])->name('productions.export');
+        Route::post('/productions/confirm-day', [ProductionController::class, 'confirmDay'])
+            ->name('productions.confirm-day')
+            ->middleware('permission:productions.index.edit');
+        Route::post('/productions/{production}/confirm', [ProductionController::class, 'confirm'])
+            ->name('productions.confirm')
+            ->middleware('permission:productions.index.edit');
         Route::get('/work-day-sessions/today', [WorkDaySessionController::class, 'today'])->name('work-day-sessions.today');
         Route::post('/work-day-sessions/start', [WorkDaySessionController::class, 'start'])->name('work-day-sessions.start');
         Route::post('/work-day-sessions/{workDaySession}/close', [WorkDaySessionController::class, 'close'])->name('work-day-sessions.close');
@@ -143,6 +162,13 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     });
 
     Route::middleware('permission:payroll_concepts.index.view')->group(function () {
+        // Antes del resource: un segmento literal no puede quedar detras de {payroll_concept}.
+        Route::post('/payroll-concepts/reorder', [PayrollConceptController::class, 'reorder'])
+            ->name('payroll-concepts.reorder')
+            ->middleware('permission:payroll_concepts.index.edit');
+        Route::patch('/payroll-concepts/{payroll_concept}/toggle', [PayrollConceptController::class, 'toggleActive'])
+            ->name('payroll-concepts.toggle')
+            ->middleware('permission:payroll_concepts.index.edit');
         Route::resource('payroll-concepts', PayrollConceptController::class)->except(['show']);
     });
 
@@ -157,15 +183,31 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Anticipos
     Route::middleware('permission:advances.index.view')->group(function () {
+        // Antes del resource: un segmento literal no puede quedar detras de {advance}.
+        Route::get('/advances/export', [AdvanceController::class, 'export'])->name('advances.export');
+        Route::get('/advances/{advance}/receipt', [AdvanceController::class, 'receipt'])->name('advances.receipt');
         Route::resource('advances', AdvanceController::class)->except(['show', 'edit', 'update']);
+        Route::get('/advances/{advance}', [AdvanceController::class, 'show'])->name('advances.show');
     });
 
     // Gastos (solo usuarios de empresa; policies bloquean super_admin)
     Route::middleware('permission:expenses.categories.view')->group(function () {
+        // Antes del resource: un segmento literal no puede quedar detras de {expense_category}.
+        Route::post('/expense-categories/reorder', [ExpenseCategoryController::class, 'reorder'])
+            ->name('expense-categories.reorder')
+            ->middleware('permission:expenses.categories.edit');
+        Route::patch('/expense-categories/{expense_category}/toggle', [ExpenseCategoryController::class, 'toggleActive'])
+            ->name('expense-categories.toggle')
+            ->middleware('permission:expenses.categories.edit');
         Route::resource('expense-categories', ExpenseCategoryController::class)->except(['show']);
     });
 
     Route::middleware('permission:expenses.index.view')->group(function () {
+        // Antes del resource: un segmento literal no puede quedar detras de {expense}.
+        Route::get('/expenses/export', [ExpenseController::class, 'export'])->name('expenses.export');
+        Route::post('/expenses/quick', [ExpenseController::class, 'quickStore'])
+            ->name('expenses.quick-store')
+            ->middleware('permission:expenses.index.create');
         Route::resource('expenses', ExpenseController::class);
     });
 

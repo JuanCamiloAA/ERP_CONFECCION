@@ -72,6 +72,43 @@ class HolidayService
         return $count;
     }
 
+    /**
+     * Fecha original de cada festivo trasladado del año, indexada por la fecha en que
+     * quedo: `['2026-01-12' => '2026-01-06']`.
+     *
+     * Se calcula, no se guarda: el algoritmo es determinista, asi que persistir la fecha
+     * original solo añadiria una columna que puede quedar desincronizada. La pantalla
+     * necesita el dato en la respuesta, no en la tabla.
+     *
+     * @return array<string, string>
+     */
+    public function originalDatesFor(int $year): array
+    {
+        $map = [];
+
+        foreach (self::FIXED_SHIFTED as [$month, $day, $name]) {
+            $original = Carbon::create($year, $month, $day);
+            $shifted = $this->shiftToMonday($original);
+
+            if ($shifted['shifted']) {
+                $map[$shifted['date']->toDateString()] = $original->toDateString();
+            }
+        }
+
+        $easter = $this->easterSunday($year);
+
+        foreach ([[39, 'Ascensión del Señor'], [60, 'Corpus Christi'], [68, 'Sagrado Corazón de Jesús']] as [$offsetDays, $name]) {
+            $original = $easter->copy()->addDays($offsetDays);
+            $shifted = $this->shiftToMonday($original);
+
+            if ($shifted['shifted']) {
+                $map[$shifted['date']->toDateString()] = $original->toDateString();
+            }
+        }
+
+        return $map;
+    }
+
     public function isHolidayOrSunday(Carbon $date, string $countryCode = 'CO'): bool
     {
         if ($date->isSunday()) {

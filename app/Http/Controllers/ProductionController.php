@@ -18,22 +18,15 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
+use League\Csv\Bom;
+use League\Csv\Writer;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductionController extends Controller
 {
     public function index(Request $request): Response
     {
         $user = $request->user();
-
-        $filters = [
-            'employee_id' => $request->input('employee_id'),
-            'reference_id' => $request->input('reference_id'),
-            'operation_id' => $request->input('operation_id'),
-            'date_start' => $request->input('date_start'),
-            'date_end' => $request->input('date_end'),
-            'shift' => $request->input('shift'),
-            'status' => $request->input('status'),
-        ];
 
         $query = Production::query()->with([
             'employee:id,first_name,last_name',
@@ -43,34 +36,19 @@ class ProductionController extends Controller
         ]);
 
         $this->applyEmployeeRestriction($query, $user);
-
-        if ($filters['employee_id']) {
-            $query->where('employee_id', $filters['employee_id']);
-        }
-        if ($filters['reference_id']) {
-            $query->where('reference_id', $filters['reference_id']);
-        }
-        if ($filters['operation_id']) {
-            $query->where('operation_id', $filters['operation_id']);
-        }
-        if ($filters['date_start']) {
-            $query->where('date', '>=', $filters['date_start']);
-        }
-        if ($filters['date_end']) {
-            $query->where('date', '<=', $filters['date_end']);
-        }
-        if ($filters['shift']) {
-            $query->where('shift', $filters['shift']);
-        }
-        if ($filters['status'] && in_array((string) $filters['status'], [Production::STATUS_PENDING, Production::STATUS_CONFIRMED, Production::STATUS_PAID], true)) {
-            $query->where('status', $filters['status']);
-        }
+        $filters = $this->applyIndexFilters($query, $request);
 
         /** Mismo filtro que el listado, sin eager/limit/order: evita fromSub + scope (rompe el SQL) y evita clonar tras paginate(). */
         $totalsRow = (clone $query)
             ->withoutEagerLoads()
             ->reorder()
-            ->selectRaw('SUM(quantity) as total_quantity, SUM(total_value) as total_value')
+            // `pending_count` sale de la misma consulta que el resto: contarlo sobre la
+            // pagina daria «3 por confirmar» cuando hay treinta en el filtro.
+            ->selectRaw('
+                SUM(quantity) as total_quantity,
+                SUM(total_value) as total_value,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as pending_count
+            ', [Production::STATUS_PENDING])
             ->first();
 
         $productions = $query->orderByDesc('date')->orderByDesc('id')->paginate(20)->withQueryString();
@@ -120,6 +98,7 @@ class ProductionController extends Controller
             'totals' => [
                 'total_quantity' => (int) ($totalsRow->total_quantity ?? 0),
                 'total_value' => (float) ($totalsRow->total_value ?? 0),
+                'pending_count' => (int) ($totalsRow->pending_count ?? 0),
             ],
             'employees' => $workerMode ? [] : $this->employeesList(),
             'references' => Reference::active()->orderBy('code')->get(['id', 'code', 'name']),
@@ -226,6 +205,123 @@ class ProductionController extends Controller
         return redirect()->route('productions.index')->with('success', 'Produccion eliminada.');
     }
 
+    /**
+     * Confirma un registro pendiente desde el listado.
+     *
+     * Confirmar era hasta ahora un efecto secundario de guardar el formulario completo de
+     * edicion: para aprobar una cifra correcta habia que reenviar empleado, referencia,
+     * operacion, cantidad y fecha, y volver a pasar por todas sus validaciones. Aqui solo
+     * cambia el estado, que es lo unico que se quiso cambiar.
+     */
+    public function confirm(Request $request, Production $production): RedirectResponse
+    {
+        // Registrar y aprobar son cosas distintas: el operario hace lo primero.
+        abort_if($request->user()?->isRestrictedProductionAccount(), 403);
+
+        if ($production->status === Production::STATUS_PAID) {
+            return back()->with('error', 'Este registro ya entro en una nomina pagada; su estado no se puede cambiar.');
+        }
+
+        if ($production->status === Production::STATUS_CONFIRMED) {
+            return back()->with('warning', 'Este registro ya estaba confirmado.');
+        }
+
+        $production->update(['status' => Production::STATUS_CONFIRMED]);
+
+        return back()->with('success', 'Registro confirmado.');
+    }
+
+    /**
+     * Confirma de una vez los pendientes de un dia (y de un empleado, si el listado esta
+     * filtrado por uno).
+     *
+     * Es la accion natural del cierre del dia: se revisa la jornada completa y se aprueba.
+     * Registro por registro son treinta confirmaciones y treinta recargas.
+     */
+    public function confirmDay(Request $request): RedirectResponse
+    {
+        abort_if($request->user()?->isRestrictedProductionAccount(), 403);
+
+        $data = $request->validate([
+            'date' => ['required', 'date'],
+            'employee_id' => ['nullable', 'integer', 'exists:employees,id'],
+        ]);
+
+        $query = Production::query()
+            ->whereDate('date', $data['date'])
+            ->where('status', Production::STATUS_PENDING);
+
+        if (! empty($data['employee_id'])) {
+            $query->where('employee_id', $data['employee_id']);
+        }
+
+        // Actualizacion en bloque: el estado no interviene en el cierre de lote (que suma
+        // cantidades, ver ReferenceLotCompletion), asi que no hay observador que perder.
+        $confirmed = $query->update(['status' => Production::STATUS_CONFIRMED]);
+
+        if ($confirmed === 0) {
+            return back()->with('warning', 'No quedaban registros pendientes en ese dia.');
+        }
+
+        return back()->with('success', $confirmed === 1
+            ? 'Se confirmo 1 registro del dia.'
+            : "Se confirmaron {$confirmed} registros del dia.");
+    }
+
+    /**
+     * Descarga en CSV lo que muestra el listado, con el filtro aplicado.
+     *
+     * Sin limite de pagina: se exporta el filtro completo, que es justo lo que no cabe en
+     * la pantalla. El BOM va porque Excel en Windows abre el CSV en la codificacion del
+     * sistema y sin el rompe cada tilde.
+     */
+    public function export(Request $request): StreamedResponse
+    {
+        $user = $request->user();
+
+        $query = Production::query()->with([
+            'employee:id,first_name,last_name',
+            'reference:id,code,name',
+            'operation:id,name',
+        ]);
+
+        $this->applyEmployeeRestriction($query, $user);
+        $this->applyIndexFilters($query, $request);
+
+        $filename = 'produccion-'.now()->format('Ymd-Hi').'.csv';
+
+        return response()->streamDownload(function () use ($query) {
+            $writer = Writer::createFromStream(fopen('php://output', 'w'));
+            $writer->setOutputBOM(Bom::Utf8);
+            $writer->insertOne([
+                'Fecha', 'Empleado', 'Referencia', 'Nombre referencia', 'Operacion',
+                'Cantidad', 'Precio unitario', 'Valor', 'Turno', 'Estado', 'Observaciones',
+            ]);
+
+            // Por trozos: una exportacion de meses no tiene por que caber en memoria.
+            $query->orderByDesc('date')->orderByDesc('id')->chunk(500, function ($rows) use ($writer) {
+                foreach ($rows as $row) {
+                    $writer->insertOne([
+                        $row->date?->format('Y-m-d'),
+                        trim(($row->employee?->first_name ?? '').' '.($row->employee?->last_name ?? '')),
+                        $row->reference?->code,
+                        $row->reference?->name,
+                        $row->operation?->name,
+                        (int) $row->quantity,
+                        (float) $row->unit_price,
+                        (float) $row->total_value,
+                        $row->shift,
+                        $row->status,
+                        $row->notes,
+                    ]);
+                }
+            });
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
     public function report(Request $request, ProductionReportService $service): Response
     {
         $user = $request->user();
@@ -283,6 +379,51 @@ class ProductionController extends Controller
         if ($user->isRestrictedProductionAccount()) {
             $query->where('employee_id', $user->employee_id);
         }
+    }
+
+    /**
+     * Filtros del listado: los aplica a la consulta y devuelve como quedaron.
+     *
+     * Vive aparte porque los usan dos salidas —la pantalla y la exportacion— y un CSV que
+     * no coincida con lo que se ve en pantalla es peor que no tener CSV.
+     *
+     * @return array{employee_id: mixed, reference_id: mixed, operation_id: mixed, date_start: mixed, date_end: mixed, shift: mixed, status: mixed}
+     */
+    protected function applyIndexFilters($query, Request $request): array
+    {
+        $filters = [
+            'employee_id' => $request->input('employee_id'),
+            'reference_id' => $request->input('reference_id'),
+            'operation_id' => $request->input('operation_id'),
+            'date_start' => $request->input('date_start'),
+            'date_end' => $request->input('date_end'),
+            'shift' => $request->input('shift'),
+            'status' => $request->input('status'),
+        ];
+
+        if ($filters['employee_id']) {
+            $query->where('employee_id', $filters['employee_id']);
+        }
+        if ($filters['reference_id']) {
+            $query->where('reference_id', $filters['reference_id']);
+        }
+        if ($filters['operation_id']) {
+            $query->where('operation_id', $filters['operation_id']);
+        }
+        if ($filters['date_start']) {
+            $query->where('date', '>=', $filters['date_start']);
+        }
+        if ($filters['date_end']) {
+            $query->where('date', '<=', $filters['date_end']);
+        }
+        if ($filters['shift']) {
+            $query->where('shift', $filters['shift']);
+        }
+        if ($filters['status'] && in_array((string) $filters['status'], [Production::STATUS_PENDING, Production::STATUS_CONFIRMED, Production::STATUS_PAID], true)) {
+            $query->where('status', $filters['status']);
+        }
+
+        return $filters;
     }
 
     protected function employeesList()

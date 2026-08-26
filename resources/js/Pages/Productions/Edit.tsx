@@ -1,16 +1,12 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import { ArrowLeftIcon } from '@heroicons/react/24/outline';
+import { ArrowLeft } from '@phosphor-icons/react';
 import { FormEvent, useEffect, useMemo } from 'react';
-import { Button } from '@/Components/UI/Button';
-import { Badge } from '@/Components/UI/Badge';
-import { Card, CardHeader } from '@/Components/UI/Card';
-import { Input } from '@/Components/UI/Input';
-import { PageHeader } from '@/Components/UI/PageHeader';
-import { Select } from '@/Components/UI/Select';
-import { Textarea } from '@/Components/UI/Textarea';
+import { StatusMark } from '@/Components/Productions/ProductionTable';
+import { EmpInput, EmpSelect, EmpTextarea } from '@/Components/UI/ModuleFields';
 import AppLayout from '@/Layouts/AppLayout';
-import { formatCurrency } from '@/lib/utils';
+import { formatCurrency, formatNumber } from '@/lib/utils';
 import type { Employee, Production, ReferenceOperationPivot } from '@/types';
+import '../../../css/module-ui.css';
 
 interface ReferenceWithOps {
     id: number;
@@ -47,7 +43,10 @@ export default function ProductionEdit({ production, employees, references, pric
     // asi que aqui se avisa antes en vez de dejar intentarlo.
     const isPaid = production.status === 'pagado';
 
-    const selectedReference = useMemo(() => references.find((r) => r.id === Number(data.reference_id)), [data.reference_id, references]);
+    const selectedReference = useMemo(
+        () => references.find((r) => r.id === Number(data.reference_id)),
+        [data.reference_id, references],
+    );
     const availableOperations = selectedReference?.operations ?? [];
 
     const lotMaxQuantity = useMemo(() => {
@@ -60,6 +59,7 @@ export default function ProductionEdit({ production, employees, references, pric
         const sameLine =
             Number(data.reference_id) === production.reference_id && Number(data.operation_id) === production.operation_id;
         const usedExcludingThisRow = sameLine ? sumForOp - production.quantity : sumForOp;
+
         return Math.max(0, ref.lot_total_quantity - usedExcludingThisRow);
     }, [
         selectedReference,
@@ -90,108 +90,178 @@ export default function ProductionEdit({ production, employees, references, pric
     };
 
     return (
-        <AppLayout title="Editar produccion">
-            <Head title="Editar produccion" />
-            <form onSubmit={submit} className="space-y-6">
-                <PageHeader
-                    title="Editar produccion"
-                    breadcrumbs={[
-                        { label: 'Produccion', href: route('productions.index') },
-                        { label: 'Editar' },
-                    ]}
-                    action={
-                        <div className="flex gap-2">
-                            <Link href={route('productions.index')}><Button variant="ghost" icon={<ArrowLeftIcon className="h-4 w-4" />}>Cancelar</Button></Link>
-                            <Button type="submit" loading={processing}>Guardar</Button>
-                        </div>
-                    }
-                />
+        <AppLayout title="Editar producción">
+            <Head title="Editar producción" />
 
-                <Card>
-                    <CardHeader title="Datos" />
-                    <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
-                        <Select label="Empleado" value={data.employee_id} onChange={(e) => setData('employee_id', Number(e.target.value))} options={employees.map((e) => ({ value: e.id, label: `${e.first_name} ${e.last_name}` }))} required />
-                        <Input label="Fecha" type="date" value={data.date} onChange={(e) => setData('date', e.target.value)} error={errors.date} required max={new Date().toISOString().split('T')[0]} />
-                        <Select label="Referencia" value={data.reference_id} onChange={(e) => setData('reference_id', Number(e.target.value))} options={references.map((r) => ({ value: r.id, label: `${r.code} - ${r.name}` }))} required />
-                        <Select label="Operacion" value={data.operation_id} onChange={(e) => setData('operation_id', Number(e.target.value))} options={availableOperations.map((o) => ({ value: o.id, label: `${o.name} (${formatCurrency(o.pivot.price)})` }))} required />
-                        {selectedReference?.lot_total_quantity != null && (
-                            <p className="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700 dark:border-slate-600 dark:bg-slate-900/40 dark:text-slate-300">
-                                Tope del lote por operacion: <strong>{selectedReference.lot_total_quantity}</strong> · Puedes dejar en este
-                                movimiento hasta <strong>{lotMaxQuantity ?? '—'}</strong> unidades para la operacion seleccionada.
-                                {lotMaxQuantity === 0 && ' No hay saldo disponible para esta operacion.'}
-                            </p>
-                        )}
-                        <Input
-                            label="Cantidad"
-                            type="number"
-                            min={1}
-                            max={lotMaxQuantity != null ? lotMaxQuantity || undefined : undefined}
-                            value={data.quantity}
-                            onChange={(e) => setData('quantity', Number(e.target.value))}
-                            error={errors.quantity}
-                            required
-                            disabled={lotMaxQuantity != null && lotMaxQuantity < 1}
-                            description={
-                                lotMaxQuantity != null && lotMaxQuantity > 0
-                                    ? `Maximo permitido para esta operacion: ${lotMaxQuantity} unidades (tope del lote).`
-                                    : undefined
-                            }
-                        />
-                        <Input
-                            label="Precio unitario"
-                            type="number"
-                            step="0.01"
-                            value={data.unit_price}
-                            onChange={(e) => setData('unit_price', e.target.value)}
-                            error={errors.unit_price}
-                            prefix="$"
-                            disabled={priceLocked}
-                            description={
-                                priceLocked
-                                    ? 'Valor fijado segun la operacion (no editable).'
-                                    : undefined
-                            }
-                        />
-                        <Select label="Turno" value={data.shift} onChange={(e) => setData('shift', e.target.value as 'manana' | 'tarde' | 'noche')} options={[{ value: 'manana', label: 'Manana' }, { value: 'tarde', label: 'Tarde' }, { value: 'noche', label: 'Noche' }]} required />
-                        {statusEditable && !isPaid ? (
-                            <Select
-                                label="Estado del registro"
-                                value={data.status}
-                                onChange={(e) => setData('status', e.target.value as 'pendiente' | 'confirmado')}
-                                error={errors.status}
-                                options={[
-                                    { value: 'pendiente', label: 'Pendiente de confirmar' },
-                                    { value: 'confirmado', label: 'Confirmado (cuenta para nomina)' },
-                                ]}
-                                required
-                            />
-                        ) : (
-                            <div className="flex flex-col gap-1 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm dark:border-slate-600 dark:bg-slate-900/40">
-                                <span className="font-medium text-slate-600 dark:text-slate-400">Estado</span>
-                                <div>
-                                    {isPaid ? (
-                                        <Badge variant="info">Pagado</Badge>
-                                    ) : (
-                                        <Badge variant={data.status === 'pendiente' ? 'warning' : 'success'}>
-                                            {data.status === 'pendiente' ? 'Pendiente' : 'Confirmado'}
-                                        </Badge>
-                                    )}
-                                    {isPaid && (
-                                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                            Ya se liquido en una nomina cerrada; el registro no se puede modificar.
-                                        </p>
-                                    )}
-                                    {!isPaid && data.status === 'pendiente' && (
-                                        <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">
-                                            Un administrador debe confirmar el registro para que cuente en la nomina.
-                                        </p>
-                                    )}
-                                </div>
+            <form onSubmit={submit} className="emp-form -m-4 min-h-screen sm:-m-6 lg:-m-8">
+                <header
+                    className="sticky top-0 z-30 px-4 py-3 sm:px-[34px] sm:py-4"
+                    style={{ backgroundColor: 'var(--emp-bar)', borderBottom: '1px solid var(--emp-border)' }}
+                >
+                    <div className="flex items-center justify-between gap-3">
+                        <div className="flex min-w-0 items-center gap-3">
+                            <Link href={route('productions.index')} className="emp-btn emp-btn-ghost shrink-0 px-2">
+                                <ArrowLeft size={17} />
+                                <span className="max-sm:sr-only">Volver</span>
+                            </Link>
+                            <div className="min-w-0">
+                                <nav
+                                    className="hidden items-center gap-1.5 text-[12px] sm:flex"
+                                    style={{ color: 'var(--emp-subtle)' }}
+                                >
+                                    <Link href={route('productions.index')} className="hover:underline">
+                                        Producción
+                                    </Link>
+                                    <span>/</span>
+                                    <span>Editar</span>
+                                </nav>
+                                <h1 className="truncate text-[17px] sm:mt-0.5 sm:text-[19px]" style={{ color: 'var(--emp-text)' }}>
+                                    Editar registro
+                                </h1>
                             </div>
-                        )}
-                        <Textarea label="Observaciones" value={data.notes} onChange={(e) => setData('notes', e.target.value)} className="sm:col-span-2" rows={3} />
+                        </div>
+
+                        <button type="submit" disabled={processing} className="emp-btn emp-btn-primary shrink-0">
+                            {processing ? 'Guardando…' : 'Guardar'}
+                        </button>
                     </div>
-                </Card>
+                </header>
+
+                <div className="px-4 pb-8 pt-5 sm:px-[34px] sm:pt-6">
+                    <div className="emp-card w-full max-w-[720px] p-[17px]">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <EmpSelect
+                                label="Empleado"
+                                required
+                                value={data.employee_id}
+                                onChange={(e) => setData('employee_id', Number(e.target.value))}
+                                error={errors.employee_id}
+                                options={employees.map((e) => ({ value: e.id, label: `${e.first_name} ${e.last_name}` }))}
+                            />
+                            <EmpInput
+                                label="Fecha"
+                                type="date"
+                                required
+                                value={data.date}
+                                onChange={(e) => setData('date', e.target.value)}
+                                error={errors.date}
+                                max={new Date().toISOString().split('T')[0]}
+                            />
+                            <EmpSelect
+                                label="Referencia"
+                                required
+                                value={data.reference_id}
+                                onChange={(e) => setData('reference_id', Number(e.target.value))}
+                                error={errors.reference_id}
+                                options={references.map((r) => ({ value: r.id, label: `${r.code} - ${r.name}` }))}
+                            />
+                            <EmpSelect
+                                label="Operación"
+                                required
+                                value={data.operation_id}
+                                onChange={(e) => setData('operation_id', Number(e.target.value))}
+                                error={errors.operation_id}
+                                options={availableOperations.map((o) => ({
+                                    value: o.id,
+                                    label: `${o.name} (${formatCurrency(o.pivot.price)})`,
+                                }))}
+                            />
+
+                            {selectedReference?.lot_total_quantity != null ? (
+                                <p className="emp-note sm:col-span-2">
+                                    Tope del lote por operación:{' '}
+                                    <strong>{formatNumber(selectedReference.lot_total_quantity)}</strong> · en este
+                                    movimiento puedes dejar hasta{' '}
+                                    <strong>{lotMaxQuantity != null ? formatNumber(lotMaxQuantity) : '—'}</strong> unidades.
+                                    {lotMaxQuantity === 0 ? ' No hay saldo disponible para esta operación.' : ''}
+                                </p>
+                            ) : null}
+
+                            <EmpInput
+                                label="Cantidad"
+                                type="number"
+                                min={1}
+                                max={lotMaxQuantity != null ? lotMaxQuantity || undefined : undefined}
+                                required
+                                value={data.quantity}
+                                onChange={(e) => setData('quantity', Number(e.target.value))}
+                                error={errors.quantity}
+                                disabled={lotMaxQuantity != null && lotMaxQuantity < 1}
+                                help={
+                                    lotMaxQuantity != null && lotMaxQuantity > 0
+                                        ? `Máximo para esta operación: ${formatNumber(lotMaxQuantity)} unidades.`
+                                        : undefined
+                                }
+                            />
+                            <EmpInput
+                                label="Precio unitario"
+                                type="number"
+                                step="0.01"
+                                prefix="$"
+                                value={data.unit_price}
+                                onChange={(e) => setData('unit_price', e.target.value)}
+                                error={errors.unit_price}
+                                disabled={priceLocked}
+                                help={priceLocked ? 'Valor fijado según la operación (no editable).' : undefined}
+                            />
+                            <EmpSelect
+                                label="Turno"
+                                required
+                                value={data.shift}
+                                onChange={(e) => setData('shift', e.target.value as 'manana' | 'tarde' | 'noche')}
+                                error={errors.shift}
+                                options={[
+                                    { value: 'manana', label: 'Mañana' },
+                                    { value: 'tarde', label: 'Tarde' },
+                                    { value: 'noche', label: 'Noche' },
+                                ]}
+                            />
+
+                            {statusEditable && !isPaid ? (
+                                <EmpSelect
+                                    label="Estado del registro"
+                                    required
+                                    value={data.status}
+                                    onChange={(e) => setData('status', e.target.value as 'pendiente' | 'confirmado')}
+                                    error={errors.status}
+                                    options={[
+                                        { value: 'pendiente', label: 'Pendiente de confirmar' },
+                                        { value: 'confirmado', label: 'Confirmado (cuenta para nómina)' },
+                                    ]}
+                                />
+                            ) : (
+                                <div className="min-w-0">
+                                    <span className="emp-label">Estado</span>
+                                    <div
+                                        className="rounded-lg px-3 py-2.5"
+                                        style={{ border: '1px solid var(--emp-border)', backgroundColor: 'var(--emp-field-alt)' }}
+                                    >
+                                        <StatusMark status={isPaid ? 'pagado' : data.status} />
+                                        {isPaid ? (
+                                            <p className="emp-help">
+                                                Ya se liquidó en una nómina cerrada; el registro no se puede modificar.
+                                            </p>
+                                        ) : null}
+                                        {!isPaid && data.status === 'pendiente' ? (
+                                            <p className="emp-help">
+                                                Un administrador debe confirmarlo para que cuente en la nómina.
+                                            </p>
+                                        ) : null}
+                                    </div>
+                                </div>
+                            )}
+
+                            <EmpTextarea
+                                label="Observaciones"
+                                rows={3}
+                                value={data.notes}
+                                onChange={(e) => setData('notes', e.target.value)}
+                                error={errors.notes}
+                                containerClassName="sm:col-span-2"
+                            />
+                        </div>
+                    </div>
+                </div>
             </form>
         </AppLayout>
     );

@@ -1,178 +1,146 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { PencilSquareIcon, PlusIcon, ScaleIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { Badge } from '@/Components/UI/Badge';
-import { Button } from '@/Components/UI/Button';
-import { Can } from '@/Components/UI/Can';
-import { Card, CardHeader } from '@/Components/UI/Card';
-import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
-import { PageHeader } from '@/Components/UI/PageHeader';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
-import AppLayout from '@/Layouts/AppLayout';
-import { formatDate } from '@/lib/utils';
+import { Plus, Scales } from '@phosphor-icons/react';
 import { useState } from 'react';
-
-interface LegalParameterRow {
-    id: number;
-    company_id: number | null;
-    effective_from: string;
-    effective_to: string | null;
-    weekly_legal_hours: string | number;
-    monthly_hours_divisor: string | number;
-    night_start_time: string;
-    night_end_time: string;
-    night_surcharge_percent: string | number;
-    overtime_day_percent: string | number;
-    overtime_night_percent: string | number;
-    sunday_holiday_surcharge_percent: string | number;
-    max_overtime_hours_per_day: string | number;
-    max_overtime_hours_per_week: string | number;
-    discount_unexcused_absences: boolean;
-    absence_discount_percent: string | number;
-    legal_reference: string | null;
-}
+import { LegalParameterActiveCard } from '@/Components/PayrollLegalParameters/LegalParameterActiveCard';
+import { LegalParameterTramoCard } from '@/Components/PayrollLegalParameters/LegalParameterTramoCard';
+import { Can } from '@/Components/UI/Can';
+import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import AppLayout from '@/Layouts/AppLayout';
+import type { LegalParameterRow } from '@/lib/legalParameters';
+import { formatDate, formatNumber } from '@/lib/utils';
+import '../../../css/module-ui.css';
 
 interface Props {
     parameters: LegalParameterRow[];
+    active: LegalParameterRow | null;
     isSuperAdmin: boolean;
+    salaryExample: number;
 }
 
-export default function PayrollLegalParametersIndex({ parameters, isSuperAdmin }: Props) {
+export default function PayrollLegalParametersIndex({ parameters, active, isSuperAdmin, salaryExample }: Props) {
     const [confirmDelete, setConfirmDelete] = useState<LegalParameterRow | null>(null);
 
-    const handleDelete = () => {
-        if (!confirmDelete) return;
-        router.delete(route('payroll-legal-parameters.destroy', confirmDelete.id), {
-            onSuccess: () => setConfirmDelete(null),
-        });
-    };
-
     return (
-        <AppLayout title="Parametros Legales de Nomina">
-            <Head title="Parametros Legales de Nomina" />
-            <div className="space-y-6">
-                <PageHeader
-                    title="Parametros Legales de Nomina"
-                    description="Jornada, horarios, recargos, horas extra e inasistencias que rigen la liquidacion de la modalidad 'Por horas (legal)'."
-                    action={
-                        <Can permission="payroll_legal_parameters.index.create">
-                            <Link href={route('payroll-legal-parameters.create')}>
-                                <Button icon={<PlusIcon className="h-4 w-4" />}>Nuevo tramo</Button>
-                            </Link>
-                        </Can>
-                    }
-                />
+        <AppLayout title="Parámetros legales de nómina">
+            <Head title="Parámetros legales de nómina" />
 
-                <div className="flex items-start gap-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800/60 dark:bg-amber-900/20 dark:text-amber-100">
-                    <ScaleIcon className="h-5 w-5 shrink-0" />
+            <div className="emp-form -m-4 min-h-screen px-4 pb-10 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8">
+                {/* -------------------------------------------------- cabecera */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h1 className="text-[24px]" style={{ color: 'var(--emp-text)' }}>
+                            Parámetros legales de nómina
+                        </h1>
+                        <p className="mt-1 text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                            Jornada, franja nocturna, recargos, horas extra e inasistencias que rigen la liquidación de
+                            la modalidad «Por horas (legal)».
+                        </p>
+                    </div>
+
+                    <Can permission="payroll_legal_parameters.index.create">
+                        <Link
+                            href={route('payroll-legal-parameters.create')}
+                            className="emp-btn emp-btn-sm emp-btn-primary"
+                        >
+                            <Plus size={15} />
+                            Nuevo tramo
+                        </Link>
+                    </Can>
+                </div>
+
+                {/* Aviso legal: rojo del sistema, no un ambar fuera de la paleta. */}
+                <div
+                    className="emp-note mt-4 flex items-start gap-2.5"
+                    style={{
+                        borderLeftColor: 'var(--emp-danger)',
+                        backgroundColor: 'color-mix(in srgb, var(--emp-danger) 8%, transparent)',
+                    }}
+                >
+                    <Scales size={18} style={{ color: 'var(--emp-danger)', flexShrink: 0, marginTop: '1px' }} />
                     <p>
-                        Estos valores determinan como se paga la jornada, los recargos, las horas extra y las inasistencias de
-                        todas las nominas. <strong>Verificalos con tu asesor legal/contable antes de aprobar nomina real.</strong>{' '}
-                        El descuento por inasistencia en particular tiene matices legales genuinos (no confundir con el tope del
-                        20% de multas disciplinarias del art. 113 CST) — activalo solo con ese acompañamiento.
+                        Estos valores determinan cómo se paga la jornada, los recargos, las horas extra y las
+                        inasistencias de todas las nóminas.{' '}
+                        <strong style={{ color: 'var(--emp-danger)' }}>
+                            Verifícalos con tu asesor legal o contable antes de aprobar nómina real.
+                        </strong>{' '}
+                        El descuento por inasistencia en particular tiene matices legales genuinos —no confundir con el
+                        tope del 20% de multas disciplinarias del art. 113 del CST—: actívalo solo con ese
+                        acompañamiento.
                     </p>
                 </div>
 
-                <Card>
-                    <CardHeader
-                        title="Tramos de vigencia"
-                        description={
-                            isSuperAdmin
-                                ? 'Se muestran los tramos globales (aplican a toda empresa sin tramo propio) y los de la empresa activa seleccionada.'
-                                : 'Se muestran los tramos globales (de referencia, solo lectura) y los propios de tu empresa.'
-                        }
-                    />
-                    <div className="mt-4">
-                        <Table>
-                            <TableHead>
-                                <TableRow>
-                                    <TableHeader>Vigencia</TableHeader>
-                                    <TableHeader>Alcance</TableHeader>
-                                    <TableHeader align="right">Jornada/Divisor</TableHeader>
-                                    <TableHeader>Nocturno</TableHeader>
-                                    <TableHeader align="right">Recargos (noct./extra d./extra n./dom-fest)</TableHeader>
-                                    <TableHeader align="center">Descuento inasistencia</TableHeader>
-                                    <TableHeader></TableHeader>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {parameters.length === 0 ? (
-                                    <TableRow>
-                                        <TableCell colSpan={7} align="center">
-                                            No hay tramos configurados.
-                                        </TableCell>
-                                    </TableRow>
-                                ) : (
-                                    parameters.map((p) => {
-                                        const isGlobal = p.company_id === null;
-                                        const canEdit = !isGlobal || isSuperAdmin;
-                                        return (
-                                            <TableRow key={p.id}>
-                                                <TableCell>
-                                                    {formatDate(p.effective_from)} —{' '}
-                                                    {p.effective_to ? formatDate(p.effective_to) : 'vigente'}
-                                                    {p.legal_reference && (
-                                                        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">{p.legal_reference}</p>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge variant={isGlobal ? 'neutral' : 'primary'}>
-                                                        {isGlobal ? 'Global (default)' : 'Esta empresa'}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell align="right">
-                                                    {p.weekly_legal_hours}h / {p.monthly_hours_divisor}
-                                                </TableCell>
-                                                <TableCell>
-                                                    {String(p.night_start_time).slice(0, 5)} - {String(p.night_end_time).slice(0, 5)}
-                                                </TableCell>
-                                                <TableCell align="right">
-                                                    {p.night_surcharge_percent}% / {p.overtime_day_percent}% / {p.overtime_night_percent}% /{' '}
-                                                    {p.sunday_holiday_surcharge_percent}%
-                                                </TableCell>
-                                                <TableCell align="center">
-                                                    {p.discount_unexcused_absences ? (
-                                                        <Badge variant="warning">{p.absence_discount_percent}% activo</Badge>
-                                                    ) : (
-                                                        <Badge variant="neutral">Desactivado</Badge>
-                                                    )}
-                                                </TableCell>
-                                                <TableCell align="right" data-label="">
-                                                    {canEdit ? (
-                                                        <div className="flex justify-end gap-1">
-                                                            <Can permission="payroll_legal_parameters.index.edit">
-                                                                <Link href={route('payroll-legal-parameters.edit', p.id)}>
-                                                                    <Button variant="ghost" size="sm" icon={<PencilSquareIcon className="h-4 w-4" />} />
-                                                                </Link>
-                                                            </Can>
-                                                            <Can permission="payroll_legal_parameters.index.delete">
-                                                                <Button
-                                                                    variant="ghost"
-                                                                    size="sm"
-                                                                    icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
-                                                                    onClick={() => setConfirmDelete(p)}
-                                                                />
-                                                            </Can>
-                                                        </div>
-                                                    ) : (
-                                                        <span className="text-xs text-slate-400">Solo lectura</span>
-                                                    )}
-                                                </TableCell>
-                                            </TableRow>
-                                        );
-                                    })
-                                )}
-                            </TableBody>
-                        </Table>
-                    </div>
-                </Card>
+                {/* ---------------------------------------------- vigente hoy */}
+                <div className="mt-5">
+                    {active ? (
+                        <LegalParameterActiveCard
+                            active={active}
+                            salaryExample={salaryExample}
+                            hasCompanyOverride={active.scope === 'company'}
+                        />
+                    ) : (
+                        <div className="emp-card p-6 text-center text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                            Ningún tramo cubre la fecha de hoy: la nómina por horas no tiene parámetros con los que
+                            liquidar. Crea un tramo con vigencia desde hoy.
+                        </div>
+                    )}
+                </div>
+
+                {/* ------------------------------------------------- tramos */}
+                <section className="mt-6">
+                    <header className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 px-0.5 pb-2">
+                        <h2 className="text-[11px] uppercase tracking-[0.09em]" style={{ color: 'var(--emp-subtle)' }}>
+                            Tramos de vigencia
+                        </h2>
+                        <p className="text-[11px]" style={{ color: 'var(--emp-muted)' }}>
+                            · {formatNumber(parameters.length)} {parameters.length === 1 ? 'tramo' : 'tramos'} · los
+                            globales aplican a toda empresa sin tramo propio
+                        </p>
+                    </header>
+
+                    {parameters.length === 0 ? (
+                        <div className="emp-card p-6 text-center text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                            No hay tramos configurados.
+                        </div>
+                    ) : (
+                        <div className="flex flex-col gap-2.5">
+                            {/* Los de la empresa primero: son los que mandan. */}
+                            {[...parameters]
+                                .sort((a, b) => {
+                                    if (a.scope !== b.scope) {
+                                        return a.scope === 'company' ? -1 : 1;
+                                    }
+
+                                    return String(b.effective_from).localeCompare(String(a.effective_from));
+                                })
+                                .map((parameter) => (
+                                    <LegalParameterTramoCard
+                                        key={parameter.id}
+                                        parameter={parameter}
+                                        isSuperAdmin={isSuperAdmin}
+                                        onDelete={setConfirmDelete}
+                                    />
+                                ))}
+                        </div>
+                    )}
+                </section>
             </div>
 
             <ConfirmDialog
-                open={confirmDelete !== null}
-                title="Eliminar tramo"
-                message={`¿Eliminar el tramo desde ${confirmDelete ? formatDate(confirmDelete.effective_from) : ''}? Esta accion no se puede deshacer.`}
-                onConfirm={handleDelete}
+                open={!!confirmDelete}
                 onClose={() => setConfirmDelete(null)}
+                onConfirm={() => {
+                    if (!confirmDelete) return;
+                    router.delete(route('payroll-legal-parameters.destroy', confirmDelete.id), {
+                        onFinish: () => setConfirmDelete(null),
+                    });
+                }}
+                title="Eliminar tramo"
+                message={
+                    confirmDelete
+                        ? `Se elimina el tramo desde el ${formatDate(confirmDelete.effective_from)}. Si había nóminas liquidadas dentro del rango, el servidor lo rechaza; en ese caso cierra su vigencia y crea uno nuevo.`
+                        : ''
+                }
+                confirmText="Eliminar"
                 variant="danger"
             />
         </AppLayout>

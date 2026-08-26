@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import '../../../css/employee-form.css';
+import '../../../css/module-ui.css';
 
 export interface EmployeeSectionRef {
     id: string;

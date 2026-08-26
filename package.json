@@ -7,6 +7,7 @@
         "build:ssr": "vite build && vite build --ssr",
         "dev": "vite",
         "format": "prettier --write resources/",
+        "test:js": "node --test \"resources/js/**/*.test.ts\"",
         "type-check": "tsc --noEmit"
     },
     "devDependencies": {
