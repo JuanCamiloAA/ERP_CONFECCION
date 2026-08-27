@@ -1,122 +1,297 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { CaretLeft, CaretRight, Eye, Plus } from '@phosphor-icons/react';
 import { useState } from 'react';
-import { Badge } from '@/Components/UI/Badge';
-import { Button } from '@/Components/UI/Button';
+import { WidgetCard } from '@/Components/DashboardBuilder/WidgetCard';
+import { WidgetFilterBar, type WidgetFilters } from '@/Components/DashboardBuilder/WidgetFilterBar';
+import { WIDGET_GRID, WidgetRow, type WidgetListRow } from '@/Components/DashboardBuilder/WidgetRow';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
-import { PageHeader } from '@/Components/UI/PageHeader';
-import { Pagination } from '@/Components/UI/Pagination';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import AppLayout from '@/Layouts/AppLayout';
+import { formatNumber } from '@/lib/utils';
 import type { PaginatedResponse } from '@/types';
+import '../../../../css/module-ui.css';
 
-interface WidgetRow {
-    id: number;
-    name: string;
-    title: string;
-    type: string;
-    query_mode: 'builder' | 'sql';
-    is_active: boolean;
-    visibility_count: number;
+interface Metrics {
+    total: number;
+    active: number;
+    inactive: number;
+    assignments: number;
+    companies: number;
+    roles: number;
+    unassigned: number;
 }
 
 interface Props {
-    widgets: PaginatedResponse<WidgetRow>;
+    widgets: PaginatedResponse<WidgetListRow>;
+    filters: WidgetFilters;
+    metrics: Metrics;
+    companies: { id: number; name: string }[];
 }
 
-const typeLabels: Record<string, string> = {
-    kpi: 'KPI',
-    bar: 'Barras',
-    line: 'Lineas',
-    pie: 'Torta',
-    table: 'Tabla',
-};
+/** Etiqueta de pagina de Laravel, sin entidades ni las palabras de navegacion. */
+function pageLabel(label: string): string {
+    return label
+        .replace('&laquo;', '')
+        .replace('&raquo;', '')
+        .replace('Previous', '')
+        .replace('Next', '')
+        .replace('Anterior', '')
+        .replace('Siguiente', '')
+        .trim();
+}
 
-export default function DashboardWidgetsIndex({ widgets }: Props) {
-    const [confirm, setConfirm] = useState<WidgetRow | null>(null);
+const COLUMNS = [
+    { label: 'Widget', right: false },
+    { label: 'Tipo', right: false },
+    { label: 'Consulta', right: false },
+    { label: 'Quién lo ve', right: false },
+    { label: 'Refresco', right: true },
+    { label: 'Estado', right: false },
+    { label: '', right: false },
+];
 
-    const destroy = () => {
-        if (!confirm) return;
-        router.delete(route('super-admin.dashboard-widgets.destroy', confirm.id), { onFinish: () => setConfirm(null) });
+export default function DashboardWidgetsIndex({ widgets, filters, metrics, companies }: Props) {
+    const [confirmDelete, setConfirmDelete] = useState<WidgetListRow | null>(null);
+
+    const rows = widgets.data;
+    const total = widgets.total ?? rows.length;
+
+    const applyFilters = (next: WidgetFilters) => {
+        const params: Record<string, string> = {};
+        if (next.search) params.search = next.search;
+        if (next.state !== 'all') params.state = next.state;
+        if (next.type) params.type = next.type;
+        if (next.assignment && next.assignment !== 'any') params.assignment = next.assignment;
+
+        router.get(route('super-admin.dashboard-widgets.index'), params, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+        });
     };
+
+    const hasFilters = Boolean(
+        filters.search || filters.state !== 'all' || filters.type || filters.assignment !== 'any',
+    );
+
+    const emptyState = (
+        <div className="emp-card p-6 text-center text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+            {hasFilters ? (
+                <>
+                    Ningún widget coincide con este filtro.
+                    <button
+                        type="button"
+                        onClick={() => applyFilters({ search: '', state: 'all', type: null, assignment: 'any' })}
+                        className="ml-1 underline underline-offset-2"
+                        style={{ color: 'var(--emp-accent-on)' }}
+                    >
+                        Limpiar filtros
+                    </button>
+                </>
+            ) : (
+                <>
+                    <p>Aún no hay widgets. Crea el primero.</p>
+                    <Link
+                        href={route('super-admin.dashboard-widgets.create')}
+                        className="emp-btn emp-btn-sm emp-btn-primary mt-3"
+                    >
+                        <Plus size={15} />
+                        Nuevo widget
+                    </Link>
+                </>
+            )}
+        </div>
+    );
 
     return (
         <AppLayout title="Constructor de dashboards">
             <Head title="Constructor de dashboards" />
-            <div className="space-y-6">
-                <PageHeader
-                    title="Constructor de dashboards"
-                    description="Widgets dinamicos que se muestran en el Dashboard de empresas y roles seleccionados."
-                    action={
-                        <Link href={route('super-admin.dashboard-widgets.create')}>
-                            <Button icon={<PlusIcon className="h-4 w-4" />}>Nuevo widget</Button>
+
+            <div className="emp-form -m-4 min-h-screen px-4 pb-28 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8 lg:pb-8">
+                {/* -------------------------------------------------- cabecera */}
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0">
+                        <h1 className="text-[24px]" style={{ color: 'var(--emp-text)' }}>
+                            Constructor de dashboards
+                        </h1>
+                        <p className="mt-1 max-w-[720px] text-[13px]" style={{ color: 'var(--emp-muted)' }}>
+                            Widgets dinámicos que se muestran en el Dashboard de las empresas y roles asignados. Cada
+                            widget es una consulta guiada (o SQL de solo lectura) con su propia apariencia.
+                        </p>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Link href={route('dashboard')} className="emp-btn emp-btn-sm">
+                            <Eye size={15} />
+                            Ver el dashboard
                         </Link>
-                    }
-                />
+                        <Link
+                            href={route('super-admin.dashboard-widgets.create')}
+                            className="emp-btn emp-btn-sm emp-btn-primary max-sm:hidden"
+                        >
+                            <Plus size={15} />
+                            Nuevo widget
+                        </Link>
+                    </div>
+                </div>
 
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableHeader>Widget</TableHeader>
-                            <TableHeader align="center">Tipo</TableHeader>
-                            <TableHeader align="center">Consulta</TableHeader>
-                            <TableHeader align="center">Asignaciones</TableHeader>
-                            <TableHeader align="center">Estado</TableHeader>
-                            <TableHeader align="right">Acciones</TableHeader>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {widgets.data.length === 0 ? (
-                            <tr>
-                                <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500">
-                                    Aun no hay widgets. Crea el primero.
-                                </td>
-                            </tr>
-                        ) : (
-                            widgets.data.map((w) => (
-                                <TableRow key={w.id}>
-                                    <TableCell>
-                                        <div className="font-medium text-slate-900 dark:text-slate-100">{w.title}</div>
-                                        <div className="text-xs text-slate-500">{w.name}</div>
-                                    </TableCell>
-                                    <TableCell align="center">{typeLabels[w.type] ?? w.type}</TableCell>
-                                    <TableCell align="center">
-                                        <Badge variant={w.query_mode === 'sql' ? 'warning' : 'info'}>
-                                            {w.query_mode === 'sql' ? 'SQL avanzado' : 'Guiado'}
-                                        </Badge>
-                                    </TableCell>
-                                    <TableCell align="center">{w.visibility_count}</TableCell>
-                                    <TableCell align="center">
-                                        <Badge variant={w.is_active ? 'success' : 'danger'}>{w.is_active ? 'Activo' : 'Inactivo'}</Badge>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <div className="flex justify-end gap-1">
-                                            <Link href={route('super-admin.dashboard-widgets.edit', w.id)}>
-                                                <Button variant="ghost" size="sm" icon={<PencilSquareIcon className="h-4 w-4" />} />
-                                            </Link>
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
-                                                onClick={() => setConfirm(w)}
-                                            />
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                {/* -------------------------------------------------- metricas */}
+                <div className="mt-5 -mx-4 flex gap-2.5 overflow-x-auto px-4 sm:mx-0 sm:grid sm:grid-cols-3 sm:overflow-visible sm:px-0">
+                    <div className="emp-card min-w-[212px] shrink-0 p-[17px] sm:min-w-0">
+                        <p className="emp-kicker">Widgets activos</p>
+                        <p className="mt-1 text-[27px] leading-none tabular-nums" style={{ color: 'var(--emp-accent-on)' }}>
+                            {formatNumber(metrics.active)}{' '}
+                            <span className="text-[15px]" style={{ color: 'var(--emp-subtle)' }}>
+                                de {formatNumber(metrics.total)}
+                            </span>
+                        </p>
+                        <p className="mt-1 text-[11px]" style={{ color: 'var(--emp-subtle)' }}>
+                            {metrics.inactive === 0
+                                ? 'Todos se pintan en su dashboard'
+                                : `${formatNumber(metrics.inactive)} ${
+                                      metrics.inactive === 1 ? 'inactivo' : 'inactivos'
+                                  } · no se pintan en ningún dashboard`}
+                        </p>
+                    </div>
 
-                <Pagination links={widgets.links} from={widgets.from} to={widgets.to} total={widgets.total} />
+                    <div className="emp-card min-w-[212px] shrink-0 p-[17px] sm:min-w-0">
+                        <p className="emp-kicker">Asignaciones</p>
+                        <p className="mt-1 text-[27px] leading-none tabular-nums" style={{ color: 'var(--emp-text)' }}>
+                            {formatNumber(metrics.assignments)}
+                        </p>
+                        <p className="mt-1 text-[11px]" style={{ color: 'var(--emp-subtle)' }}>
+                            {formatNumber(metrics.companies)} {metrics.companies === 1 ? 'empresa' : 'empresas'} ·{' '}
+                            {formatNumber(metrics.roles)} {metrics.roles === 1 ? 'rol distinto' : 'roles distintos'}
+                        </p>
+                    </div>
+
+                    <div className="emp-card min-w-[212px] shrink-0 p-[17px] sm:min-w-0">
+                        <p className="emp-kicker">Sin asignar</p>
+                        <p
+                            className="mt-1 text-[27px] leading-none tabular-nums"
+                            style={{ color: metrics.unassigned > 0 ? 'var(--emp-danger)' : 'var(--emp-text)' }}
+                        >
+                            {formatNumber(metrics.unassigned)}
+                        </p>
+                        <p className="mt-1 text-[11px]" style={{ color: 'var(--emp-subtle)' }}>
+                            {metrics.unassigned > 0
+                                ? 'Existen y están activos, pero nadie los ve'
+                                : 'Todos los widgets tienen a quién mostrarse'}
+                        </p>
+                    </div>
+                </div>
+
+                {/* --------------------------------------------------- filtros */}
+                <div
+                    className="sticky top-16 z-10 -mx-4 mt-4 bg-[color:var(--emp-bg)] px-4 py-3 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0"
+                    style={{ borderBottom: '1px solid var(--emp-border)' }}
+                >
+                    <WidgetFilterBar
+                        filters={filters}
+                        onChange={applyFilters}
+                        companies={companies}
+                        total={total}
+                        unassigned={metrics.unassigned}
+                    />
+                </div>
+
+                {/* ---------------------------------------------------- listado */}
+                {rows.length === 0 ? (
+                    <div className="mt-4">{emptyState}</div>
+                ) : (
+                    <>
+                        {/* Escritorio: tabla. */}
+                        <div className="mt-4 hidden lg:block">
+                            <div
+                                className="grid items-center gap-2.5 px-3 pb-2"
+                                style={{ gridTemplateColumns: WIDGET_GRID, borderBottom: '1px solid var(--emp-border)' }}
+                            >
+                                {COLUMNS.map((column, index) => (
+                                    <span
+                                        key={column.label || `col-${index}`}
+                                        className={`text-[11px] uppercase tracking-[0.09em] ${column.right ? 'text-right' : ''}`}
+                                        style={{ color: 'var(--emp-subtle)' }}
+                                    >
+                                        {column.label}
+                                    </span>
+                                ))}
+                            </div>
+
+                            {rows.map((widget) => (
+                                <WidgetRow key={widget.id} widget={widget} onDelete={setConfirmDelete} />
+                            ))}
+                        </div>
+
+                        {/* Movil: tarjetas. */}
+                        <div className="mt-4 flex flex-col gap-2 lg:hidden">
+                            {rows.map((widget) => (
+                                <WidgetCard key={widget.id} widget={widget} onDelete={setConfirmDelete} />
+                            ))}
+                        </div>
+                    </>
+                )}
+
+                {/* ----------------------------------------------- paginacion */}
+                {rows.length > 0 ? (
+                    <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                        <p className="text-[12px]" style={{ color: 'var(--emp-subtle)' }}>
+                            Mostrando {formatNumber(widgets.from ?? 0)}–{formatNumber(widgets.to ?? 0)} de{' '}
+                            {formatNumber(total)}
+                        </p>
+                        <div className="flex flex-wrap gap-1">
+                            {widgets.links.map((link, index) => {
+                                const isPrev = index === 0;
+                                const isNext = index === widgets.links.length - 1;
+
+                                return (
+                                    <Link
+                                        key={index}
+                                        href={link.url ?? '#'}
+                                        preserveScroll
+                                        aria-label={isPrev ? 'Página anterior' : isNext ? 'Página siguiente' : undefined}
+                                        aria-current={link.active ? 'page' : undefined}
+                                        className={`flex h-[30px] min-w-[30px] items-center justify-center rounded-lg px-2 text-[12px] ${
+                                            link.active ? 'emp-seg-on' : ''
+                                        } ${!link.url ? 'pointer-events-none opacity-40' : ''}`}
+                                        style={{
+                                            border: '1px solid var(--emp-border)',
+                                            color: link.active ? 'var(--emp-accent-on)' : 'var(--emp-muted)',
+                                        }}
+                                    >
+                                        {isPrev ? <CaretLeft size={13} /> : isNext ? <CaretRight size={13} /> : pageLabel(link.label)}
+                                    </Link>
+                                );
+                            })}
+                        </div>
+                    </div>
+                ) : null}
+            </div>
+
+            {/* Movil: crear siempre a mano. */}
+            <div
+                className="emp-form fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:hidden"
+                style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
+            >
+                <Link href={route('super-admin.dashboard-widgets.create')} className="emp-btn emp-btn-primary w-full">
+                    <Plus size={17} />
+                    Nuevo widget
+                </Link>
             </div>
 
             <ConfirmDialog
-                open={!!confirm}
-                onClose={() => setConfirm(null)}
-                onConfirm={destroy}
+                open={!! confirmDelete}
+                onClose={() => setConfirmDelete(null)}
+                onConfirm={() => {
+                    if (! confirmDelete) return;
+                    router.delete(route('super-admin.dashboard-widgets.destroy', confirmDelete.id), {
+                        onFinish: () => setConfirmDelete(null),
+                    });
+                }}
                 title="Eliminar widget"
-                message="Se eliminaran tambien todas sus asignaciones de visibilidad por empresa y rol."
+                message={
+                    confirmDelete
+                        ? `Se elimina "${confirmDelete.title}" y sus ${confirmDelete.visibility_count} asignacion(es) de visibilidad por empresa y rol.`
+                        : ''
+                }
                 confirmText="Eliminar"
                 variant="danger"
             />

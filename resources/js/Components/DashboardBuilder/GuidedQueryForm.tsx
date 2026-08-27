@@ -1,9 +1,12 @@
-import { PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useMemo } from 'react';
-import { Button } from '@/Components/UI/Button';
-import { Input } from '@/Components/UI/Input';
-import { Select } from '@/Components/UI/Select';
-import type { QueryDefinition, QueryFilter, SessionVariableMeta, TableMeta, WidgetType } from './dashboard-builder-types';
+import { CaretDown, CheckCircle, Plus, Trash, Warning } from '@phosphor-icons/react';
+import { useMemo, type ReactNode } from 'react';
+import type {
+    QueryDefinition,
+    QueryFilter,
+    SessionVariableMeta,
+    TableMeta,
+    WidgetType,
+} from './dashboard-builder-types';
 
 interface GuidedQueryFormProps {
     availableTables: TableMeta[];
@@ -18,8 +21,8 @@ const aggregationOptions = [
     { value: 'sum', label: 'Suma (SUM)' },
     { value: 'count', label: 'Conteo (COUNT)' },
     { value: 'avg', label: 'Promedio (AVG)' },
-    { value: 'min', label: 'Minimo (MIN)' },
-    { value: 'max', label: 'Maximo (MAX)' },
+    { value: 'min', label: 'Mínimo (MIN)' },
+    { value: 'max', label: 'Máximo (MAX)' },
 ];
 
 const operatorOptions = [
@@ -33,13 +36,74 @@ const operatorOptions = [
 ];
 
 const granularityOptions = [
-    { value: 'day', label: 'Por dia' },
+    { value: 'day', label: 'Por día' },
     { value: 'week', label: 'Por semana' },
     { value: 'month', label: 'Por mes' },
 ];
 
-export function GuidedQueryForm({ availableTables, availableSessionVariables, type, value, onChange, errors = {} }: GuidedQueryFormProps) {
-    const selectedTable = useMemo(() => availableTables.find((t) => t.key === value.table), [availableTables, value.table]);
+const FILTER_GRID = 'minmax(0,1fr) 168px 150px minmax(0,1fr) 30px';
+
+/** Desplegable con la flecha del módulo; `emp-field` ya oculta la nativa. */
+function Dropdown({
+    id,
+    label,
+    value,
+    onChange,
+    children,
+    help,
+}: {
+    id: string;
+    label?: string;
+    value: string;
+    onChange: (value: string) => void;
+    children: ReactNode;
+    help?: ReactNode;
+}) {
+    return (
+        <div className="min-w-0">
+            {label ? (
+                <label className="emp-label" htmlFor={id}>
+                    {label}
+                </label>
+            ) : null}
+            <div className="relative">
+                <select
+                    id={id}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    aria-label={label}
+                    className="emp-field"
+                >
+                    {children}
+                </select>
+                <CaretDown
+                    size={13}
+                    className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
+                    style={{ color: 'var(--emp-subtle)' }}
+                />
+            </div>
+            {help}
+        </div>
+    );
+}
+
+/**
+ * Consulta guiada. La lógica es la misma de siempre —tabla, métrica, agrupación, filtros
+ * predefinidos y filtros por columna—; lo que cambia es que ahora se ve de dónde sale el
+ * dato y si la tabla filtra por empresa antes de guardar nada.
+ */
+export function GuidedQueryForm({
+    availableTables,
+    availableSessionVariables,
+    type,
+    value,
+    onChange,
+    errors = {},
+}: GuidedQueryFormProps) {
+    const selectedTable = useMemo(
+        () => availableTables.find((t) => t.key === value.table),
+        [availableTables, value.table],
+    );
     const columns = selectedTable?.columns ?? [];
     const aggregatableColumns = columns.filter((c) => c.aggregatable);
     const groupableColumns = columns.filter((c) => c.groupable);
@@ -59,12 +123,16 @@ export function GuidedQueryForm({ availableTables, availableSessionVariables, ty
     };
 
     const setMetric = (column: string, aggregation: string) => {
-        onChange({ ...value, metric: { column, aggregation: aggregation as 'sum' | 'count' | 'avg' | 'min' | 'max' } });
+        onChange({
+            ...value,
+            metric: { column, aggregation: aggregation as 'sum' | 'count' | 'avg' | 'min' | 'max' },
+        });
     };
 
     const setGroupBy = (column: string) => {
-        if (!column) {
+        if (! column) {
             onChange({ ...value, group_by: null });
+
             return;
         }
         const col = columns.find((c) => c.key === column);
@@ -75,7 +143,7 @@ export function GuidedQueryForm({ availableTables, availableSessionVariables, ty
     };
 
     const setGranularity = (granularity: string) => {
-        if (!value.group_by) return;
+        if (! value.group_by) return;
         onChange({ ...value, group_by: { ...value.group_by, granularity: granularity as 'day' | 'week' | 'month' } });
     };
 
@@ -103,201 +171,355 @@ export function GuidedQueryForm({ availableTables, availableSessionVariables, ty
         onChange({ ...value, filters: filters.filter((_, i) => i !== index) });
     };
 
+    const scopeList = selectedTable?.scopes ?? [];
+
     return (
-        <div className="space-y-4">
-            <Select
-                label="Tabla"
-                value={value.table ?? ''}
-                onChange={(e) => setTable(e.target.value)}
-                options={availableTables.map((t) => ({ value: t.key, label: t.label }))}
-                placeholder="Selecciona una tabla"
-                error={errors.query_definition}
-                required
-            />
+        <div className="flex flex-col gap-4">
+            {/* ------------------------------------------ tabla y metrica */}
+            <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-3">
+                <Dropdown
+                    id="guided-table"
+                    label="Tabla"
+                    value={value.table ?? ''}
+                    onChange={setTable}
+                    help={
+                        selectedTable ? (
+                            <p
+                                className="mt-1 flex items-center gap-1 text-[11px]"
+                                style={{
+                                    color: selectedTable.has_company_scope ? 'var(--emp-ok)' : 'var(--emp-danger)',
+                                }}
+                            >
+                                {selectedTable.has_company_scope ? <CheckCircle size={12} /> : <Warning size={12} />}
+                                {selectedTable.has_company_scope
+                                    ? 'Filtra por empresa automáticamente'
+                                    : 'Esta tabla no tiene company_id'}
+                            </p>
+                        ) : (
+                            <p className="emp-help">De aquí sale el dato del widget.</p>
+                        )
+                    }
+                >
+                    <option value="">Selecciona una tabla</option>
+                    {availableTables.map((table) => (
+                        <option key={table.key} value={table.key}>
+                            {table.label}
+                        </option>
+                    ))}
+                </Dropdown>
 
-            {selectedTable && type !== 'table' && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Select
-                        label="Columna (metrica)"
-                        value={value.metric?.column ?? ''}
-                        onChange={(e) => setMetric(e.target.value, value.metric?.aggregation ?? 'sum')}
-                        options={aggregatableColumns.map((c) => ({ value: c.key, label: c.label }))}
-                        placeholder="Selecciona una columna"
-                        required
-                    />
-                    <Select
-                        label="Agregacion"
-                        value={value.metric?.aggregation ?? 'sum'}
-                        onChange={(e) => setMetric(value.metric?.column ?? '', e.target.value)}
-                        options={aggregationOptions}
-                        required
-                    />
-                </div>
-            )}
+                {selectedTable && type !== 'table' ? (
+                    <>
+                        <Dropdown
+                            id="guided-metric-column"
+                            label="Columna (métrica)"
+                            value={value.metric?.column ?? ''}
+                            onChange={(column) => setMetric(column, value.metric?.aggregation ?? 'sum')}
+                        >
+                            <option value="">Selecciona una columna</option>
+                            {aggregatableColumns.map((column) => (
+                                <option key={column.key} value={column.key}>
+                                    {column.label}
+                                </option>
+                            ))}
+                        </Dropdown>
 
-            {selectedTable && type !== 'table' && type !== 'kpi' && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <Select
+                        <Dropdown
+                            id="guided-aggregation"
+                            label="Agregación"
+                            value={value.metric?.aggregation ?? 'sum'}
+                            onChange={(aggregation) => setMetric(value.metric?.column ?? '', aggregation)}
+                        >
+                            {aggregationOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </Dropdown>
+                    </>
+                ) : null}
+            </div>
+
+            {errors.query_definition ? <p className="emp-error">{errors.query_definition}</p> : null}
+
+            {/* ------------------------------------------------ agrupacion */}
+            {selectedTable && type !== 'table' && type !== 'kpi' ? (
+                <div className="grid grid-cols-1 gap-[14px] sm:grid-cols-2">
+                    <Dropdown
+                        id="guided-group"
                         label="Agrupar por"
                         value={value.group_by?.column ?? ''}
-                        onChange={(e) => setGroupBy(e.target.value)}
-                        options={groupableColumns.map((c) => ({ value: c.key, label: c.label }))}
-                        placeholder="Sin agrupacion"
-                    />
-                    {value.group_by && columns.find((c) => c.key === value.group_by?.column)?.type === 'date' && (
-                        <Select
+                        onChange={setGroupBy}
+                    >
+                        <option value="">Sin agrupación</option>
+                        {groupableColumns.map((column) => (
+                            <option key={column.key} value={column.key}>
+                                {column.label}
+                            </option>
+                        ))}
+                    </Dropdown>
+
+                    {value.group_by && columns.find((c) => c.key === value.group_by?.column)?.type === 'date' ? (
+                        <Dropdown
+                            id="guided-granularity"
                             label="Granularidad"
                             value={value.group_by.granularity ?? 'day'}
-                            onChange={(e) => setGranularity(e.target.value)}
-                            options={granularityOptions}
-                        />
-                    )}
+                            onChange={setGranularity}
+                        >
+                            {granularityOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </Dropdown>
+                    ) : null}
                 </div>
-            )}
+            ) : null}
 
-            {selectedTable && type === 'table' && (
+            {/* --------------------------------------- columnas de la tabla */}
+            {selectedTable && type === 'table' ? (
                 <div>
-                    <p className="mb-1.5 block text-sm font-medium text-slate-700 dark:text-slate-300">Columnas a mostrar</p>
-                    <div className="grid grid-cols-2 gap-2 rounded-lg border border-slate-200 p-3 sm:grid-cols-3 dark:border-slate-700">
-                        {columns.map((c) => (
-                            <label key={c.key} className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
-                                <input
-                                    type="checkbox"
-                                    checked={(value.columns ?? []).includes(c.key)}
-                                    onChange={() => toggleTableColumn(c.key)}
-                                    className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 dark:border-slate-600"
-                                />
-                                {c.label}
-                            </label>
-                        ))}
-                    </div>
-                    {errors.query_definition && <p className="mt-1.5 text-xs text-rose-500">{errors.query_definition}</p>}
-                    <Input
-                        label="Limite de filas"
-                        type="number"
-                        min={1}
-                        max={500}
-                        className="mt-3 max-w-xs"
-                        value={value.limit ?? 50}
-                        onChange={(e) => onChange({ ...value, limit: Number(e.target.value) })}
-                    />
-                </div>
-            )}
-
-            {/* Condiciones de negocio que no se pueden escribir como filtro de columna. */}
-            {selectedTable && (selectedTable.scopes ?? []).length > 0 && (
-                <div>
-                    <p className="mb-1.5 text-sm font-medium text-slate-700 dark:text-slate-300">Filtros predefinidos</p>
-                    <div className="space-y-2">
-                        {(selectedTable.scopes ?? []).map((scope) => (
+                    <span className="emp-label">Columnas a mostrar</span>
+                    <div
+                        className="grid grid-cols-2 gap-2 rounded-[10px] p-3 sm:grid-cols-3"
+                        style={{ border: '1px solid var(--emp-border)' }}
+                    >
+                        {columns.map((column) => (
                             <label
-                                key={scope.key}
-                                className="flex cursor-pointer gap-2.5 rounded-lg border border-slate-200 p-3 dark:border-slate-700"
+                                key={column.key}
+                                className="flex cursor-pointer items-center gap-2 text-[12.5px]"
+                                style={{ color: 'var(--emp-text)' }}
                             >
                                 <input
                                     type="checkbox"
-                                    className="mt-0.5 h-4 w-4 shrink-0 rounded"
-                                    checked={scopes.includes(scope.key)}
-                                    onChange={() => toggleScope(scope.key)}
+                                    checked={(value.columns ?? []).includes(column.key)}
+                                    onChange={() => toggleTableColumn(column.key)}
+                                    className="h-4 w-4 shrink-0 rounded"
+                                    style={{ accentColor: 'var(--emp-accent)' }}
                                 />
-                                <span className="min-w-0">
-                                    <span className="block text-sm text-slate-800 dark:text-slate-200">{scope.label}</span>
-                                    {scope.help ? (
-                                        <span className="mt-0.5 block text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                                            {scope.help}
-                                        </span>
-                                    ) : null}
-                                </span>
+                                <span className="truncate">{column.label}</span>
                             </label>
                         ))}
                     </div>
-                </div>
-            )}
 
-            {selectedTable && (
-                <div>
-                    <div className="mb-1.5 flex items-center justify-between">
-                        <p className="text-sm font-medium text-slate-700 dark:text-slate-300">Filtros</p>
-                        <Button type="button" size="sm" variant="secondary" icon={<PlusIcon className="h-4 w-4" />} onClick={addFilter}>
-                            Agregar filtro
-                        </Button>
+                    <div className="mt-3 max-w-[200px]">
+                        <label className="emp-label" htmlFor="guided-limit">
+                            Límite de filas
+                        </label>
+                        <input
+                            id="guided-limit"
+                            type="number"
+                            min={1}
+                            max={500}
+                            value={value.limit ?? 50}
+                            onChange={(e) => onChange({ ...value, limit: Number(e.target.value) })}
+                            className="emp-field"
+                        />
                     </div>
+                </div>
+            ) : null}
+
+            {/* ------------------------------------- filtros predefinidos */}
+            {selectedTable && scopeList.length > 0 ? (
+                <div>
+                    <span className="emp-label">Filtros predefinidos</span>
+                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        {scopeList.map((scope) => {
+                            const active = scopes.includes(scope.key);
+
+                            return (
+                                <label
+                                    key={scope.key}
+                                    className="flex cursor-pointer gap-2.5 rounded-[10px] p-3"
+                                    style={{
+                                        border: `1px solid ${active ? 'var(--emp-accent)' : 'var(--emp-border)'}`,
+                                        backgroundColor: active ? 'var(--emp-accent-tint)' : 'transparent',
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={active}
+                                        onChange={() => toggleScope(scope.key)}
+                                        className="mt-0.5 h-4 w-4 shrink-0 rounded"
+                                        style={{ accentColor: 'var(--emp-accent)' }}
+                                    />
+                                    <span className="min-w-0">
+                                        <span className="block text-[13px]" style={{ color: 'var(--emp-text)' }}>
+                                            {scope.label}
+                                        </span>
+                                        {scope.help ? (
+                                            <span
+                                                className="mt-0.5 block text-[11px] leading-relaxed"
+                                                style={{ color: 'var(--emp-subtle)' }}
+                                            >
+                                                {scope.help}
+                                            </span>
+                                        ) : null}
+                                    </span>
+                                </label>
+                            );
+                        })}
+                    </div>
+                </div>
+            ) : null}
+
+            {/* ------------------------------------------ filtros por columna */}
+            {selectedTable ? (
+                <div>
+                    <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="text-[12px]" style={{ color: 'var(--emp-muted)' }}>Filtros por columna</span>
+                        <button type="button" onClick={addFilter} className="emp-btn emp-btn-sm">
+                            <Plus size={13} />
+                            Agregar filtro
+                        </button>
+                    </div>
+
                     {filters.length === 0 ? (
-                        <p className="text-xs text-slate-400">Sin filtros (se incluyen todas las filas de la empresa).</p>
+                        <p className="text-[12px]" style={{ color: 'var(--emp-subtle)' }}>
+                            Sin filtros: entran todas las filas de la empresa.
+                        </p>
                     ) : (
-                        <div className="space-y-3">
+                        <div className="flex flex-col gap-2">
                             {filters.map((filter, index) => {
                                 const valueType = filter.value_type ?? 'literal';
+                                const columnType = columns.find((c) => c.key === filter.column)?.type;
+
                                 return (
-                                    <div key={index} className="rounded-lg border border-slate-200 p-3 dark:border-slate-700">
-                                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_150px_auto]">
-                                            <Select
-                                                value={filter.column}
-                                                onChange={(e) => updateFilter(index, { column: e.target.value })}
-                                                options={columns.map((c) => ({ value: c.key, label: c.label }))}
-                                                placeholder="Columna"
-                                            />
-                                            <Select
-                                                value={filter.operator}
-                                                onChange={(e) => updateFilter(index, { operator: e.target.value as QueryFilter['operator'] })}
-                                                options={operatorOptions}
-                                            />
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
-                                                onClick={() => removeFilter(index)}
-                                            />
-                                        </div>
-                                        <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-[auto_1fr]">
-                                            <div className="flex gap-1">
-                                                <Button
+                                    <div
+                                        key={index}
+                                        className="grid grid-cols-1 items-end gap-2 lg:grid-cols-[var(--filter-grid)]"
+                                        style={{ ['--filter-grid' as string]: FILTER_GRID }}
+                                    >
+                                        <Dropdown
+                                            id={`filter-column-${index}`}
+                                            label={index === 0 ? 'Columna' : undefined}
+                                            value={filter.column}
+                                            onChange={(column) => updateFilter(index, { column })}
+                                        >
+                                            <option value="">Columna</option>
+                                            {columns.map((column) => (
+                                                <option key={column.key} value={column.key}>
+                                                    {column.label}
+                                                </option>
+                                            ))}
+                                        </Dropdown>
+
+                                        <Dropdown
+                                            id={`filter-operator-${index}`}
+                                            label={index === 0 ? 'Operador' : undefined}
+                                            value={filter.operator}
+                                            onChange={(operator) =>
+                                                updateFilter(index, { operator: operator as QueryFilter['operator'] })
+                                            }
+                                        >
+                                            {operatorOptions.map((option) => (
+                                                <option key={option.value} value={option.value}>
+                                                    {option.label}
+                                                </option>
+                                            ))}
+                                        </Dropdown>
+
+                                        <div className="min-w-0">
+                                            {index === 0 ? <span className="emp-label">Tipo de valor</span> : null}
+                                            <div className="emp-seg">
+                                                <button
                                                     type="button"
-                                                    size="sm"
-                                                    variant={valueType === 'literal' ? 'primary' : 'secondary'}
                                                     onClick={() => updateFilter(index, { value_type: 'literal', value: '' })}
+                                                    className={`emp-seg-item ${valueType === 'literal' ? 'emp-seg-on' : ''}`}
                                                 >
                                                     Valor fijo
-                                                </Button>
-                                                <Button
+                                                </button>
+                                                <button
                                                     type="button"
-                                                    size="sm"
-                                                    variant={valueType === 'variable' ? 'primary' : 'secondary'}
                                                     onClick={() =>
                                                         updateFilter(index, {
                                                             value_type: 'variable',
                                                             value: availableSessionVariables[0]?.key ?? '',
                                                         })
                                                     }
+                                                    className={`emp-seg-item ${valueType === 'variable' ? 'emp-seg-on' : ''}`}
                                                 >
-                                                    Variable de sesion
-                                                </Button>
+                                                    Variable
+                                                </button>
                                             </div>
-                                            {valueType === 'variable' ? (
-                                                <Select
+                                        </div>
+
+                                        {valueType === 'variable' ? (
+                                            <div className="min-w-0">
+                                                {index === 0 ? (
+                                                    <label className="emp-label" htmlFor={`filter-value-${index}`}>
+                                                        Variable de sesión
+                                                    </label>
+                                                ) : null}
+                                                <div className="relative">
+                                                    <select
+                                                        id={`filter-value-${index}`}
+                                                        value={filter.value}
+                                                        onChange={(e) => updateFilter(index, { value: e.target.value })}
+                                                        aria-label="Variable de sesión del filtro"
+                                                        className="emp-field"
+                                                        style={{
+                                                            borderColor: 'var(--emp-accent)',
+                                                            fontFamily: 'ui-monospace, monospace',
+                                                            fontSize: '12px',
+                                                        }}
+                                                    >
+                                                        <option value="">Selecciona una variable</option>
+                                                        {availableSessionVariables.map((variable) => (
+                                                            <option key={variable.key} value={variable.key}>
+                                                                :{variable.key}
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                    <CaretDown
+                                                        size={13}
+                                                        className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2"
+                                                        style={{ color: 'var(--emp-subtle)' }}
+                                                    />
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <div className="min-w-0">
+                                                {index === 0 ? (
+                                                    <label className="emp-label" htmlFor={`filter-value-${index}`}>
+                                                        Valor
+                                                    </label>
+                                                ) : null}
+                                                <input
+                                                    id={`filter-value-${index}`}
+                                                    type={columnType === 'date' ? 'date' : 'text'}
                                                     value={filter.value}
                                                     onChange={(e) => updateFilter(index, { value: e.target.value })}
-                                                    options={availableSessionVariables.map((v) => ({ value: v.key, label: v.label }))}
-                                                    placeholder="Selecciona una variable"
+                                                    placeholder="Valor"
+                                                    aria-label="Valor del filtro"
+                                                    className="emp-field"
                                                 />
-                                            ) : (
-                                                <Input value={filter.value} onChange={(e) => updateFilter(index, { value: e.target.value })} placeholder="Valor" />
-                                            )}
-                                        </div>
-                                        {valueType === 'variable' && (
-                                            <p className="mt-1.5 text-xs text-slate-500 dark:text-slate-400">
-                                                El valor se resuelve segun quien este viendo el dashboard (ej. cada empleado vera
-                                                solo lo suyo).
-                                            </p>
+                                            </div>
                                         )}
+
+                                        <button
+                                            type="button"
+                                            onClick={() => removeFilter(index)}
+                                            aria-label={`Quitar el filtro ${index + 1}`}
+                                            className="flex h-[38px] w-[30px] items-center justify-center rounded-lg max-lg:h-11 max-lg:w-full"
+                                            style={{ color: 'var(--emp-danger)' }}
+                                        >
+                                            <Trash size={15} />
+                                        </button>
                                     </div>
                                 );
                             })}
                         </div>
                     )}
+
+                    {filters.some((f) => (f.value_type ?? 'literal') === 'variable') ? (
+                        <div className="emp-note mt-2.5">
+                            Con una variable de sesión el valor se resuelve según quien mire el dashboard: cada empleado
+                            verá solo lo suyo, sin duplicar el widget por persona.
+                        </div>
+                    ) : null}
                 </div>
-            )}
+            ) : null}
         </div>
     );
 }

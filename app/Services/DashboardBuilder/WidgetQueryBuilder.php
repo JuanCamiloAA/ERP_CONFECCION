@@ -78,6 +78,37 @@ class WidgetQueryBuilder
      */
     protected function executeGuidedMetric(array $definition, string $table, array $tableConfig, ?int $companyId, string $type, array $sessionVariables): array
     {
+        $built = $this->buildMetricQuery($definition, $table, $tableConfig, $companyId, $type, $sessionVariables);
+
+        if ($built['grouped']) {
+            $rows = $built['query']->get();
+
+            return [
+                'labels' => $rows->pluck('group_label')->map(fn ($v) => (string) $v)->all(),
+                'series' => $rows->pluck('agg_value')->map(fn ($v) => (float) $v)->all(),
+            ];
+        }
+
+        $value = $built['query']->value('agg_value');
+
+        return ['value' => (float) ($value ?? 0)];
+    }
+
+    /**
+     * Arma la consulta de metrica (KPI o serie) sin ejecutarla.
+     *
+     * Existe separada de la ejecucion para que la vista previa del SQL y el SQL que de
+     * verdad corre salgan del MISMO sitio. Con dos implementaciones, el panel «SQL
+     * generado» acabaria mintiendo en cuanto una de las dos cambiara.
+     *
+     * @param  array<string, mixed>  $definition
+     * @param  array<string, mixed>  $tableConfig
+     * @param  array<string, int|string|null>  $sessionVariables
+     * @param  bool  $placeholders  deja `:company_id` y `:variable` sin resolver (solo para mostrar el SQL)
+     * @return array{query: Builder, grouped: bool}
+     */
+    protected function buildMetricQuery(array $definition, string $table, array $tableConfig, ?int $companyId, string $type, array $sessionVariables, bool $placeholders = false): array
+    {
         $metric = $definition['metric'] ?? null;
         if (! is_array($metric) || ! isset($metric['column'], $metric['aggregation'])) {
             throw new WidgetQueryException('Falta la metrica (columna y agregacion) de la consulta.');
@@ -93,9 +124,9 @@ class WidgetQueryBuilder
             throw new WidgetQueryException('Un widget KPI no admite agrupacion (group_by).');
         }
 
-        $query = $this->baseQuery($table, $tableConfig, $companyId);
+        $query = $this->baseQuery($table, $tableConfig, $companyId, $placeholders);
         $this->applyScopes($query, $table, $tableConfig, (array) ($definition['scopes'] ?? []));
-        $this->applyFilters($query, $tableConfig, (array) ($definition['filters'] ?? []), $sessionVariables);
+        $this->applyFilters($query, $tableConfig, (array) ($definition['filters'] ?? []), $sessionVariables, $placeholders);
 
         $metricExpr = sprintf('%s(`%s`) as agg_value', strtoupper($aggregation), $metricColumn);
 
@@ -113,22 +144,18 @@ class WidgetQueryBuilder
                 $groupExpr = "`{$groupColumn}`";
             }
 
-            $rows = $query
+            $query
                 ->selectRaw("{$groupExpr} as group_label, {$metricExpr}")
                 ->groupBy('group_label')
                 ->orderBy('group_label')
-                ->limit($this->maxRows())
-                ->get();
+                ->limit($this->maxRows());
 
-            return [
-                'labels' => $rows->pluck('group_label')->map(fn ($v) => (string) $v)->all(),
-                'series' => $rows->pluck('agg_value')->map(fn ($v) => (float) $v)->all(),
-            ];
+            return ['query' => $query, 'grouped' => true];
         }
 
-        $value = $query->selectRaw($metricExpr)->value('agg_value');
+        $query->selectRaw($metricExpr);
 
-        return ['value' => (float) ($value ?? 0)];
+        return ['query' => $query, 'grouped' => false];
     }
 
     /**
@@ -137,6 +164,25 @@ class WidgetQueryBuilder
      * @param  array<string, int|string|null>  $sessionVariables
      */
     protected function executeGuidedTable(array $definition, string $table, array $tableConfig, ?int $companyId, array $sessionVariables): array
+    {
+        $built = $this->buildTableQuery($definition, $table, $tableConfig, $companyId, $sessionVariables);
+        $rows = $built['query']->get();
+
+        return [
+            'columns' => $built['columns'],
+            'rows' => $rows->map(fn ($row) => (array) $row)->all(),
+        ];
+    }
+
+    /**
+     * Arma la consulta del widget de tabla sin ejecutarla. Ver `buildMetricQuery()`.
+     *
+     * @param  array<string, mixed>  $definition
+     * @param  array<string, mixed>  $tableConfig
+     * @param  array<string, int|string|null>  $sessionVariables
+     * @return array{query: Builder, columns: list<string>}
+     */
+    protected function buildTableQuery(array $definition, string $table, array $tableConfig, ?int $companyId, array $sessionVariables, bool $placeholders = false): array
     {
         $columns = $definition['columns'] ?? [];
         if (! is_array($columns) || $columns === []) {
@@ -147,9 +193,9 @@ class WidgetQueryBuilder
             $this->assertColumnAllowed($tableConfig, $column);
         }
 
-        $query = $this->baseQuery($table, $tableConfig, $companyId);
+        $query = $this->baseQuery($table, $tableConfig, $companyId, $placeholders);
         $this->applyScopes($query, $table, $tableConfig, (array) ($definition['scopes'] ?? []));
-        $this->applyFilters($query, $tableConfig, (array) ($definition['filters'] ?? []), $sessionVariables);
+        $this->applyFilters($query, $tableConfig, (array) ($definition['filters'] ?? []), $sessionVariables, $placeholders);
 
         $orderBy = $definition['order_by'] ?? null;
         if (is_array($orderBy) && isset($orderBy['column'])) {
@@ -161,18 +207,66 @@ class WidgetQueryBuilder
         }
 
         $limit = min((int) ($definition['limit'] ?? $this->maxRows()), $this->maxRows());
-        $rows = $query->select($columns)->limit(max(1, $limit))->get();
+        $query->select($columns)->limit(max(1, $limit));
 
-        return [
-            'columns' => array_values($columns),
-            'rows' => $rows->map(fn ($row) => (array) $row)->all(),
-        ];
+        return ['query' => $query, 'columns' => array_values($columns)];
+    }
+
+    /**
+     * SQL que produce una definicion guiada, con `:company_id` y las variables de sesion sin
+     * resolver. Nunca ejecuta nada: es lo que el editor muestra en «SQL generado» para que
+     * construir la consulta deje de ser a ciegas.
+     *
+     * @param  array<string, mixed>  $definition
+     */
+    public function generatedSql(array $definition, string $type): string
+    {
+        $table = (string) ($definition['table'] ?? '');
+        if (! self::isTableAllowed($table)) {
+            throw new WidgetQueryException("Tabla no permitida: {$table}");
+        }
+
+        $tableConfig = self::tableConfig($table);
+
+        $built = $type === DashboardWidget::TYPE_TABLE
+            ? $this->buildTableQuery($definition, $table, $tableConfig, null, [], true)
+            : $this->buildMetricQuery($definition, $table, $tableConfig, null, $type, [], true);
+
+        return $this->interpolateBindings($built['query']->toSql(), $built['query']->getBindings());
+    }
+
+    /**
+     * Sustituye los `?` del constructor por su valor literal, solo para mostrar. El SQL que
+     * se ejecuta sigue yendo con bindings; esto no toca esa ruta.
+     *
+     * @param  array<int, mixed>  $bindings
+     */
+    protected function interpolateBindings(string $sql, array $bindings): string
+    {
+        foreach ($bindings as $binding) {
+            $position = strpos($sql, '?');
+            if ($position === false) {
+                break;
+            }
+
+            $value = match (true) {
+                $binding === null => 'NULL',
+                is_bool($binding) => $binding ? '1' : '0',
+                is_int($binding), is_float($binding) => (string) $binding,
+                default => "'".str_replace("'", "''", (string) $binding)."'",
+            };
+
+            $sql = substr_replace($sql, $value, $position, 1);
+        }
+
+        return $sql;
     }
 
     /**
      * @param  array<string, mixed>  $tableConfig
+     * @param  bool  $placeholders  emite `:company_id` sin resolver, para la vista del SQL
      */
-    protected function baseQuery(string $table, array $tableConfig, ?int $companyId): Builder
+    protected function baseQuery(string $table, array $tableConfig, ?int $companyId, bool $placeholders = false): Builder
     {
         $query = DB::table($table);
 
@@ -183,6 +277,12 @@ class WidgetQueryBuilder
         }
 
         if ($tableConfig['has_company_scope'] ?? false) {
+            if ($placeholders) {
+                $query->whereRaw('`company_id` = :company_id');
+
+                return $query;
+            }
+
             if ($companyId === null) {
                 throw new WidgetQueryException(
                     'Esta tabla requiere una empresa de contexto; no puede ejecutarse en vista consolidada sin empresa asignada.'
@@ -222,7 +322,7 @@ class WidgetQueryBuilder
         }
     }
 
-    protected function applyFilters(Builder $query, array $tableConfig, array $filters, array $sessionVariables = []): void
+    protected function applyFilters(Builder $query, array $tableConfig, array $filters, array $sessionVariables = [], bool $placeholders = false): void
     {
         foreach ($filters as $filter) {
             if (! is_array($filter) || ! isset($filter['column'], $filter['operator'])) {
@@ -243,6 +343,14 @@ class WidgetQueryBuilder
                 $variableName = (string) ($filter['value'] ?? '');
                 if (! self::isSessionVariableAllowed($variableName)) {
                     throw new WidgetQueryException("Variable de sesion no permitida: {$variableName}");
+                }
+
+                if ($placeholders) {
+                    // El operador ya paso por la lista blanca y el nombre de la variable por
+                    // `isSessionVariableAllowed`; no hay entrada libre en este SQL.
+                    $query->whereRaw("`{$column}` {$operator} :{$variableName}");
+
+                    continue;
                 }
 
                 if (! array_key_exists($variableName, $sessionVariables) || $sessionVariables[$variableName] === null) {

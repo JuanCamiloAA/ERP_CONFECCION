@@ -297,7 +297,11 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::resource('membership-plans', MembershipPlanController::class)->except(['show']);
 
         Route::post('dashboard-widgets/preview', [DashboardWidgetController::class, 'preview'])->name('dashboard-widgets.preview');
-        Route::put('dashboard-widgets/{dashboard_widget}/visibility', [DashboardWidgetController::class, 'updateVisibility'])->name('dashboard-widgets.visibility');
+        // GET y PUT comparten nombre: la pantalla de visibilidad y el guardado de la misma.
+        Route::get('dashboard-widgets/{dashboard_widget}/visibility', [DashboardWidgetController::class, 'visibility'])->name('dashboard-widgets.visibility');
+        Route::put('dashboard-widgets/{dashboard_widget}/visibility', [DashboardWidgetController::class, 'updateVisibility'])->name('dashboard-widgets.visibility.update');
+        Route::patch('dashboard-widgets/{dashboard_widget}/toggle-active', [DashboardWidgetController::class, 'toggleActive'])->name('dashboard-widgets.toggle-active');
+        Route::post('dashboard-widgets/{dashboard_widget}/duplicate', [DashboardWidgetController::class, 'duplicate'])->name('dashboard-widgets.duplicate');
         Route::resource('dashboard-widgets', DashboardWidgetController::class)->except(['show']);
     });
 });
