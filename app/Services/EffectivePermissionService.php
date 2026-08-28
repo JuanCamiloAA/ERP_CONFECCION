@@ -7,6 +7,14 @@ use App\Models\UserPermissionOverride;
 use Illuminate\Support\Collection;
 use Spatie\Permission\Models\Permission;
 
+/**
+ * Que puede hacer exactamente un usuario.
+ *
+ * Desde que el rol es solo una plantilla, la respuesta es directa: lo que tenga asignado en
+ * `model_has_permissions`, ni mas ni menos. Antes habia que reconstruir la cuenta «permisos
+ * del rol - denegaciones + concesiones» y nadie podia mirar una pantalla y decir con
+ * seguridad que veia esa persona.
+ */
 class EffectivePermissionService
 {
     /**
@@ -18,23 +26,10 @@ class EffectivePermissionService
             return Permission::query()->orderBy('name')->pluck('name')->all();
         }
 
-        $base = $user->getAllPermissions()->pluck('name');
-
-        $effects = UserPermissionOverride::query()
-            ->where('user_id', $user->id)
-            ->where('company_id', $user->company_id)
-            ->join('permissions', 'user_permission_overrides.permission_id', '=', 'permissions.id')
-            ->selectRaw('permissions.name as name, user_permission_overrides.effect as effect')
-            ->get();
-
-        $deny = $effects->where('effect', UserPermissionOverride::EFFECT_DENY)->pluck('name');
-        $grant = $effects->where('effect', UserPermissionOverride::EFFECT_GRANT)->pluck('name');
-
-        return $base
-            ->diff($deny)
-            ->merge($grant)
+        return $user->permissions()
+            ->orderBy('name')
+            ->pluck('name')
             ->unique()
-            ->sort()
             ->values()
             ->all();
     }
@@ -49,6 +44,13 @@ class EffectivePermissionService
     }
 
     /**
+     * Excepciones del modelo anterior (rol + grant/deny).
+     *
+     * Se conserva para poder consultar el historico de lo que se toco antes de que el rol
+     * pasara a ser plantilla; ya no interviene en el calculo del permiso efectivo.
+     *
+     * @deprecated Ver `UserPermissionService`.
+     *
      * @return Collection<int, UserPermissionOverride>
      */
     public function listOverridesForUser(User $user): Collection

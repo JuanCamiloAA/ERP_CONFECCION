@@ -57,7 +57,7 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     Route::put('/dashboard/layout', [DashboardLayoutController::class, 'update'])
         ->name('dashboard.layout.update')
-        ->middleware('permission:dashboard.index.view');
+        ->middleware('permission:dashboard.index.customize');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -74,36 +74,71 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Empleados
     Route::middleware('permission:employees.index.view')->group(function () {
-        Route::resource('employees', EmployeeController::class);
-        Route::post('/employees/{employee}/access', [EmployeeController::class, 'storeAccess'])->name('employees.access.store');
-        Route::post('/employees/{employee}/access/toggle', [EmployeeController::class, 'toggleAccess'])->name('employees.access.toggle');
-        Route::post('/employees/{employee}/access/role', [EmployeeController::class, 'changeRole'])->name('employees.access.role');
-        Route::post('/employees/{employee}/access/reset-password', [EmployeeController::class, 'resetPassword'])->name('employees.access.reset-password');
+        Route::resource('employees', EmployeeController::class)
+            ->middlewareFor(['create', 'store'], 'permission:employees.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:employees.index.edit')
+            ->middlewareFor('destroy', 'permission:employees.index.delete')
+            ->middlewareFor('show', 'permission:employees.show.view');
+        Route::post('/employees/{employee}/access', [EmployeeController::class, 'storeAccess'])
+            ->name('employees.access.store')
+            ->middleware('permission:employees.access.create');
+        Route::post('/employees/{employee}/access/toggle', [EmployeeController::class, 'toggleAccess'])
+            ->name('employees.access.toggle')
+            ->middleware('permission:employees.access.toggle');
+        Route::post('/employees/{employee}/access/role', [EmployeeController::class, 'changeRole'])
+            ->name('employees.access.role')
+            ->middleware('permission:employees.access.change_role');
+        Route::post('/employees/{employee}/access/reset-password', [EmployeeController::class, 'resetPassword'])
+            ->name('employees.access.reset-password')
+            ->middleware('permission:employees.access.reset_password');
         Route::post('/employees/{employee}/deactivate', [EmployeeController::class, 'deactivate'])
             ->name('employees.deactivate')
-            ->middleware('permission:employees.index.edit');
+            ->middleware('permission:employees.index.deactivate');
         Route::post('/employees/{employee}/reactivate', [EmployeeController::class, 'reactivate'])
             ->name('employees.reactivate')
-            ->middleware('permission:employees.index.edit');
+            ->middleware('permission:employees.index.reactivate');
     });
 
     // Bancos (catalogo empresa)
     Route::middleware('permission:banks.index.view')->group(function () {
-        Route::resource('banks', BankController::class)->except(['show']);
+        Route::resource('banks', BankController::class)->except(['show'])
+            ->middlewareFor(['create', 'store'], 'permission:banks.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:banks.index.edit')
+            ->middlewareFor('destroy', 'permission:banks.index.delete');
     });
 
     // Referencias
     Route::middleware('permission:references.index.view')->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {reference}.
-        Route::post('/references/recalculate-difficulty', [ReferenceController::class, 'recalculateAllDifficulties'])->name('references.recalculate-difficulty');
-        Route::get('/references/export/excel', [ReferenceController::class, 'exportExcel'])->name('references.export.excel');
-        Route::get('/references/export/pdf', [ReferenceController::class, 'exportPdf'])->name('references.export.pdf');
-        Route::resource('references', ReferenceController::class);
-        Route::post('/references/{reference}/duplicate', [ReferenceController::class, 'duplicate'])->name('references.duplicate');
-        Route::post('/references/{reference}/recalculate-difficulty', [ReferenceController::class, 'recalculateDifficulties'])->name('references.operations.recalculate');
-        Route::post('/references/{reference}/operations', [ReferenceController::class, 'attachOperation'])->name('references.operations.attach');
-        Route::put('/references/{reference}/operations/{operation}', [ReferenceController::class, 'updateOperationPrice'])->name('references.operations.update');
-        Route::delete('/references/{reference}/operations/{operation}', [ReferenceController::class, 'detachOperation'])->name('references.operations.detach');
+        Route::post('/references/recalculate-difficulty', [ReferenceController::class, 'recalculateAllDifficulties'])
+            ->name('references.recalculate-difficulty')
+            ->middleware('permission:references.index.recalculate_difficulty');
+        Route::get('/references/export/excel', [ReferenceController::class, 'exportExcel'])
+            ->name('references.export.excel')
+            ->middleware('permission:references.index.export_excel');
+        Route::get('/references/export/pdf', [ReferenceController::class, 'exportPdf'])
+            ->name('references.export.pdf')
+            ->middleware('permission:references.index.export_pdf');
+        Route::resource('references', ReferenceController::class)
+            ->middlewareFor(['create', 'store'], 'permission:references.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:references.index.edit')
+            ->middlewareFor('destroy', 'permission:references.index.delete')
+            ->middlewareFor('show', 'permission:references.show.view');
+        Route::post('/references/{reference}/duplicate', [ReferenceController::class, 'duplicate'])
+            ->name('references.duplicate')
+            ->middleware('permission:references.index.duplicate');
+        Route::post('/references/{reference}/recalculate-difficulty', [ReferenceController::class, 'recalculateDifficulties'])
+            ->name('references.operations.recalculate')
+            ->middleware('permission:references.operations.recalculate');
+        Route::post('/references/{reference}/operations', [ReferenceController::class, 'attachOperation'])
+            ->name('references.operations.attach')
+            ->middleware('permission:references.operations.attach');
+        Route::put('/references/{reference}/operations/{operation}', [ReferenceController::class, 'updateOperationPrice'])
+            ->name('references.operations.update')
+            ->middleware('permission:references.operations.update');
+        Route::delete('/references/{reference}/operations/{operation}', [ReferenceController::class, 'detachOperation'])
+            ->name('references.operations.detach')
+            ->middleware('permission:references.operations.detach');
     });
 
     // Operaciones
@@ -111,32 +146,48 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {operation}.
         Route::post('/operations/bulk-status', [OperationController::class, 'bulkStatus'])
             ->name('operations.bulk-status')
-            ->middleware('permission:operations.index.edit');
-        Route::resource('operations', OperationController::class)->except(['show']);
-        Route::get('/operations/{operation}', [OperationController::class, 'show'])->name('operations.show');
+            ->middleware('permission:operations.index.bulk_status');
+        Route::resource('operations', OperationController::class)->except(['show'])
+            ->middlewareFor(['create', 'store'], 'permission:operations.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:operations.index.edit')
+            ->middlewareFor('destroy', 'permission:operations.index.delete');
+        Route::get('/operations/{operation}', [OperationController::class, 'show'])
+            ->name('operations.show')
+            ->middleware('permission:operations.show.view');
         Route::patch('/operations/{operation}/price', [OperationController::class, 'updatePrice'])
             ->name('operations.price')
-            ->middleware('permission:operations.index.edit');
+            ->middleware('permission:operations.index.edit_price');
         Route::post('/operations/{operation}/duplicate', [OperationController::class, 'duplicate'])
             ->name('operations.duplicate')
-            ->middleware('permission:operations.index.edit');
+            ->middleware('permission:operations.index.duplicate');
     });
 
     // Produccion
     Route::middleware('permission:productions.index.view')->group(function () {
-        Route::get('/productions/report', [ProductionController::class, 'report'])->name('productions.report');
+        Route::get('/productions/report', [ProductionController::class, 'report'])
+            ->name('productions.report')
+            ->middleware('permission:productions.report.view');
         // Antes del resource: un segmento literal no puede quedar detras de {production}.
-        Route::get('/productions/export', [ProductionController::class, 'export'])->name('productions.export');
+        Route::get('/productions/export', [ProductionController::class, 'export'])
+            ->name('productions.export')
+            ->middleware('permission:productions.index.export');
         Route::post('/productions/confirm-day', [ProductionController::class, 'confirmDay'])
             ->name('productions.confirm-day')
-            ->middleware('permission:productions.index.edit');
+            ->middleware('permission:productions.index.confirm_day');
         Route::post('/productions/{production}/confirm', [ProductionController::class, 'confirm'])
             ->name('productions.confirm')
-            ->middleware('permission:productions.index.edit');
+            ->middleware('permission:productions.index.confirm');
         Route::get('/work-day-sessions/today', [WorkDaySessionController::class, 'today'])->name('work-day-sessions.today');
-        Route::post('/work-day-sessions/start', [WorkDaySessionController::class, 'start'])->name('work-day-sessions.start');
-        Route::post('/work-day-sessions/{workDaySession}/close', [WorkDaySessionController::class, 'close'])->name('work-day-sessions.close');
-        Route::resource('productions', ProductionController::class)->except(['show']);
+        Route::post('/work-day-sessions/start', [WorkDaySessionController::class, 'start'])
+            ->name('work-day-sessions.start')
+            ->middleware('permission:productions.index.workday_start');
+        Route::post('/work-day-sessions/{workDaySession}/close', [WorkDaySessionController::class, 'close'])
+            ->name('work-day-sessions.close')
+            ->middleware('permission:productions.index.workday_close');
+        Route::resource('productions', ProductionController::class)->except(['show'])
+            ->middlewareFor(['create', 'store'], 'permission:productions.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:productions.index.edit')
+            ->middlewareFor('destroy', 'permission:productions.index.delete');
     });
 
     Route::middleware('permission:productions.ranking.view')->group(function () {
@@ -146,18 +197,32 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     // Nomina
     Route::middleware('permission:payrolls.index.view')->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {payroll}.
-        Route::get('/payrolls/export-list', [PayrollController::class, 'exportList'])->name('payrolls.export-list');
-        Route::resource('payrolls', PayrollController::class)->except(['edit', 'update']);
-        Route::post('/payrolls/{payroll}/calculate', [PayrollController::class, 'calculate'])->name('payrolls.calculate');
-        Route::post('/payrolls/{payroll}/approve', [PayrollController::class, 'approve'])->name('payrolls.approve');
-        Route::post('/payrolls/{payroll}/pay', [PayrollController::class, 'pay'])->name('payrolls.pay');
-        Route::get('/payrolls/{payroll}/export', [PayrollController::class, 'export'])->name('payrolls.export');
-        // Ficha y comprobante de un empleado dentro de la nomina. El permiso fino lo aplica
-        // la policy (`payrolls.show.view`) igual que en el detalle del periodo.
+        Route::get('/payrolls/export-list', [PayrollController::class, 'exportList'])
+            ->name('payrolls.export-list')
+            ->middleware('permission:payrolls.index.export');
+        Route::resource('payrolls', PayrollController::class)->except(['edit', 'update'])
+            ->middlewareFor(['create', 'store'], 'permission:payrolls.index.create')
+            ->middlewareFor('destroy', 'permission:payrolls.index.delete')
+            ->middlewareFor('show', 'permission:payrolls.show.view');
+        Route::post('/payrolls/{payroll}/calculate', [PayrollController::class, 'calculate'])
+            ->name('payrolls.calculate')
+            ->middleware('permission:payrolls.show.calculate');
+        Route::post('/payrolls/{payroll}/approve', [PayrollController::class, 'approve'])
+            ->name('payrolls.approve')
+            ->middleware('permission:payrolls.show.approve');
+        Route::post('/payrolls/{payroll}/pay', [PayrollController::class, 'pay'])
+            ->name('payrolls.pay')
+            ->middleware('permission:payrolls.show.pay');
+        Route::get('/payrolls/{payroll}/export', [PayrollController::class, 'export'])
+            ->name('payrolls.export')
+            ->middleware('permission:payrolls.show.export');
+        // Ficha y comprobante de un empleado dentro de la nomina.
         Route::get('/payrolls/{payroll}/empleados/{payrollEmployee}', [PayrollController::class, 'employee'])
-            ->name('payrolls.payroll-employees.show');
+            ->name('payrolls.payroll-employees.show')
+            ->middleware('permission:payrolls.employee.view');
         Route::get('/payrolls/{payroll}/empleados/{payrollEmployee}/comprobante', [PayrollController::class, 'receipt'])
-            ->name('payrolls.payroll-employees.receipt');
+            ->name('payrolls.payroll-employees.receipt')
+            ->middleware('permission:payrolls.employee.receipt');
     });
 
     Route::middleware('permission:payrolls.show.manage_adjustments')->group(function () {
@@ -173,29 +238,47 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {payroll_concept}.
         Route::post('/payroll-concepts/reorder', [PayrollConceptController::class, 'reorder'])
             ->name('payroll-concepts.reorder')
-            ->middleware('permission:payroll_concepts.index.edit');
+            ->middleware('permission:payroll_concepts.index.reorder');
         Route::patch('/payroll-concepts/{payroll_concept}/toggle', [PayrollConceptController::class, 'toggleActive'])
             ->name('payroll-concepts.toggle')
-            ->middleware('permission:payroll_concepts.index.edit');
-        Route::resource('payroll-concepts', PayrollConceptController::class)->except(['show']);
+            ->middleware('permission:payroll_concepts.index.toggle');
+        Route::resource('payroll-concepts', PayrollConceptController::class)->except(['show'])
+            ->middlewareFor(['create', 'store'], 'permission:payroll_concepts.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:payroll_concepts.index.edit')
+            ->middlewareFor('destroy', 'permission:payroll_concepts.index.delete');
     });
 
     Route::middleware('permission:payroll_legal_parameters.index.view')->group(function () {
-        Route::resource('payroll-legal-parameters', PayrollLegalParameterController::class)->except(['show']);
+        Route::resource('payroll-legal-parameters', PayrollLegalParameterController::class)->except(['show'])
+            ->middlewareFor(['create', 'store'], 'permission:payroll_legal_parameters.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:payroll_legal_parameters.index.edit')
+            ->middlewareFor('destroy', 'permission:payroll_legal_parameters.index.delete');
     });
 
     Route::middleware('permission:holidays.index.view')->group(function () {
-        Route::post('/holidays/sync', [HolidayController::class, 'sync'])->name('holidays.sync');
-        Route::resource('holidays', HolidayController::class)->only(['index', 'store', 'destroy']);
+        Route::post('/holidays/sync', [HolidayController::class, 'sync'])
+            ->name('holidays.sync')
+            ->middleware('permission:holidays.index.sync');
+        Route::resource('holidays', HolidayController::class)->only(['index', 'store', 'destroy'])
+            ->middlewareFor('store', 'permission:holidays.index.create')
+            ->middlewareFor('destroy', 'permission:holidays.index.delete');
     });
 
     // Anticipos
     Route::middleware('permission:advances.index.view')->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {advance}.
-        Route::get('/advances/export', [AdvanceController::class, 'export'])->name('advances.export');
-        Route::get('/advances/{advance}/receipt', [AdvanceController::class, 'receipt'])->name('advances.receipt');
-        Route::resource('advances', AdvanceController::class)->except(['show', 'edit', 'update']);
-        Route::get('/advances/{advance}', [AdvanceController::class, 'show'])->name('advances.show');
+        Route::get('/advances/export', [AdvanceController::class, 'export'])
+            ->name('advances.export')
+            ->middleware('permission:advances.index.export');
+        Route::get('/advances/{advance}/receipt', [AdvanceController::class, 'receipt'])
+            ->name('advances.receipt')
+            ->middleware('permission:advances.show.receipt');
+        Route::resource('advances', AdvanceController::class)->except(['show', 'edit', 'update'])
+            ->middlewareFor(['create', 'store'], 'permission:advances.index.create')
+            ->middlewareFor('destroy', 'permission:advances.index.delete');
+        Route::get('/advances/{advance}', [AdvanceController::class, 'show'])
+            ->name('advances.show')
+            ->middleware('permission:advances.show.view');
     });
 
     // Gastos (solo usuarios de empresa; policies bloquean super_admin)
@@ -203,20 +286,29 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {expense_category}.
         Route::post('/expense-categories/reorder', [ExpenseCategoryController::class, 'reorder'])
             ->name('expense-categories.reorder')
-            ->middleware('permission:expenses.categories.edit');
+            ->middleware('permission:expenses.categories.reorder');
         Route::patch('/expense-categories/{expense_category}/toggle', [ExpenseCategoryController::class, 'toggleActive'])
             ->name('expense-categories.toggle')
-            ->middleware('permission:expenses.categories.edit');
-        Route::resource('expense-categories', ExpenseCategoryController::class)->except(['show']);
+            ->middleware('permission:expenses.categories.toggle');
+        Route::resource('expense-categories', ExpenseCategoryController::class)->except(['show'])
+            ->middlewareFor(['create', 'store'], 'permission:expenses.categories.create')
+            ->middlewareFor(['edit', 'update'], 'permission:expenses.categories.edit')
+            ->middlewareFor('destroy', 'permission:expenses.categories.delete');
     });
 
     Route::middleware('permission:expenses.index.view')->group(function () {
         // Antes del resource: un segmento literal no puede quedar detras de {expense}.
-        Route::get('/expenses/export', [ExpenseController::class, 'export'])->name('expenses.export');
+        Route::get('/expenses/export', [ExpenseController::class, 'export'])
+            ->name('expenses.export')
+            ->middleware('permission:expenses.index.export');
         Route::post('/expenses/quick', [ExpenseController::class, 'quickStore'])
             ->name('expenses.quick-store')
-            ->middleware('permission:expenses.index.create');
-        Route::resource('expenses', ExpenseController::class);
+            ->middleware('permission:expenses.index.quick_create');
+        Route::resource('expenses', ExpenseController::class)
+            ->middlewareFor(['create', 'store'], 'permission:expenses.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:expenses.index.edit')
+            ->middlewareFor('destroy', 'permission:expenses.index.delete')
+            ->middlewareFor('show', 'permission:expenses.show.view');
     });
 
     // Reportes
@@ -229,16 +321,36 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Usuarios
     Route::middleware('permission:users.index.view')->group(function () {
-        Route::resource('users', UserController::class);
+        Route::resource('users', UserController::class)
+            ->middlewareFor(['create', 'store'], 'permission:users.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:users.index.edit')
+            ->middlewareFor('destroy', 'permission:users.index.delete')
+            ->middlewareFor('show', 'permission:users.show.view');
+        // Permisos por usuario: el catalogo que se pinta en el asignador y su guardado.
+        Route::get('/users/{user}/permissions', [UserController::class, 'permissions'])
+            ->name('users.permissions.show')
+            ->middleware('permission:users.edit.permission_overrides')
+            ->can('managePermissionOverrides', 'user');
+        Route::put('/users/{user}/permissions', [UserController::class, 'updatePermissions'])
+            ->name('users.permissions.update')
+            ->middleware('permission:users.edit.permission_overrides')
+            ->can('managePermissionOverrides', 'user');
         Route::put('/users/{user}/permission-overrides', [UserController::class, 'updatePermissionOverrides'])
             ->name('users.permission-overrides.update')
+            ->middleware('permission:users.edit.permission_overrides')
             ->can('managePermissionOverrides', 'user');
     });
 
     // Roles y Permisos
     Route::middleware('permission:roles.index.view')->group(function () {
         Route::get('/roles/permission-matrix', [RoleController::class, 'permissionMatrix'])->name('roles.permission-matrix');
-        Route::resource('roles', RoleController::class);
+        Route::post('/roles/{role}/propagate', [RoleController::class, 'propagate'])
+            ->name('roles.propagate')
+            ->middleware('permission:roles.index.propagate');
+        Route::resource('roles', RoleController::class)
+            ->middlewareFor(['create', 'store'], 'permission:roles.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:roles.index.edit')
+            ->middlewareFor('destroy', 'permission:roles.index.delete');
     });
 
     // Mi empresa (solo datos de la compania del usuario; empresas globales = superadmin)

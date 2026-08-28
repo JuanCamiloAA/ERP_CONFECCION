@@ -129,7 +129,7 @@ export default function AdvanceShow({
                     </div>
 
                     <div className="flex flex-wrap items-center gap-2">
-                        <Can permission="advances.index.view">
+                        <Can permission="advances.show.receipt">
                             <button
                                 type="button"
                                 onClick={() => window.open(route('advances.receipt', advance.id), '_blank')}

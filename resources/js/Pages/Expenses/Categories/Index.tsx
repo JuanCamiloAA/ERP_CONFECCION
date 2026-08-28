@@ -281,7 +281,7 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                                 >
                                     <div className="flex flex-col items-center gap-0.5">
                                         {!isConsolidatedView ? (
-                                            <Can permission="expenses.categories.edit">
+                                            <Can permission="expenses.categories.reorder">
                                                 <button
                                                     type="button"
                                                     aria-label={`Subir ${category.name}`}
@@ -327,7 +327,7 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                                             <span className="emp-pill">{category.is_active ? 'Activa' : 'Inactiva'}</span>
                                         ) : (
                                             <Can
-                                                permission="expenses.categories.edit"
+                                                permission="expenses.categories.toggle"
                                                 fallback={
                                                     <span className="emp-pill">
                                                         {category.is_active ? 'Activa' : 'Inactiva'}
@@ -342,7 +342,7 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                                     <div className="flex items-center justify-end gap-0.5">
                                         {!isConsolidatedView ? (
                                             <>
-                                                <Can permission="expenses.categories.edit">
+                                                <Can permission="expenses.categories.toggle">
                                                     <Link
                                                         href={route('expense-categories.edit', category.id)}
                                                         aria-label={`Editar ${category.name}`}
@@ -394,7 +394,7 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                                         </div>
 
                                         {!isConsolidatedView ? (
-                                            <Can permission="expenses.categories.edit">
+                                            <Can permission="expenses.categories.toggle">
                                                 <Link
                                                     href={route('expense-categories.edit', category.id)}
                                                     aria-label={`Editar ${category.name}`}
@@ -421,7 +421,7 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                                             <span className="emp-pill">{category.is_active ? 'Activa' : 'Inactiva'}</span>
                                         ) : (
                                             <Can
-                                                permission="expenses.categories.edit"
+                                                permission="expenses.categories.toggle"
                                                 fallback={
                                                     <span className="emp-pill">
                                                         {category.is_active ? 'Activa' : 'Inactiva'}

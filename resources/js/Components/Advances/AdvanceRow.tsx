@@ -67,7 +67,7 @@ export function AdvanceActionsMenu({
                         </Link>
                     </MenuItem>
 
-                    <Can permission="advances.index.view">
+                    <Can permission="advances.show.receipt">
                         <MenuItem>
                             <button
                                 type="button"

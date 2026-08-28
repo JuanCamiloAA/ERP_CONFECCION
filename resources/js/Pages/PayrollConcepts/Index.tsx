@@ -281,7 +281,7 @@ export default function PayrollConceptsIndex({ concepts, filters, summary }: Pro
                                             <span className="emp-pill">{concept.is_active ? 'Activo' : 'Inactivo'}</span>
                                         ) : (
                                             <Can
-                                                permission="payroll_concepts.index.edit"
+                                                permission="payroll_concepts.index.toggle"
                                                 fallback={
                                                     <span className="emp-pill">
                                                         {concept.is_active ? 'Activo' : 'Inactivo'}
@@ -296,7 +296,7 @@ export default function PayrollConceptsIndex({ concepts, filters, summary }: Pro
                                     <div className="flex items-center justify-end gap-0.5">
                                         {!isConsolidatedView ? (
                                             <>
-                                                <Can permission="payroll_concepts.index.edit">
+                                                <Can permission="payroll_concepts.index.toggle">
                                                     <Link
                                                         href={route('payroll-concepts.edit', concept.id)}
                                                         aria-label={`Editar ${concept.name}`}
@@ -376,7 +376,7 @@ export default function PayrollConceptsIndex({ concepts, filters, summary }: Pro
                                             <span className="emp-pill">{concept.is_active ? 'Activo' : 'Inactivo'}</span>
                                         ) : (
                                             <Can
-                                                permission="payroll_concepts.index.edit"
+                                                permission="payroll_concepts.index.toggle"
                                                 fallback={
                                                     <span className="emp-pill">
                                                         {concept.is_active ? 'Activo' : 'Inactivo'}

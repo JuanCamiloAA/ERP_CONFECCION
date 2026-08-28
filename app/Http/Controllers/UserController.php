@@ -11,7 +11,10 @@ use App\Models\Role;
 use App\Models\User;
 use App\Services\CompanyDefaultRolesService;
 use App\Services\Membership\MembershipStaffLimiter;
+use App\Services\PermissionInsightService;
 use App\Services\UserPermissionOverrideService;
+use App\Services\UserPermissionService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -52,12 +55,68 @@ class UserController extends Controller
             $query->where('is_active', false);
         }
 
+        // Enlace cruzado desde el listado de roles: «6 usuarios» abre aqui ya filtrado.
+        $roleFilter = $request->input('role_id');
+        if ($roleFilter !== null && $roleFilter !== '') {
+            $query->whereHas('roles', fn ($q) => $q->where('roles.id', (int) $roleFilter));
+        }
+
         $users = $query->orderBy('name')->paginate(15)->withQueryString();
+
+        $insight = app(PermissionInsightService::class);
+        $summaries = $insight->summaries($users->getCollection());
+
+        $users->getCollection()->transform(function (User $user) use ($summaries) {
+            $summary = $summaries[$user->id] ?? ['assigned' => 0, 'extra' => 0, 'missing' => 0];
+            $user->setAttribute('permissions_count', $summary['assigned']);
+            $user->setAttribute('extra_count', $summary['extra']);
+            $user->setAttribute('missing_count', $summary['missing']);
+
+            return $user;
+        });
 
         return Inertia::render('Users/Index', [
             'users' => $users,
-            'filters' => ['search' => $search, 'status' => $status, 'company_id' => $companyFilter],
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'company_id' => $companyFilter,
+                'role_id' => $roleFilter !== null && $roleFilter !== '' ? (int) $roleFilter : null,
+            ],
+            'roles' => $this->availableRoles($request->user()),
+            'metrics' => $this->indexMetrics($request),
         ]);
+    }
+
+    /**
+     * Cifras de la franja: siempre sobre todos los usuarios visibles, no sobre la pagina.
+     *
+     * @return array<string, int>
+     */
+    protected function indexMetrics(Request $request): array
+    {
+        $base = User::query();
+
+        if (! $request->user()->isSuperAdmin()) {
+            $base->where('company_id', $request->user()->company_id);
+        }
+
+        $companyFilter = $request->input('company_id');
+        if ($companyFilter !== null && $companyFilter !== '' && $request->user()->isSuperAdmin()) {
+            $base->where('company_id', (int) $companyFilter);
+        }
+
+        $all = (clone $base)->get(['id', 'is_active', 'last_login_at', 'company_id']);
+
+        return [
+            'total' => $all->count(),
+            'active' => $all->where('is_active', true)->count(),
+            'inactive' => $all->where('is_active', false)->count(),
+            'never_logged_in' => $all->whereNull('last_login_at')->count(),
+            'with_overrides' => app(PermissionInsightService::class)->countWithOverrides(
+                (clone $base)->with('roles')->get()
+            ),
+        ];
     }
 
     public function create(Request $request): Response
@@ -110,9 +169,18 @@ class UserController extends Controller
             ->paginate(15)
             ->withQueryString();
 
+        $insight = app(PermissionInsightService::class);
+        $assigned = $user->isSuperAdmin()
+            ? PermissionHelper::flatPermissions()
+            : $user->permissions->pluck('name')->all();
+        $template = $user->roles->flatMap(fn ($role) => $role->permissions->pluck('name'))->unique()->values()->all();
+
         return Inertia::render('Users/Show', [
             'user' => $user,
             'accessLogs' => $logs,
+            'summary' => $insight->summaryFor($user),
+            'moduleCoverage' => $insight->moduleCoverage($assigned, $template),
+            'canManagePermissions' => Gate::forUser($request->user())->allows('managePermissionOverrides', $user),
         ]);
     }
 
@@ -132,7 +200,89 @@ class UserController extends Controller
             'role_permissions' => $user->roles->flatMap(fn ($r) => $r->permissions->pluck('name'))->unique()->values()->all(),
             'permission_overrides' => $overrideService->listOverridesForUi($user),
             'can_manage_permission_overrides' => Gate::forUser($request->user())->allows('managePermissionOverrides', $user),
+            'assigned_permissions' => app(UserPermissionService::class)->namesFor($user),
+            'summary' => app(PermissionInsightService::class)->summaryFor($user),
+            'permission_labels' => self::permissionLabels(),
         ]);
+    }
+
+    /**
+     * Catalogo de permisos de un usuario, para el asignador del listado.
+     *
+     * Devuelve JSON y no una pantalla porque el asignador es un modal: abrirlo no deberia
+     * sacar al administrador del listado donde estaba trabajando.
+     */
+    public function permissions(Request $request, User $user): JsonResponse
+    {
+        $this->authorize('managePermissionOverrides', $user);
+
+        $role = $user->roles->first();
+
+        return response()->json([
+            'user' => [
+                'id' => $user->id,
+                'name' => trim($user->name.' '.($user->last_name ?? '')),
+                'email' => $user->email,
+                'role' => $role?->display_name ?? $role?->name,
+                'role_id' => $role?->id,
+                'is_super_admin' => $user->isSuperAdmin(),
+            ],
+            'catalogue' => PermissionHelper::catalogue(),
+            'assigned' => app(UserPermissionService::class)->namesFor($user),
+            'labels' => self::permissionLabels(),
+            'summary' => app(PermissionInsightService::class)->summaryFor($user),
+            // La plantilla del rol se ofrece como punto de partida, no como herencia viva.
+            'template' => $role
+                ? $role->permissions->pluck('name')->values()->all()
+                : [],
+        ]);
+    }
+
+    /**
+     * Guarda el conjunto de permisos del usuario. Reemplaza, no acumula: el asignador
+     * muestra el estado completo y eso es exactamente lo que se guarda.
+     */
+    public function updatePermissions(Request $request, User $user): RedirectResponse
+    {
+        $this->authorize('managePermissionOverrides', $user);
+
+        $validated = $request->validate([
+            'permissions' => ['nullable', 'array'],
+            'permissions.*' => ['string'],
+        ]);
+
+        try {
+            app(UserPermissionService::class)->sync($user, $validated['permissions'] ?? [], $request->user());
+        } catch (\InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        AccessLog::log('user_permissions_updated', $request->user()?->id, [
+            'company_id' => $user->company_id,
+            'permission_checked' => 'users.edit.permission_overrides',
+        ]);
+
+        return back()->with('success', 'Permisos actualizados.');
+    }
+
+    /**
+     * `permiso => "Modulo · Etiqueta"`, para no ensenar nombres tecnicos en la interfaz.
+     *
+     * @return array<string, string>
+     */
+    public static function permissionLabels(): array
+    {
+        $labels = [];
+
+        foreach (PermissionHelper::catalogue(true) as $module) {
+            foreach ($module['groups'] as $group) {
+                foreach ($group['permissions'] as $permission) {
+                    $labels[$permission['name']] = $module['display'].' · '.$permission['label'];
+                }
+            }
+        }
+
+        return $labels;
     }
 
     public function update(UpdateUserRequest $request, User $user): RedirectResponse

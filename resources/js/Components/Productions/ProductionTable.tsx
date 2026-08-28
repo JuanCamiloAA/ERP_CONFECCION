@@ -122,7 +122,7 @@ export function RowMenu({
 
                     {/* «Pagado» no se toca: ese estado lo pone el cierre de nómina. */}
                     {production.status === 'pendiente' ? (
-                        <Can permission="productions.index.edit">
+                        <Can permission="productions.index.confirm">
                             <MenuItem>
                                 <button
                                     type="button"

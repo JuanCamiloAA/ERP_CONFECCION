@@ -74,7 +74,7 @@ export function OperationActionsMenu({
                         </MenuItem>
                     </Can>
 
-                    <Can permission="operations.index.create">
+                    <Can permission="operations.index.duplicate">
                         <MenuItem>
                             <button
                                 type="button"

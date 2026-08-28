@@ -27,13 +27,13 @@ export function OperationBulkBar({ count, onActivate, onDeactivate, onClear }: P
             </span>
 
             <div className="flex flex-wrap items-center gap-2">
-                <Can permission="operations.index.edit">
+                <Can permission="operations.index.bulk_status">
                     <button type="button" onClick={onActivate} className="emp-btn emp-btn-sm">
                         <Check size={13} />
                         Activar
                     </button>
                 </Can>
-                <Can permission="operations.index.edit">
+                <Can permission="operations.index.bulk_status">
                     <button type="button" onClick={onDeactivate} className="emp-btn emp-btn-sm">
                         <Prohibit size={13} />
                         Inactivar

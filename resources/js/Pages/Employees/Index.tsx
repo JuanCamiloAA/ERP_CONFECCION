@@ -140,21 +140,25 @@ export default function EmployeesIndex({ employees, filters, metrics }: Props) {
                 icon: <PencilSimple size={15} />,
                 href: route('employees.edit', employee.id),
             });
-            items.push(
-                employee.is_active
-                    ? {
-                          key: 'deactivate',
-                          label: 'Inactivar',
-                          icon: <Prohibit size={15} />,
-                          onClick: () => setConfirmDeactivate(employee),
-                      }
-                    : {
-                          key: 'reactivate',
-                          label: 'Reactivar',
-                          icon: <ArrowCounterClockwise size={15} />,
-                          onClick: () => reactivate(employee),
-                      },
-            );
+        }
+
+        // Inactivar y reactivar tienen permiso propio: se ofrecen solo si se tiene el suyo.
+        if (employee.is_active) {
+            if (perms.can('employees.index.deactivate')) {
+                items.push({
+                    key: 'deactivate',
+                    label: 'Inactivar',
+                    icon: <Prohibit size={15} />,
+                    onClick: () => setConfirmDeactivate(employee),
+                });
+            }
+        } else if (perms.can('employees.index.reactivate')) {
+            items.push({
+                key: 'reactivate',
+                label: 'Reactivar',
+                icon: <ArrowCounterClockwise size={15} />,
+                onClick: () => reactivate(employee),
+            });
         }
 
         if (perms.can('employees.index.delete')) {
@@ -503,8 +507,9 @@ export default function EmployeesIndex({ employees, filters, metrics }: Props) {
 
                                         <td className="px-3 py-2.5">
                                             <div className="flex items-center justify-end gap-1">
-                                                <Can permission="employees.index.edit">
-                                                    {employee.is_active ? (
+                                                {/* Editar y reactivar son dos permisos distintos: cada boton pide el suyo. */}
+                                                {employee.is_active ? (
+                                                    <Can permission="employees.index.edit">
                                                         <Link
                                                             href={route('employees.edit', employee.id)}
                                                             aria-label={`Editar a ${employee.full_name}`}
@@ -513,7 +518,9 @@ export default function EmployeesIndex({ employees, filters, metrics }: Props) {
                                                         >
                                                             <PencilSimple size={15} />
                                                         </Link>
-                                                    ) : (
+                                                    </Can>
+                                                ) : (
+                                                    <Can permission="employees.index.reactivate">
                                                         <button
                                                             type="button"
                                                             onClick={() => reactivate(employee)}
@@ -522,8 +529,8 @@ export default function EmployeesIndex({ employees, filters, metrics }: Props) {
                                                             <ArrowCounterClockwise size={14} />
                                                             Reactivar
                                                         </button>
-                                                    )}
-                                                </Can>
+                                                    </Can>
+                                                )}
                                                 {rowMenu(employee)}
                                             </div>
                                         </td>

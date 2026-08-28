@@ -93,7 +93,7 @@ export function ProductionDayGroup({ bucket, onConfirmDay, children }: Props) {
                 </span>
 
                 {bucket.pending > 0 ? (
-                    <Can permission="productions.index.edit">
+                    <Can permission="productions.index.confirm_day">
                         <button type="button" onClick={() => onConfirmDay(bucket)} className="emp-btn emp-btn-sm emp-btn-primary">
                             <Check size={13} />
                             Confirmar el día
