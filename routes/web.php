@@ -64,12 +64,32 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Empresas (super_admin)
     Route::middleware('permission:companies.index.view')->group(function () {
-        Route::resource('companies', CompanyController::class);
+        Route::get('/companies/export', [CompanyController::class, 'export'])
+            ->name('companies.export')
+            ->middleware('permission:companies.index.export');
+
+        Route::resource('companies', CompanyController::class)
+            ->middlewareFor(['create', 'store'], 'permission:companies.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:companies.index.edit')
+            ->middlewareFor('destroy', 'permission:companies.index.delete');
         Route::post('/companies/set-active', [CompanyController::class, 'setActive'])->name('companies.set-active');
     });
 
     Route::middleware('permission:payroll_periodicities.index.view')->group(function () {
-        Route::resource('payroll-periodicities', PayrollPeriodicityController::class)->except(['show']);
+        // Antes del resource: `payroll-periodicities/{id}` capturaria «reorder» y «toggle»
+        // como si fueran claves y devolveria 404 por binding.
+        Route::patch('/payroll-periodicities/reorder', [PayrollPeriodicityController::class, 'reorder'])
+            ->name('payroll-periodicities.reorder')
+            ->middleware('permission:payroll_periodicities.index.reorder');
+        Route::patch('/payroll-periodicities/{payrollPeriodicity}/toggle', [PayrollPeriodicityController::class, 'toggle'])
+            ->name('payroll-periodicities.toggle')
+            ->middleware('permission:payroll_periodicities.index.toggle');
+
+        Route::resource('payroll-periodicities', PayrollPeriodicityController::class)
+            ->except(['show'])
+            ->middlewareFor(['create', 'store'], 'permission:payroll_periodicities.index.create')
+            ->middlewareFor(['edit', 'update'], 'permission:payroll_periodicities.index.edit')
+            ->middlewareFor('destroy', 'permission:payroll_periodicities.index.delete');
     });
 
     // Empleados

@@ -23,6 +23,10 @@ class MembershipPlanController extends Controller
 
         return Inertia::render('SuperAdmin/MembershipPlans/Index', [
             'plans' => $plans,
+            // El plan mas usado se destaca en la comparativa de tarjetas.
+            'featuredPlanId' => $plans->getCollection()
+                ->sortByDesc('companies_count')
+                ->first(fn ($plan) => $plan->companies_count > 0)?->id,
         ]);
     }
 

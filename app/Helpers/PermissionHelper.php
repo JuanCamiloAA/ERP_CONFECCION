@@ -499,7 +499,14 @@ class PermissionHelper
                     'index' => [
                         'display' => 'Listado de Empresas',
                         'route' => 'companies.index',
-                        'actions' => ['view', 'create', 'edit', 'delete'],
+                        'actions' => ['view', 'create', 'edit', 'delete', 'export'],
+                        'labels' => [
+                            'view' => 'Ver empresas',
+                            'create' => 'Crear empresa',
+                            'edit' => 'Editar empresa',
+                            'delete' => 'Desactivar empresa',
+                            'export' => 'Exportar listado',
+                        ],
                     ],
                 ],
             ],
@@ -513,7 +520,15 @@ class PermissionHelper
                     'index' => [
                         'display' => 'Maestro periodicidad',
                         'route' => 'payroll-periodicities.index',
-                        'actions' => ['view', 'create', 'edit', 'delete'],
+                        'actions' => ['view', 'create', 'edit', 'delete', 'reorder', 'toggle'],
+                        'labels' => [
+                            'view' => 'Ver periodicidades',
+                            'create' => 'Crear periodicidad',
+                            'edit' => 'Editar periodicidad',
+                            'delete' => 'Eliminar periodicidad',
+                            'reorder' => 'Reordenar',
+                            'toggle' => 'Activar / desactivar',
+                        ],
                     ],
                 ],
             ],

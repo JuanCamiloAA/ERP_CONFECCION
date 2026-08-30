@@ -6,7 +6,10 @@ import { AdvanceFilterBar, type AdvanceFilters } from '@/Components/Advances/Adv
 import { AdvanceMonthGroup, groupByMonth } from '@/Components/Advances/AdvanceMonthGroup';
 import { ADVANCE_GRID, AdvanceRow, employeeName, type AdvanceRowData } from '@/Components/Advances/AdvanceRow';
 import { Can } from '@/Components/UI/Can';
+import { ListViewSwitch } from '@/Components/UI/ListViewSwitch';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 import type { Employee, PaginatedResponse } from '@/types';
@@ -89,6 +92,8 @@ export default function AdvancesIndex({ advances, filters, employees, metrics }:
             ) : null}
         </div>
     );
+
+    const [view, setView] = useViewMode('advances');
 
     const tableHeader = (
         <div
@@ -196,6 +201,7 @@ export default function AdvancesIndex({ advances, filters, employees, metrics }:
                         employees={employees}
                         total={total}
                         pendingCount={metrics.pending_count}
+                        trailing={<ViewToggle variant="emp" value={view} onChange={setView} />}
                     />
                 </div>
 
@@ -206,20 +212,24 @@ export default function AdvancesIndex({ advances, filters, employees, metrics }:
                     <div className="mt-4 flex flex-col gap-[22px]">
                         {buckets.map((bucket) => (
                             <AdvanceMonthGroup key={bucket.key} bucket={bucket}>
-                                {/* Escritorio: tabla. */}
-                                <div className="hidden lg:block">
-                                    {tableHeader}
-                                    {bucket.rows.map((advance) => (
-                                        <AdvanceRow key={advance.id} advance={advance} onDelete={setConfirmDelete} />
-                                    ))}
-                                </div>
-
-                                {/* Movil: tarjetas. */}
-                                <div className="flex flex-col gap-2 lg:hidden">
-                                    {bucket.rows.map((advance) => (
+                                <ListViewSwitch
+                                    view={view}
+                                    table={
+                                        <>
+                                            {tableHeader}
+                                            {bucket.rows.map((advance) => (
+                                                <AdvanceRow
+                                                    key={advance.id}
+                                                    advance={advance}
+                                                    onDelete={setConfirmDelete}
+                                                />
+                                            ))}
+                                        </>
+                                    }
+                                    cards={bucket.rows.map((advance) => (
                                         <AdvanceCard key={advance.id} advance={advance} onDelete={setConfirmDelete} />
                                     ))}
-                                </div>
+                                />
                             </AdvanceMonthGroup>
                         ))}
                     </div>

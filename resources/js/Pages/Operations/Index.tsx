@@ -8,6 +8,9 @@ import { OperationQuickCreateModal } from '@/Components/Operations/OperationQuic
 import { OPERATION_GRID, OperationRow, type OperationRowData } from '@/Components/Operations/OperationRow';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { ListViewSwitch } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { difficultyLabel } from '@/lib/difficulty';
 import { formatCurrency, formatNumber } from '@/lib/utils';
@@ -70,6 +73,8 @@ export default function OperationsIndex({ operations, filters, metrics }: Props)
     };
 
     const hasFilters = Boolean(filters.search || (filters.status && filters.status !== 'all') || filters.difficulty);
+
+    const [view, setView] = useViewMode('operations');
 
     const emptyState = (
         <div className="emp-card p-6 text-center text-[13px]" style={{ color: 'var(--emp-muted)' }}>
@@ -147,7 +152,12 @@ export default function OperationsIndex({ operations, filters, metrics }: Props)
                     className="sticky top-16 z-10 -mx-4 mt-4 bg-[color:var(--emp-bg)] px-4 py-3 sm:static sm:mx-0 sm:bg-transparent sm:px-0 sm:py-0"
                     style={{ borderBottom: '1px solid var(--emp-border)' }}
                 >
-                    <OperationFilterBar filters={filters} onChange={applyFilters} total={total} />
+                    <OperationFilterBar
+                        filters={filters}
+                        onChange={applyFilters}
+                        total={total}
+                        trailing={<ViewToggle variant="emp" value={view} onChange={setView} />}
+                    />
                 </div>
 
                 {selected.length > 0 ? (
@@ -161,61 +171,68 @@ export default function OperationsIndex({ operations, filters, metrics }: Props)
                     </div>
                 ) : null}
 
-                {/* ------------------------------------------- movil: tarjetas */}
-                <div className="mt-3 flex flex-col gap-2 lg:hidden">
-                    {rows.length === 0
-                        ? emptyState
-                        : rows.map((operation) => (
-                              <OperationCard
-                                  key={operation.id}
-                                  operation={operation}
-                                  selected={selected.includes(operation.id)}
-                                  onToggleSelect={toggleOne}
-                                  onDelete={setConfirmDelete}
-                              />
-                          ))}
-                </div>
+                <div className="mt-3">
+                    <ListViewSwitch
+                        view={view}
+                        table={
+                            <>
+                                <div
+                                    className="grid items-center gap-2.5 px-3 pb-2"
+                                    style={{
+                                        gridTemplateColumns: OPERATION_GRID,
+                                        borderBottom: '1px solid var(--emp-border)',
+                                    }}
+                                >
+                                    <input
+                                        type="checkbox"
+                                        checked={allSelected}
+                                        ref={(el) => {
+                                            // Marca «hay algo, pero no todo» en la casilla de la cabecera.
+                                            if (el) el.indeterminate = !allSelected && someSelected;
+                                        }}
+                                        onChange={togglePage}
+                                        aria-label="Seleccionar todas las operaciones de esta página"
+                                        className="h-4 w-4 cursor-pointer rounded"
+                                        style={{ accentColor: 'var(--emp-accent)' }}
+                                    />
+                                    {['Operación', 'Precio base', 'Dificultad', 'Estado', ''].map((label, index) => (
+                                        <span
+                                            key={label || `col-${index}`}
+                                            className={`text-[11px] uppercase tracking-[0.09em] ${index === 1 ? 'text-right' : ''}`}
+                                            style={{ color: 'var(--emp-subtle)' }}
+                                        >
+                                            {label}
+                                        </span>
+                                    ))}
+                                </div>
 
-                {/* ---------------------------------------- escritorio: tabla */}
-                <div className="mt-4 hidden lg:block">
-                    <div
-                        className="grid items-center gap-2.5 px-3 pb-2"
-                        style={{ gridTemplateColumns: OPERATION_GRID, borderBottom: '1px solid var(--emp-border)' }}
-                    >
-                        <input
-                            type="checkbox"
-                            checked={allSelected}
-                            ref={(el) => {
-                                // Marca «hay algo, pero no todo» en la casilla de la cabecera.
-                                if (el) el.indeterminate = !allSelected && someSelected;
-                            }}
-                            onChange={togglePage}
-                            aria-label="Seleccionar todas las operaciones de esta página"
-                            className="h-4 w-4 cursor-pointer rounded"
-                            style={{ accentColor: 'var(--emp-accent)' }}
-                        />
-                        {['Operación', 'Precio base', 'Dificultad', 'Estado', ''].map((label, index) => (
-                            <span
-                                key={label || `col-${index}`}
-                                className={`text-[11px] uppercase tracking-[0.09em] ${index === 1 ? 'text-right' : ''}`}
-                                style={{ color: 'var(--emp-subtle)' }}
-                            >
-                                {label}
-                            </span>
-                        ))}
-                    </div>
-
-                    {rows.length === 0
-                        ? emptyState
-                        : rows.map((operation) => (
-                              <OperationRow
-                                  key={operation.id}
-                                  operation={operation}
-                                  selected={selected.includes(operation.id)}
-                                  onToggleSelect={toggleOne}
-                                  onDelete={setConfirmDelete}
-                              />
-                          ))}
+                                {rows.length === 0
+                                    ? emptyState
+                                    : rows.map((operation) => (
+                                          <OperationRow
+                                              key={operation.id}
+                                              operation={operation}
+                                              selected={selected.includes(operation.id)}
+                                              onToggleSelect={toggleOne}
+                                              onDelete={setConfirmDelete}
+                                          />
+                                      ))}
+                            </>
+                        }
+                        cards={
+                            rows.length === 0
+                                ? emptyState
+                                : rows.map((operation) => (
+                                      <OperationCard
+                                          key={operation.id}
+                                          operation={operation}
+                                          selected={selected.includes(operation.id)}
+                                          onToggleSelect={toggleOne}
+                                          onDelete={setConfirmDelete}
+                                      />
+                                  ))
+                        }
+                    />
                 </div>
 
                 {/* ----------------------------------------------- paginacion */}

@@ -19,6 +19,9 @@ import { Avatar } from '@/Components/UI/Avatar';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { usePermissions } from '@/contexts/PermissionsContext';
+import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatNumber } from '@/lib/utils';
 import type { Employee, PaginatedResponse } from '@/types';
@@ -75,6 +78,8 @@ function roleName(employee: Employee): string | null {
 }
 
 export default function EmployeesIndex({ employees, filters, metrics }: Props) {
+    const [view, setView] = useViewMode('employees');
+
     const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
     const perms = usePermissions();
     const [search, setSearch] = useState(filters.search ?? '');
@@ -357,11 +362,13 @@ export default function EmployeesIndex({ employees, filters, metrics }: Props) {
                         <span className="ml-auto shrink-0 text-[12px] max-sm:hidden" style={{ color: 'var(--emp-subtle)' }}>
                             {countLabel}
                         </span>
+
+                        <ViewToggle variant="emp" value={view} onChange={setView} />
                     </div>
                 </div>
 
-                {/* ------------------------------------------- movil: tarjetas */}
-                <div className="mt-3 flex flex-col gap-2 lg:hidden">
+                {/* ---------------------------------------------- vista tarjetas */}
+                <div className={cardsViewClass(view, 'mt-3')}>
                     {employees.data.length === 0 ? (
                         <p className="emp-card p-6 text-center text-[13px]" style={{ color: 'var(--emp-muted)' }}>
                             No se encontraron empleados.
@@ -410,8 +417,8 @@ export default function EmployeesIndex({ employees, filters, metrics }: Props) {
                     )}
                 </div>
 
-                {/* ---------------------------------------- escritorio: tabla */}
-                <div className="mt-4 hidden lg:block">
+                {/* ------------------------------------------------- vista tabla */}
+                <div className={tableViewClass(view, 'mt-4')}>
                     <table className="w-full text-left">
                         <thead>
                             <tr style={{ borderBottom: '1px solid var(--emp-border)' }}>

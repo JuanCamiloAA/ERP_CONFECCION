@@ -1,5 +1,5 @@
 import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { formatNumber } from '@/lib/utils';
 import type { Employee } from '@/types';
 
@@ -21,6 +21,8 @@ interface Props {
     employees: Pick<Employee, 'id' | 'first_name' | 'last_name'>[];
     total: number;
     pendingCount: number;
+    /** Controles que van al extremo derecho de la barra (hoy, el conmutador de vista). */
+    trailing?: ReactNode;
 }
 
 /**
@@ -29,7 +31,7 @@ interface Props {
  * No hay boton «Filtrar»: cada cambio recarga. La busqueda espera 300 ms para no disparar
  * una peticion por letra.
  */
-export function AdvanceFilterBar({ filters, onChange, employees, total, pendingCount }: Props) {
+export function AdvanceFilterBar({ filters, onChange, employees, total, pendingCount, trailing }: Props) {
     const [term, setTerm] = useState(filters.search);
 
     useEffect(() => {
@@ -101,6 +103,8 @@ export function AdvanceFilterBar({ filters, onChange, employees, total, pendingC
             <span className="shrink-0 text-[12px] max-sm:hidden sm:ml-auto" style={{ color: 'var(--emp-subtle)' }}>
                 {formatNumber(total)} {total === 1 ? 'anticipo' : 'anticipos'} · {formatNumber(pendingCount)} con saldo
             </span>
+
+            {trailing}
         </div>
     );
 }

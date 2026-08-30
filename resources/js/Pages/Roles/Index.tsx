@@ -4,6 +4,10 @@ import { useMemo, useState } from 'react';
 import { RoleCard, type RoleRow } from '@/Components/Roles/RoleCard';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { RoleTable } from '@/Components/Roles/RoleTable';
+import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatNumber } from '@/lib/utils';
 import type { PaginatedResponse } from '@/types';
@@ -45,6 +49,8 @@ function pageLabel(label: string): string {
 }
 
 export default function RolesIndex({ roles, metrics }: Props) {
+    const [view, setView] = useViewMode('roles');
+
     const [confirmDelete, setConfirmDelete] = useState<RoleRow | null>(null);
     const [term, setTerm] = useState('');
     const [scope, setScope] = useState<Scope>('all');
@@ -171,6 +177,8 @@ export default function RolesIndex({ roles, metrics }: Props) {
                         {formatNumber(visible.length)} {visible.length === 1 ? 'rol' : 'roles'} ·{' '}
                         {formatNumber(metrics.users_with_role)} usuarios asignados
                     </span>
+
+                    <ViewToggle variant="emp" value={view} onChange={setView} />
                 </div>
 
                 {/* --------------------------------------------------- tarjetas */}
@@ -181,11 +189,23 @@ export default function RolesIndex({ roles, metrics }: Props) {
                             : 'Ningún rol coincide con este filtro.'}
                     </div>
                 ) : (
-                    <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
-                        {visible.map((role) => (
-                            <RoleCard key={role.id} role={role} onDelete={setConfirmDelete} />
-                        ))}
-                    </div>
+                    <>
+                        <div className={tableViewClass(view, 'mt-4')}>
+                            <RoleTable roles={visible} onDelete={setConfirmDelete} />
+                        </div>
+
+                        <div
+                            className={
+                                view === 'cards'
+                                    ? 'mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3'
+                                    : 'mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 lg:hidden'
+                            }
+                        >
+                            {visible.map((role) => (
+                                <RoleCard key={role.id} role={role} onDelete={setConfirmDelete} />
+                            ))}
+                        </div>
+                    </>
                 )}
 
                 {/* ----------------------------------------------- paginacion */}

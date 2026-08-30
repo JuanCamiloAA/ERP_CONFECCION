@@ -1,5 +1,5 @@
 import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { formatNumber } from '@/lib/utils';
 
 export interface PayrollFilters {
@@ -23,6 +23,8 @@ interface Props {
     years: number[];
     total: number;
     openCount: number;
+    /** Controles que van al extremo derecho de la barra (hoy, el conmutador de vista). */
+    trailing?: ReactNode;
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  * una peticion por letra. En movil solo quedan buscador y segmentado; ano y periodicidad
  * son afinados de escritorio y en el telefono solo estorban.
  */
-export function PayrollFilterBar({ filters, onChange, periodicities, years, total, openCount }: Props) {
+export function PayrollFilterBar({ filters, onChange, periodicities, years, total, openCount, trailing }: Props) {
     const [term, setTerm] = useState(filters.search);
 
     useEffect(() => {
@@ -127,6 +129,8 @@ export function PayrollFilterBar({ filters, onChange, periodicities, years, tota
                 {formatNumber(total)} {total === 1 ? 'nómina' : 'nóminas'} · {formatNumber(openCount)}{' '}
                 {openCount === 1 ? 'abierta' : 'abiertas'}
             </span>
+
+            {trailing}
         </div>
     );
 }

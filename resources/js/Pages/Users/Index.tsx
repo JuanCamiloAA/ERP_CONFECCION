@@ -19,6 +19,9 @@ import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { usePermissions } from '@/contexts/PermissionsContext';
+import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatNumber, formatRelativeDate } from '@/lib/utils';
 import type { PaginatedResponse } from '@/types';
@@ -92,6 +95,8 @@ function initialsOf(user: UserRow): string {
 }
 
 export default function UsersIndex({ users, filters, roles, metrics }: Props) {
+    const [view, setView] = useViewMode('users');
+
     const { isSuperAdmin } = usePermissions();
     const [term, setTerm] = useState(filters.search ?? '');
     const [confirmDelete, setConfirmDelete] = useState<UserRow | null>(null);
@@ -329,6 +334,8 @@ export default function UsersIndex({ users, filters, roles, metrics }: Props) {
                     <span className="shrink-0 text-[12px] max-sm:hidden sm:ml-auto" style={{ color: 'var(--emp-subtle)' }}>
                         {formatNumber(users.total ?? rows.length)} {(users.total ?? rows.length) === 1 ? 'usuario' : 'usuarios'}
                     </span>
+
+                    <ViewToggle variant="emp" value={view} onChange={setView} />
                 </div>
 
                 {/* -------------------------------------------------- listado */}
@@ -338,8 +345,8 @@ export default function UsersIndex({ users, filters, roles, metrics }: Props) {
                     </div>
                 ) : (
                     <>
-                        {/* Escritorio: tabla. */}
-                        <div className="mt-4 hidden lg:block">
+                        {/* Vista tabla. */}
+                        <div className={tableViewClass(view, 'mt-4')}>
                             <div
                                 className="grid items-center gap-2.5 px-3 pb-2"
                                 style={{ gridTemplateColumns: USER_GRID, borderBottom: '1px solid var(--emp-border)' }}
@@ -426,8 +433,8 @@ export default function UsersIndex({ users, filters, roles, metrics }: Props) {
                             })}
                         </div>
 
-                        {/* Movil: tarjetas. */}
-                        <div className="mt-4 flex flex-col gap-2 lg:hidden">
+                        {/* Vista tarjetas. */}
+                        <div className={cardsViewClass(view, 'mt-4')}>
                             {rows.map((user) => {
                                 const role = user.roles[0] ?? null;
                                 const color = role?.color ?? '#6366f1';

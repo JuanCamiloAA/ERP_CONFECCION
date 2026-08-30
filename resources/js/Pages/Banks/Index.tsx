@@ -5,10 +5,13 @@ import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { EntityCard } from '@/Components/UI/EntityCard';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
 import { SearchInput } from '@/Components/UI/SearchInput';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import type { Bank, PaginatedResponse } from '@/types';
 
@@ -21,6 +24,7 @@ export default function BanksIndex({ banks, filters }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
     const [status, setStatus] = useState(filters.status ?? 'all');
     const [confirmDelete, setConfirmDelete] = useState<Bank | null>(null);
+    const [view, setView] = useViewMode('banks');
 
     const updateFilters = (next: { search?: string; status?: string }) => {
         const params: Record<string, string> = {};
@@ -54,7 +58,7 @@ export default function BanksIndex({ banks, filters }: Props) {
                     }
                 />
 
-                <div className="flex flex-col gap-3 sm:flex-row">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <SearchInput
                         value={search}
                         onChange={(v) => {
@@ -76,8 +80,52 @@ export default function BanksIndex({ banks, filters }: Props) {
                         <option value="active">Activos</option>
                         <option value="inactive">Inactivos</option>
                     </select>
+
+                    <ViewToggle value={view} onChange={setView} className="sm:ml-auto" />
                 </div>
 
+                {view === 'cards' ? (
+                    <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+                        {banks.data.length === 0 ? (
+                            <p className="text-sm text-slate-500 dark:text-slate-400">No hay bancos registrados.</p>
+                        ) : (
+                            banks.data.map((b) => (
+                                <EntityCard
+                                    key={b.id}
+                                    initials={(b.code ?? b.name).slice(0, 2).toUpperCase()}
+                                    title={b.name}
+                                    subtitle={b.code ?? 'Sin código'}
+                                    status={
+                                        <Badge variant={b.is_active ? 'success' : 'danger'}>
+                                            {b.is_active ? 'Activo' : 'Inactivo'}
+                                        </Badge>
+                                    }
+                                    metrics={[{ label: 'Empleados', value: String(b.employees_count ?? 0) }]}
+                                    actions={
+                                        <>
+                                            <Can permission="banks.index.edit">
+                                                <Link href={route('banks.edit', b.id)}>
+                                                    <Button variant="outline" size="sm">
+                                                        Editar
+                                                    </Button>
+                                                </Link>
+                                            </Can>
+                                            <Can permission="banks.index.delete">
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    icon={<TrashIcon className="h-4 w-4 text-rose-500" />}
+                                                    onClick={() => setConfirmDelete(b)}
+                                                    aria-label={`Eliminar ${b.name}`}
+                                                />
+                                            </Can>
+                                        </>
+                                    }
+                                />
+                            ))
+                        )}
+                    </div>
+                ) : (
                 <Table>
                     <TableHead>
                         <TableRow>
@@ -126,6 +174,7 @@ export default function BanksIndex({ banks, filters }: Props) {
                         )}
                     </TableBody>
                 </Table>
+                )}
 
                 <Pagination links={banks.links} from={banks.from} to={banks.to} total={banks.total} />
             </div>

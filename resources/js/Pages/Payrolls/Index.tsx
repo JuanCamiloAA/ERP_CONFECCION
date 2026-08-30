@@ -7,6 +7,9 @@ import { PayrollMonthGroup } from '@/Components/Payrolls/PayrollMonthGroup';
 import { PAYROLL_GRID, PayrollRow, type PayrollRowData } from '@/Components/Payrolls/PayrollRow';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { ListViewSwitch } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { groupPayrollsByMonth, isClosed } from '@/lib/payrolls';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
@@ -109,6 +112,8 @@ export default function PayrollsIndex({ payrolls, filters, metrics, periodicitie
             ) : null}
         </div>
     );
+
+    const [view, setView] = useViewMode('payrolls');
 
     const tableHeader = (
         <div
@@ -213,6 +218,7 @@ export default function PayrollsIndex({ payrolls, filters, metrics, periodicitie
                         years={years}
                         total={total}
                         openCount={metrics.filtered_open_count}
+                        trailing={<ViewToggle variant="emp" value={view} onChange={setView} />}
                     />
                 </div>
 
@@ -223,23 +229,23 @@ export default function PayrollsIndex({ payrolls, filters, metrics, periodicitie
                     <div className="mt-4 flex flex-col gap-[22px]">
                         {buckets.map((bucket) => (
                             <PayrollMonthGroup key={bucket.key} bucket={bucket}>
-                                {/* Escritorio: tabla. */}
-                                <div className="hidden lg:block">
-                                    {tableHeader}
-                                    {bucket.rows.map((payroll) => (
-                                        <PayrollRow
-                                            key={payroll.id}
-                                            payroll={payroll}
-                                            onDelete={setConfirmDelete}
-                                            highlighted={payroll.id === highlightId}
-                                            showCompany={isConsolidatedView}
-                                        />
-                                    ))}
-                                </div>
-
-                                {/* Movil: tarjetas. */}
-                                <div className="flex flex-col gap-2 lg:hidden">
-                                    {bucket.rows.map((payroll) => (
+                                <ListViewSwitch
+                                    view={view}
+                                    table={
+                                        <>
+                                            {tableHeader}
+                                            {bucket.rows.map((payroll) => (
+                                                <PayrollRow
+                                                    key={payroll.id}
+                                                    payroll={payroll}
+                                                    onDelete={setConfirmDelete}
+                                                    highlighted={payroll.id === highlightId}
+                                                    showCompany={isConsolidatedView}
+                                                />
+                                            ))}
+                                        </>
+                                    }
+                                    cards={bucket.rows.map((payroll) => (
                                         <PayrollCard
                                             key={payroll.id}
                                             payroll={payroll}
@@ -247,7 +253,7 @@ export default function PayrollsIndex({ payrolls, filters, metrics, periodicitie
                                             showCompany={isConsolidatedView}
                                         />
                                     ))}
-                                </div>
+                                />
                             </PayrollMonthGroup>
                         ))}
                     </div>

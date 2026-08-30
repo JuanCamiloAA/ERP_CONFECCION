@@ -15,6 +15,9 @@ import { ProductionRegisterForm } from '@/Components/Productions/ProductionRegis
 import { WorkDayBanner, type WorkDayBannerPayload } from '@/Components/Productions/WorkDayBanner';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatDate, formatNumber } from '@/lib/utils';
 import type { Employee, Operation, PaginatedResponse, Production, Reference } from '@/types';
@@ -270,8 +273,10 @@ export default function ProductionsIndex({
     // En workerMode el formulario ya trae su propia barra y se solaparian.
     const showMobileCreateBar = !workerMode && !isConsolidatedView;
 
+    const [view, setView] = useViewMode('productions');
+
     const viewSwitch = (
-        <div className="emp-seg shrink-0 max-lg:hidden">
+        <div className={`emp-seg shrink-0 max-lg:hidden ${view === 'cards' ? 'hidden' : ''}`}>
             <button
                 type="button"
                 onClick={() => chooseView('list')}
@@ -413,11 +418,12 @@ export default function ProductionsIndex({
                         operations={operations}
                         exportUrl={exportUrl}
                         viewSwitch={viewSwitch}
+                        trailing={<ViewToggle variant="emp" value={view} onChange={setView} />}
                     />
                 </div>
 
-                {/* ------------------------------------------- movil: por dia */}
-                <div className="mt-4 flex flex-col gap-4 lg:hidden">
+                {/* ------------------------------------- vista tarjetas: por dia */}
+                <div className={cardsViewClass(view, 'mt-4 gap-4')}>
                     {rows.length === 0 ? <div className="emp-card">{emptyState}</div> : null}
 
                     {buckets.map((bucket) => (
@@ -445,8 +451,8 @@ export default function ProductionsIndex({
                     ))}
                 </div>
 
-                {/* -------------------------------------------- escritorio */}
-                <div className="mt-4 hidden lg:block">
+                {/* ------------------------------------------------- vista tabla */}
+                <div className={tableViewClass(view, 'mt-4')}>
                     {viewMode === 'list' ? (
                         <ProductionTable totalQuantity={totals.total_quantity} totalValue={totals.total_value}>
                             <ProductionTableHeader />

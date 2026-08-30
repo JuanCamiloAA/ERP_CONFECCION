@@ -3,6 +3,9 @@ import { CaretDown, CaretUp, MagnifyingGlass, PencilSimple, Plus, Trash } from '
 import { useEffect, useMemo, useState } from 'react';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { monthName } from '@/lib/expenses';
 import { formatCurrency, formatNumber } from '@/lib/utils';
@@ -35,6 +38,8 @@ const STATUS_SEGMENTS = [
 ];
 
 export default function ExpenseCategoriesIndex({ categories, filters, summary }: Props) {
+    const [view, setView] = useViewMode('expense-categories');
+
     const isConsolidatedView = usePage<App.PageProps>().props.isConsolidatedView ?? false;
     const [term, setTerm] = useState(filters.search ?? '');
     const [confirmDelete, setConfirmDelete] = useState<CategoryRow | null>(null);
@@ -243,6 +248,8 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                         {formatNumber(categories.length)} de {formatNumber(summary.total)}{' '}
                         {summary.total === 1 ? 'categoría' : 'categorías'}
                     </span>
+
+                    <ViewToggle variant="emp" value={view} onChange={setView} />
                 </div>
 
                 {/* ----------------------------------------------------- lista */}
@@ -252,8 +259,8 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                     </div>
                 ) : (
                     <>
-                        {/* Escritorio: tabla. */}
-                        <div className="mt-4 hidden lg:block">
+                        {/* Vista tabla. */}
+                        <div className={tableViewClass(view, 'mt-4')}>
                             <div
                                 className="grid items-center gap-2.5 px-3 pb-2"
                                 style={{ gridTemplateColumns: CATEGORY_GRID, borderBottom: '1px solid var(--emp-border)' }}
@@ -376,8 +383,8 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
                             ))}
                         </div>
 
-                        {/* Movil: tarjetas. */}
-                        <div className="mt-4 flex flex-col gap-2 lg:hidden">
+                        {/* Vista tarjetas. */}
+                        <div className={cardsViewClass(view, 'mt-4')}>
                             {categories.map((category) => (
                                 <article
                                     key={category.id}

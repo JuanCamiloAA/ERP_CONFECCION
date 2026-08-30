@@ -18,6 +18,9 @@ import { Modal } from '@/Components/UI/Modal';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
+import { EntityCard } from '@/Components/UI/EntityCard';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { cn } from '@/lib/utils';
 import type { DataImportBatch, PaginatedResponse } from '@/types';
@@ -188,6 +191,7 @@ export default function DataImportsIndex({
     const [previewBatchId, setPreviewBatchId] = useState<number | null>(null);
     const [confirmDelete, setConfirmDelete] = useState<DataImportBatch | null>(null);
     const [deletingBatchId, setDeletingBatchId] = useState<number | null>(null);
+    const [vista, setVista] = useViewMode('data-imports');
 
     /** Archivo elegido por fila, venga del selector o de arrastrarlo encima. */
     const [picked, setPicked] = useState<Record<string, File | null>>({});
@@ -1168,10 +1172,73 @@ export default function DataImportsIndex({
                                     </option>
                                 ))}
                             </select>
+
+                            <ViewToggle value={vista} onChange={setVista} className="ml-auto" />
                         </div>
                     </div>
 
                     <div className={cn('space-y-3 lg:block', historialAbierto ? 'block' : 'hidden')}>
+                    {vista === 'cards' ? (
+                        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+                            {batches.data.length === 0 ? (
+                                <p className="text-sm text-slate-500">
+                                    No hay importaciones que coincidan con el filtro.
+                                </p>
+                            ) : (
+                                batches.data.map((b) => (
+                                    <EntityCard
+                                        key={b.id}
+                                        initials={(types[b.type] ?? b.type).slice(0, 2).toUpperCase()}
+                                        title={b.original_filename}
+                                        subtitle={`${types[b.type] ?? b.type} · ${new Date(b.created_at).toLocaleString()}`}
+                                        status={<Badge variant={statusVariant(b.status)}>{statusLabel(b.status)}</Badge>}
+                                        metrics={[
+                                            { label: 'Filas OK', value: String(b.rows_success) },
+                                            { label: 'Con error', value: String(b.rows_failed) },
+                                        ]}
+                                        tag={
+                                            b.user
+                                                ? `${b.user.name} ${b.user.last_name ?? ''}`.trim()
+                                                : `Usuario ID ${b.user_id}`
+                                        }
+                                        actions={
+                                            <>
+                                                <Button
+                                                    type="button"
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    loading={previewLoading && previewBatchId === b.id}
+                                                    disabled={previewLoading}
+                                                    onClick={() => openPreview(b)}
+                                                >
+                                                    <EyeIcon className="h-4 w-4" aria-hidden />
+                                                    <span className="ml-1">Vista previa</span>
+                                                </Button>
+                                                {canProcessBatch(b.status) ? (
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="success"
+                                                        loading={processingBatchId === b.id}
+                                                        disabled={processingBatchId !== null}
+                                                        onClick={() => runProcess(b.id)}
+                                                    >
+                                                        {processingBatchId === b.id ? 'Procesando…' : 'Procesar'}
+                                                    </Button>
+                                                ) : null}
+                                                <Link
+                                                    href={route('super-admin.data-imports.show', b.id)}
+                                                    className="text-sm font-medium text-indigo-600 hover:text-indigo-500 dark:text-indigo-400"
+                                                >
+                                                    Ver detalle
+                                                </Link>
+                                            </>
+                                        }
+                                    />
+                                ))
+                            )}
+                        </div>
+                    ) : (
                     <Table>
                         <TableHead>
                             <TableRow>
@@ -1271,6 +1338,7 @@ export default function DataImportsIndex({
                             )}
                         </TableBody>
                     </Table>
+                    )}
                     <Pagination links={batches.links} from={batches.from} to={batches.to} total={batches.total} />
                     </div>
                 </section>

@@ -1,5 +1,5 @@
 import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { difficultyLabel } from '@/lib/difficulty';
 import { formatNumber } from '@/lib/utils';
 
@@ -19,6 +19,8 @@ interface Props {
     filters: OperationFilters;
     onChange: (next: OperationFilters) => void;
     total: number;
+    /** Controles que van al extremo derecho de la barra (hoy, el conmutador de vista). */
+    trailing?: ReactNode;
 }
 
 /**
@@ -27,7 +29,7 @@ interface Props {
  * La busqueda espera 300 ms antes de recargar: escribir «pegar sesgo» disparaba once
  * peticiones, y la lista parpadeaba con cada letra.
  */
-export function OperationFilterBar({ filters, onChange, total }: Props) {
+export function OperationFilterBar({ filters, onChange, total, trailing }: Props) {
     const [term, setTerm] = useState(filters.search);
 
     // Si el filtro cambia desde fuera (limpiar todo), el campo tiene que seguirlo.
@@ -100,6 +102,8 @@ export function OperationFilterBar({ filters, onChange, total }: Props) {
             <span className="shrink-0 text-[12px] max-sm:hidden sm:ml-auto" style={{ color: 'var(--emp-subtle)' }}>
                 {formatNumber(total)} {total === 1 ? 'operación' : 'operaciones'}
             </span>
+
+            {trailing}
         </div>
     );
 }

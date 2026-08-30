@@ -1,10 +1,14 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { Plus, Scales } from '@phosphor-icons/react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { LegalParameterActiveCard } from '@/Components/PayrollLegalParameters/LegalParameterActiveCard';
+import { LegalParameterTable } from '@/Components/PayrollLegalParameters/LegalParameterTable';
 import { LegalParameterTramoCard } from '@/Components/PayrollLegalParameters/LegalParameterTramoCard';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import type { LegalParameterRow } from '@/lib/legalParameters';
 import { formatDate, formatNumber } from '@/lib/utils';
@@ -19,6 +23,20 @@ interface Props {
 
 export default function PayrollLegalParametersIndex({ parameters, active, isSuperAdmin, salaryExample }: Props) {
     const [confirmDelete, setConfirmDelete] = useState<LegalParameterRow | null>(null);
+    const [view, setView] = useViewMode('payroll-legal-parameters');
+
+    // Los de la empresa primero: son los que mandan sobre el global.
+    const sorted = useMemo(
+        () =>
+            [...parameters].sort((a, b) => {
+                if (a.scope !== b.scope) {
+                    return a.scope === 'company' ? -1 : 1;
+                }
+
+                return String(b.effective_from).localeCompare(String(a.effective_from));
+            }),
+        [parameters],
+    );
 
     return (
         <AppLayout title="Parámetros legales de nómina">
@@ -95,6 +113,8 @@ export default function PayrollLegalParametersIndex({ parameters, active, isSupe
                             · {formatNumber(parameters.length)} {parameters.length === 1 ? 'tramo' : 'tramos'} · los
                             globales aplican a toda empresa sin tramo propio
                         </p>
+
+                        <ViewToggle variant="emp" value={view} onChange={setView} className="ml-auto self-center" />
                     </header>
 
                     {parameters.length === 0 ? (
@@ -102,17 +122,17 @@ export default function PayrollLegalParametersIndex({ parameters, active, isSupe
                             No hay tramos configurados.
                         </div>
                     ) : (
-                        <div className="flex flex-col gap-2.5">
-                            {/* Los de la empresa primero: son los que mandan. */}
-                            {[...parameters]
-                                .sort((a, b) => {
-                                    if (a.scope !== b.scope) {
-                                        return a.scope === 'company' ? -1 : 1;
-                                    }
+                        <>
+                            <div className={tableViewClass(view)}>
+                                <LegalParameterTable
+                                    parameters={sorted}
+                                    isSuperAdmin={isSuperAdmin}
+                                    onDelete={setConfirmDelete}
+                                />
+                            </div>
 
-                                    return String(b.effective_from).localeCompare(String(a.effective_from));
-                                })
-                                .map((parameter) => (
+                            <div className={cardsViewClass(view, 'gap-2.5')}>
+                                {sorted.map((parameter) => (
                                     <LegalParameterTramoCard
                                         key={parameter.id}
                                         parameter={parameter}
@@ -120,7 +140,8 @@ export default function PayrollLegalParametersIndex({ parameters, active, isSupe
                                         onDelete={setConfirmDelete}
                                     />
                                 ))}
-                        </div>
+                            </div>
+                        </>
                     )}
                 </section>
             </div>

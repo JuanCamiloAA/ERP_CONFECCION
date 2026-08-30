@@ -92,6 +92,20 @@ class SettingController extends Controller
         ]);
 
         $validator->after(function ($validator) use ($request) {
+            // La suma de deducciones no puede pasar del 100 %: el neto quedaria negativo y
+            // el calculo de nomina lo recortaria a cero sin decir por que.
+            $deductions = $request->input('settings.default_deductions');
+            if (is_array($deductions) && $deductions !== []) {
+                $sum = array_sum(array_map(fn ($row) => (float) ($row['percent'] ?? 0), $deductions));
+
+                if ($sum > 100) {
+                    $validator->errors()->add(
+                        'settings.default_deductions',
+                        'Las deducciones suman '.number_format($sum, 2, ',', '.').' %; no pueden pasar del 100 %.'
+                    );
+                }
+            }
+
             $thresholds = $request->input('settings.difficulty_minute_thresholds');
             if (! is_array($thresholds) || count($thresholds) !== 4) {
                 return;

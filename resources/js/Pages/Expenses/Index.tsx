@@ -12,6 +12,9 @@ import { EXPENSE_GRID, ExpenseRow, type ExpenseRowData } from '@/Components/Expe
 import { QuickCaptureSheet } from '@/Components/Expenses/QuickCaptureSheet';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { ListViewSwitch } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { groupExpensesByMonth, monthName, variationPercent } from '@/lib/expenses';
 import { formatCurrency, formatNumber } from '@/lib/utils';
@@ -116,6 +119,8 @@ export default function ExpensesIndex({ expenses, categoryOptions, filters, filt
         },
     ];
 
+    const [view, setView] = useViewMode('expenses');
+
     const tableHeader = (
         <div
             className="grid items-center gap-2.5 px-3 pb-2"
@@ -212,6 +217,7 @@ export default function ExpensesIndex({ expenses, categoryOptions, filters, filt
                         categories={categoryOptions}
                         total={total}
                         filteredTotal={filteredTotal}
+                        trailing={<ViewToggle variant="emp" value={view} onChange={setView} />}
                     />
                 </div>
 
@@ -242,23 +248,23 @@ export default function ExpensesIndex({ expenses, categoryOptions, filters, filt
                     <div className="mt-4 flex flex-col gap-[22px]">
                         {buckets.map((bucket) => (
                             <ExpenseMonthGroup key={bucket.key} bucket={bucket}>
-                                {/* Escritorio: tabla. */}
-                                <div className="hidden lg:block">
-                                    {tableHeader}
-                                    {bucket.rows.map((expense) => (
-                                        <ExpenseRow
-                                            key={expense.id}
-                                            expense={expense}
-                                            onDelete={setConfirmDelete}
-                                            showCompany={isConsolidatedView}
-                                            readOnly={isConsolidatedView}
-                                        />
-                                    ))}
-                                </div>
-
-                                {/* Movil: tarjetas. */}
-                                <div className="flex flex-col gap-2 lg:hidden">
-                                    {bucket.rows.map((expense) => (
+                                <ListViewSwitch
+                                    view={view}
+                                    table={
+                                        <>
+                                            {tableHeader}
+                                            {bucket.rows.map((expense) => (
+                                                <ExpenseRow
+                                                    key={expense.id}
+                                                    expense={expense}
+                                                    onDelete={setConfirmDelete}
+                                                    showCompany={isConsolidatedView}
+                                                    readOnly={isConsolidatedView}
+                                                />
+                                            ))}
+                                        </>
+                                    }
+                                    cards={bucket.rows.map((expense) => (
                                         <ExpenseCard
                                             key={expense.id}
                                             expense={expense}
@@ -267,7 +273,7 @@ export default function ExpensesIndex({ expenses, categoryOptions, filters, filt
                                             readOnly={isConsolidatedView}
                                         />
                                     ))}
-                                </div>
+                                />
                             </ExpenseMonthGroup>
                         ))}
                     </div>

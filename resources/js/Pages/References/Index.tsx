@@ -9,9 +9,12 @@ import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
 import { RowActionsMenu, type RowAction } from '@/Components/UI/RowActionsMenu';
+import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
 import { SearchInput } from '@/Components/UI/SearchInput';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
 import { usePermissions } from '@/contexts/PermissionsContext';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { formatCurrency, formatNumber } from '@/lib/utils';
@@ -53,6 +56,8 @@ function money(value: string | number | null | undefined): string {
 }
 
 export default function ReferencesIndex({ references, filters }: Props) {
+    const [view, setView] = useViewMode('references');
+
     const perms = usePermissions();
     const [search, setSearch] = useState(filters.search ?? '');
     const [confirmDelete, setConfirmDelete] = useState<Reference | null>(null);
@@ -158,15 +163,19 @@ export default function ReferencesIndex({ references, filters }: Props) {
                     }
                 />
 
-                <SearchInput
-                    value={search}
-                    onChange={(v) => {
-                        setSearch(v);
-                        updateFilters(v);
-                    }}
-                    placeholder="Buscar por codigo o nombre..."
-                    className="sm:max-w-md [&_input]:h-11 lg:[&_input]:h-10"
-                />
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                    <SearchInput
+                        value={search}
+                        onChange={(v) => {
+                            setSearch(v);
+                            updateFilters(v);
+                        }}
+                        placeholder="Buscar por codigo o nombre..."
+                        className="sm:max-w-md [&_input]:h-11 lg:[&_input]:h-10"
+                    />
+
+                    <ViewToggle value={view} onChange={setView} className="sm:ml-auto" />
+                </div>
 
                 {/* Barra de seleccion: aparece al marcar la primera referencia. */}
                 {selected.length > 0 ? (
@@ -189,7 +198,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
                 ) : null}
 
                 {/* Movil: tarjeta con avance del lote y las dos cifras clave legibles. */}
-                <div className="space-y-3 lg:hidden">
+                <div className={cardsViewClass(view, 'gap-3')}>
                     {references.data.length === 0 ? (
                         <div className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-400">
                             No hay referencias.
@@ -288,7 +297,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
                     )}
                 </div>
 
-                <div className="hidden lg:block">
+                <div className={tableViewClass(view)}>
                     <Table>
                         <TableHead>
                             <TableRow>

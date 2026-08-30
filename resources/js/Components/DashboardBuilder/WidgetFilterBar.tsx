@@ -1,5 +1,5 @@
 import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import type { WidgetType } from '@/Components/DashboardBuilder/dashboard-builder-types';
 import { TYPE_LABELS, WIDGET_TYPES } from '@/lib/dashboard-widgets';
 import { formatNumber } from '@/lib/utils';
@@ -24,6 +24,8 @@ interface Props {
     companies: { id: number; name: string }[];
     total: number;
     unassigned: number;
+    /** Controles que van al extremo derecho de la barra (hoy, el conmutador de vista). */
+    trailing?: ReactNode;
 }
 
 /**
@@ -32,7 +34,7 @@ interface Props {
  * No hay botón «Filtrar»: cada cambio recarga. La búsqueda espera 300 ms para no disparar
  * una petición por letra.
  */
-export function WidgetFilterBar({ filters, onChange, companies, total, unassigned }: Props) {
+export function WidgetFilterBar({ filters, onChange, companies, total, unassigned, trailing }: Props) {
     const [term, setTerm] = useState(filters.search);
 
     useEffect(() => {
@@ -130,6 +132,8 @@ export function WidgetFilterBar({ filters, onChange, companies, total, unassigne
             <span className="shrink-0 text-[12px] max-sm:hidden sm:ml-auto" style={{ color: 'var(--emp-subtle)' }}>
                 {formatNumber(total)} {total === 1 ? 'widget' : 'widgets'} · {formatNumber(unassigned)} sin asignar
             </span>
+
+            {trailing}
         </div>
     );
 }

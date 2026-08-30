@@ -31,9 +31,20 @@ class PayrollPeriodicityPolicy
         return $user->can('payroll_periodicities.index.create');
     }
 
+    /** Reordenar y activar/desactivar no apuntan a una fila concreta, sino a la lista. */
+    public function reorder(User $user): bool
+    {
+        return $user->can('payroll_periodicities.index.reorder');
+    }
+
     public function update(User $user, PayrollPeriodicity $payrollPeriodicity): bool
     {
         return $user->can('payroll_periodicities.index.edit');
+    }
+
+    public function toggle(User $user, PayrollPeriodicity $payrollPeriodicity): bool
+    {
+        return $user->can('payroll_periodicities.index.toggle');
     }
 
     public function delete(User $user, PayrollPeriodicity $payrollPeriodicity): bool

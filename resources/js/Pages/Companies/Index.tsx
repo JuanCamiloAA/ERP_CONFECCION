@@ -1,17 +1,33 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { BuildingOffice2Icon, PencilSquareIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
-import { useState } from 'react';
+import {
+    ArrowDownTrayIcon,
+    BuildingOffice2Icon,
+    PencilSquareIcon,
+    PlusIcon,
+    UsersIcon,
+} from '@heroicons/react/24/outline';
+import { useMemo, useState } from 'react';
 import { Avatar } from '@/Components/UI/Avatar';
 import { Badge } from '@/Components/UI/Badge';
 import { Button } from '@/Components/UI/Button';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { EmptyState } from '@/Components/UI/EmptyState';
+import { EntityCard } from '@/Components/UI/EntityCard';
+import { FilterChips } from '@/Components/UI/FilterChips';
 import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
+import { RowActionsMenu } from '@/Components/UI/RowActionsMenu';
 import { SearchInput } from '@/Components/UI/SearchInput';
+import { StatBand, type Stat } from '@/Components/UI/StatBand';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
+import { UsageBar } from '@/Components/UI/UsageBar';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
+import { companyInitials, membershipLabel, type MembershipPlanRef } from '@/lib/companies';
 import { mediaUrl } from '@/lib/mediaUrl';
+import { cn } from '@/lib/utils';
 import type { PaginatedResponse } from '@/types';
 
 interface CompanyRow {
@@ -23,146 +39,375 @@ interface CompanyRow {
     address: string | null;
     logo: string | null;
     is_active: boolean;
+    membership_ends_at: string | null;
     employees_count: number;
-    users_count: number;
     staff_users_count: number;
-    membership_plan: { id: number; name: string; max_staff_users: number | null } | null;
+    membership_plan: MembershipPlanRef | null;
 }
 
 interface Props {
     companies: PaginatedResponse<CompanyRow>;
-    filters: { search: string };
+    filters: { search: string; status: string; plan: string | null };
+    stats: Stat[];
+    chipCounts: Record<string, number>;
+    summary: { total: number; active: number; staff_used: number; staff_limit: number | null };
+    plans: { id: number; name: string; slug: string }[];
 }
 
-export default function CompaniesIndex({ companies, filters }: Props) {
+const STATUS_CHIPS = [
+    { key: 'all', label: 'Todas' },
+    { key: 'active', label: 'Activas' },
+    { key: 'inactive', label: 'Inactivas' },
+    { key: 'at_limit', label: 'Al límite de staff' },
+    { key: 'expiring', label: 'Por vencer' },
+];
+
+export default function CompaniesIndex({ companies, filters, stats, chipCounts, summary, plans }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
     const [confirmDelete, setConfirmDelete] = useState<CompanyRow | null>(null);
+    const [view, setView] = useViewMode('companies');
 
-    const updateFilters = (value: string) => {
+    const hasFilters = Boolean(filters.search) || filters.status !== 'all' || Boolean(filters.plan);
+
+    /**
+     * Todo cambio de filtro pasa por aqui para que el resto se conserve: cambiar de estado no
+     * puede borrar la busqueda que se acaba de escribir. La pagina no se arrastra a proposito
+     * (la 4 de «Todas» no es la 4 de «Por vencer»).
+     */
+    const applyFilters = (next: Partial<{ search: string; status: string; plan: string | null }>) => {
+        const merged = { search, status: filters.status, plan: filters.plan, ...next };
         const params: Record<string, string> = {};
-        if (value) params.search = value;
+
+        if (merged.search) params.search = merged.search;
+        if (merged.status && merged.status !== 'all') params.status = merged.status;
+        if (merged.plan) params.plan = merged.plan;
+
         router.get(route('companies.index'), params, { preserveState: true, preserveScroll: true, replace: true });
     };
 
+    const chips = useMemo(
+        () => STATUS_CHIPS.map((chip) => ({ ...chip, count: chipCounts[chip.key] ?? 0 })),
+        [chipCounts],
+    );
+
+    const exportUrl = useMemo(() => {
+        const params = new URLSearchParams();
+        if (filters.search) params.set('search', filters.search);
+        if (filters.status && filters.status !== 'all') params.set('status', filters.status);
+        if (filters.plan) params.set('plan', filters.plan);
+        const query = params.toString();
+
+        return route('companies.export') + (query ? `?${query}` : '');
+    }, [filters.search, filters.status, filters.plan]);
+
     const handleDelete = () => {
-        if (!confirmDelete) return;
+        if (! confirmDelete) return;
         router.delete(route('companies.destroy', confirmDelete.id), {
+            preserveScroll: true,
             onFinish: () => setConfirmDelete(null),
         });
     };
 
+    const staffSummary = `${summary.staff_used}/${summary.staff_limit ?? '∞'}`;
+
+    const rowActions = (company: CompanyRow) => [
+        {
+            key: 'users',
+            label: 'Usuarios de la empresa',
+            icon: <UsersIcon className="h-4 w-4" />,
+            href: route('users.index', { company_id: company.id }),
+        },
+        // El contacto salio de su columna; aqui no es solo texto: abre el correo o marca.
+        ...(company.email ? [{ key: 'email', label: company.email, href: `mailto:${company.email}` }] : []),
+        ...(company.phone ? [{ key: 'phone', label: company.phone, href: `tel:${company.phone}` }] : []),
+    ];
+
     return (
         <AppLayout title="Empresas">
             <Head title="Empresas" />
+
             <div className="space-y-6">
                 <PageHeader
                     title="Empresas"
-                    description="Gestiona las empresas del sistema (solo super administradores)."
+                    description={`${summary.total} empresas · ${summary.active} activas · ${staffSummary} usuarios staff`}
                     action={
-                        <Can permission="companies.index.create">
-                            <Link href={route('companies.create')}>
-                                <Button icon={<PlusIcon className="h-4 w-4" />}>Nueva empresa</Button>
-                            </Link>
-                        </Can>
+                        <>
+                            <Can permission="companies.index.export">
+                                <a href={exportUrl} className="shrink-0">
+                                    <Button
+                                        variant="outline"
+                                        icon={<ArrowDownTrayIcon className="h-4 w-4" />}
+                                        className="whitespace-nowrap shrink-0"
+                                    >
+                                        Exportar
+                                    </Button>
+                                </a>
+                            </Can>
+                            <Can permission="companies.index.create">
+                                <Link href={route('companies.create')} className="shrink-0">
+                                    <Button icon={<PlusIcon className="h-4 w-4" />} className="whitespace-nowrap shrink-0">
+                                        Nueva empresa
+                                    </Button>
+                                </Link>
+                            </Can>
+                        </>
                     }
                 />
 
-                <SearchInput
-                    value={search}
-                    onChange={(v) => {
-                        setSearch(v);
-                        updateFilters(v);
-                    }}
-                    placeholder="Buscar por nombre o NIT..."
-                    className="sm:max-w-md"
-                />
+                <StatBand stats={stats} />
 
-                <Table>
-                    <TableHead>
-                        <TableRow>
-                            <TableHeader>Empresa</TableHeader>
-                            <TableHeader>NIT</TableHeader>
-                            <TableHeader>Contacto</TableHeader>
-                            <TableHeader align="center">Empleados</TableHeader>
-                            <TableHeader align="center">Usuarios</TableHeader>
-                            <TableHeader align="center">Staff</TableHeader>
-                            <TableHeader>Plan</TableHeader>
-                            <TableHeader align="center">Estado</TableHeader>
-                            <TableHeader align="right">Acciones</TableHeader>
-                        </TableRow>
-                    </TableHead>
-                    <TableBody>
-                        {companies.data.length === 0 ? (
-                            <tr>
-                                <td colSpan={9} className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400">
-                                    No se encontraron empresas.
-                                </td>
-                            </tr>
-                        ) : (
-                            companies.data.map((company) => (
-                                <TableRow key={company.id}>
-                                    <TableCell>
-                                        <div className="flex items-center gap-3">
-                                            {company.logo ? (
-                                                <Avatar src={mediaUrl(company.logo)} name={company.name} size="sm" zoomable />
-                                            ) : (
-                                                <div className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-100 text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-400">
-                                                    <BuildingOffice2Icon className="h-5 w-5" />
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+                    <SearchInput
+                        value={search}
+                        onChange={(v) => {
+                            setSearch(v);
+                            applyFilters({ search: v });
+                        }}
+                        placeholder="Buscar por nombre o NIT..."
+                        className="lg:max-w-xs"
+                    />
+
+                    <FilterChips
+                        chips={chips}
+                        active={filters.status ?? 'all'}
+                        onChange={(key) => applyFilters({ status: key })}
+                        label="Estado de la empresa"
+                        className="lg:flex-1"
+                    />
+
+                    {plans.length > 0 ? (
+                        <div className="w-full sm:w-48 lg:w-44">
+                            <select
+                                value={filters.plan ?? ''}
+                                onChange={(e) => applyFilters({ plan: e.target.value || null })}
+                                aria-label="Filtrar por plan"
+                                className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                            >
+                                <option value="">Todos los planes</option>
+                                {plans.map((plan) => (
+                                    <option key={plan.id} value={plan.slug}>
+                                        {plan.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                    ) : null}
+
+                    <ViewToggle value={view} onChange={setView} className="lg:ml-auto" />
+                </div>
+
+                {companies.data.length === 0 ? (
+                    <EmptyState
+                        icon={<BuildingOffice2Icon className="h-8 w-8" />}
+                        title="No se encontraron empresas"
+                        description={
+                            hasFilters
+                                ? 'Ninguna empresa coincide con los filtros aplicados.'
+                                : 'Todavía no hay empresas registradas en el sistema.'
+                        }
+                        action={
+                            hasFilters ? (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => {
+                                        setSearch('');
+                                        router.get(route('companies.index'), {}, { preserveScroll: true, replace: true });
+                                    }}
+                                >
+                                    Limpiar filtros
+                                </Button>
+                            ) : (
+                                <Can permission="companies.index.create">
+                                    <Link href={route('companies.create')}>
+                                        <Button icon={<PlusIcon className="h-4 w-4" />}>Nueva empresa</Button>
+                                    </Link>
+                                </Can>
+                            )
+                        }
+                    />
+                ) : view === 'table' ? (
+                    <Table>
+                        <TableHead>
+                            <TableRow>
+                                <TableHeader>Empresa</TableHeader>
+                                <TableHeader>Plan</TableHeader>
+                                <TableHeader>Usuarios staff</TableHeader>
+                                <TableHeader align="right">Empleados</TableHeader>
+                                <TableHeader>Membresía</TableHeader>
+                                <TableHeader align="right">Acciones</TableHeader>
+                            </TableRow>
+                        </TableHead>
+                        <TableBody>
+                            {companies.data.map((company) => {
+                                const membership = membershipLabel(company.membership_ends_at);
+
+                                return (
+                                    <TableRow key={company.id}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3">
+                                                {company.logo ? (
+                                                    <Avatar src={mediaUrl(company.logo)} name={company.name} size="sm" zoomable />
+                                                ) : (
+                                                    <span
+                                                        aria-hidden="true"
+                                                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-100 text-xs font-semibold text-indigo-600 dark:bg-indigo-900/40 dark:text-indigo-300"
+                                                    >
+                                                        {companyInitials(company.name)}
+                                                    </span>
+                                                )}
+                                                <div className="min-w-0">
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+                                                            {company.name}
+                                                        </p>
+                                                        <Badge variant={company.is_active ? 'success' : 'danger'}>
+                                                            {company.is_active ? 'Activa' : 'Inactiva'}
+                                                        </Badge>
+                                                    </div>
+                                                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                                        {[company.nit, company.address].filter(Boolean).join(' · ') || 'Sin NIT'}
+                                                    </p>
                                                 </div>
-                                            )}
-                                            <div>
-                                                <p className="font-medium text-slate-900 dark:text-slate-100">{company.name}</p>
-                                                {company.address && <p className="text-xs text-slate-500">{company.address}</p>}
                                             </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell>{company.nit ?? '-'}</TableCell>
-                                    <TableCell>
-                                        <div className="text-xs text-slate-500">
-                                            {company.email && <p>{company.email}</p>}
-                                            {company.phone && <p>{company.phone}</p>}
-                                            {!company.email && !company.phone && '-'}
-                                        </div>
-                                    </TableCell>
-                                    <TableCell align="center">{company.employees_count}</TableCell>
-                                    <TableCell align="center">{company.users_count}</TableCell>
-                                    <TableCell align="center">
-                                        {company.staff_users_count}
-                                        {company.membership_plan?.max_staff_users == null
-                                            ? ' / ∞'
-                                            : ` / ${company.membership_plan.max_staff_users}`}
-                                    </TableCell>
-                                    <TableCell>
-                                        <span className="text-sm text-slate-700 dark:text-slate-200">{company.membership_plan?.name ?? '—'}</span>
-                                    </TableCell>
-                                    <TableCell align="center">
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <Badge variant="neutral">{company.membership_plan?.name ?? 'Sin plan'}</Badge>
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <UsageBar
+                                                used={company.staff_users_count}
+                                                limit={company.membership_plan?.max_staff_users ?? null}
+                                                className="min-w-[9rem]"
+                                            />
+                                        </TableCell>
+
+                                        <TableCell align="right">
+                                            <span className="tabular-nums">{company.employees_count}</span>
+                                        </TableCell>
+
+                                        <TableCell>
+                                            <span
+                                                className={cn(
+                                                    'text-xs',
+                                                    membership.tone === 'expired' && 'font-medium text-rose-600 dark:text-rose-400',
+                                                    membership.tone === 'soon' && 'font-medium text-amber-600 dark:text-amber-400',
+                                                    membership.tone === 'default' && 'text-slate-500 dark:text-slate-400',
+                                                )}
+                                            >
+                                                {membership.text}
+                                            </span>
+                                        </TableCell>
+
+                                        <TableCell align="right">
+                                            <div className="flex items-center justify-end gap-1">
+                                                <Can permission="companies.index.edit">
+                                                    <Link href={route('companies.edit', company.id)}>
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="sm"
+                                                            icon={<PencilSquareIcon className="h-4 w-4" />}
+                                                            aria-label={`Editar ${company.name}`}
+                                                        />
+                                                    </Link>
+                                                </Can>
+                                                <RowActionsMenu
+                                                    actions={[
+                                                        ...rowActions(company),
+                                                        ...(company.is_active
+                                                            ? [
+                                                                  {
+                                                                      key: 'deactivate',
+                                                                      label: 'Desactivar empresa',
+                                                                      danger: true,
+                                                                      onClick: () => setConfirmDelete(company),
+                                                                  },
+                                                              ]
+                                                            : []),
+                                                    ]}
+                                                    label={`Acciones de ${company.name}`}
+                                                />
+                                            </div>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                    </Table>
+                ) : (
+                    <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(280px,1fr))]">
+                        {companies.data.map((company) => {
+                            const membership = membershipLabel(company.membership_ends_at);
+
+                            return (
+                                <EntityCard
+                                    key={company.id}
+                                    initials={companyInitials(company.name)}
+                                    logo={
+                                        company.logo ? (
+                                            <Avatar src={mediaUrl(company.logo)} name={company.name} size="sm" zoomable />
+                                        ) : undefined
+                                    }
+                                    title={company.name}
+                                    subtitle={company.nit ?? 'Sin NIT'}
+                                    status={
                                         <Badge variant={company.is_active ? 'success' : 'danger'}>
                                             {company.is_active ? 'Activa' : 'Inactiva'}
                                         </Badge>
-                                    </TableCell>
-                                    <TableCell align="right">
-                                        <div className="flex justify-end gap-1">
+                                    }
+                                    metrics={[
+                                        { label: 'Empleados', value: String(company.employees_count) },
+                                        { label: 'Staff', value: String(company.staff_users_count) },
+                                    ]}
+                                    usage={
+                                        <UsageBar
+                                            used={company.staff_users_count}
+                                            limit={company.membership_plan?.max_staff_users ?? null}
+                                            label="Usuarios staff"
+                                        />
+                                    }
+                                    tag={
+                                        <span className="flex flex-wrap items-center gap-x-1.5">
+                                            <span>{company.membership_plan?.name ?? 'Sin plan'}</span>
+                                            <span aria-hidden="true">·</span>
+                                            <span
+                                                className={cn(
+                                                    membership.tone === 'expired' && 'font-medium text-rose-600 dark:text-rose-400',
+                                                    membership.tone === 'soon' && 'font-medium text-amber-600 dark:text-amber-400',
+                                                )}
+                                            >
+                                                {membership.text}
+                                            </span>
+                                        </span>
+                                    }
+                                    actions={
+                                        <>
                                             <Can permission="companies.index.edit">
                                                 <Link href={route('companies.edit', company.id)}>
-                                                    <Button variant="ghost" size="sm" icon={<PencilSquareIcon className="h-4 w-4" />} />
+                                                    <Button variant="outline" size="sm">
+                                                        Editar
+                                                    </Button>
                                                 </Link>
                                             </Can>
-                                            <Can permission="companies.index.delete">
-                                                <Button variant="ghost" size="sm" icon={<TrashIcon className="h-4 w-4 text-rose-500" />} onClick={() => setConfirmDelete(company)} />
-                                            </Can>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                            ))
-                        )}
-                    </TableBody>
-                </Table>
+                                            <Link href={route('users.index', { company_id: company.id })}>
+                                                <Button variant="ghost" size="sm">
+                                                    Usuarios
+                                                </Button>
+                                            </Link>
+                                        </>
+                                    }
+                                />
+                            );
+                        })}
+                    </div>
+                )}
 
                 <Pagination links={companies.links} from={companies.from} to={companies.to} total={companies.total} />
             </div>
 
             <ConfirmDialog
-                open={!!confirmDelete}
+                open={!! confirmDelete}
                 onClose={() => setConfirmDelete(null)}
                 onConfirm={handleDelete}
                 title="Desactivar empresa"

@@ -5,6 +5,9 @@ import { WidgetCard } from '@/Components/DashboardBuilder/WidgetCard';
 import { WidgetFilterBar, type WidgetFilters } from '@/Components/DashboardBuilder/WidgetFilterBar';
 import { WIDGET_GRID, WidgetRow, type WidgetListRow } from '@/Components/DashboardBuilder/WidgetRow';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { ListViewSwitch } from '@/Components/UI/ListViewSwitch';
+import { ViewToggle } from '@/Components/UI/ViewToggle';
+import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatNumber } from '@/lib/utils';
 import type { PaginatedResponse } from '@/types';
@@ -54,6 +57,7 @@ export default function DashboardWidgetsIndex({ widgets, filters, metrics, compa
 
     const rows = widgets.data;
     const total = widgets.total ?? rows.length;
+    const [view, setView] = useViewMode('dashboard-widgets');
 
     const applyFilters = (next: WidgetFilters) => {
         const params: Record<string, string> = {};
@@ -191,6 +195,7 @@ export default function DashboardWidgetsIndex({ widgets, filters, metrics, compa
                         companies={companies}
                         total={total}
                         unassigned={metrics.unassigned}
+                        trailing={<ViewToggle variant="emp" value={view} onChange={setView} />}
                     />
                 </div>
 
@@ -198,36 +203,39 @@ export default function DashboardWidgetsIndex({ widgets, filters, metrics, compa
                 {rows.length === 0 ? (
                     <div className="mt-4">{emptyState}</div>
                 ) : (
-                    <>
-                        {/* Escritorio: tabla. */}
-                        <div className="mt-4 hidden lg:block">
-                            <div
-                                className="grid items-center gap-2.5 px-3 pb-2"
-                                style={{ gridTemplateColumns: WIDGET_GRID, borderBottom: '1px solid var(--emp-border)' }}
-                            >
-                                {COLUMNS.map((column, index) => (
-                                    <span
-                                        key={column.label || `col-${index}`}
-                                        className={`text-[11px] uppercase tracking-[0.09em] ${column.right ? 'text-right' : ''}`}
-                                        style={{ color: 'var(--emp-subtle)' }}
+                    <div className="mt-4">
+                        <ListViewSwitch
+                            view={view}
+                            table={
+                                <>
+                                    <div
+                                        className="grid items-center gap-2.5 px-3 pb-2"
+                                        style={{
+                                            gridTemplateColumns: WIDGET_GRID,
+                                            borderBottom: '1px solid var(--emp-border)',
+                                        }}
                                     >
-                                        {column.label}
-                                    </span>
-                                ))}
-                            </div>
+                                        {COLUMNS.map((column, index) => (
+                                            <span
+                                                key={column.label || `col-${index}`}
+                                                className={`text-[11px] uppercase tracking-[0.09em] ${column.right ? 'text-right' : ''}`}
+                                                style={{ color: 'var(--emp-subtle)' }}
+                                            >
+                                                {column.label}
+                                            </span>
+                                        ))}
+                                    </div>
 
-                            {rows.map((widget) => (
-                                <WidgetRow key={widget.id} widget={widget} onDelete={setConfirmDelete} />
-                            ))}
-                        </div>
-
-                        {/* Movil: tarjetas. */}
-                        <div className="mt-4 flex flex-col gap-2 lg:hidden">
-                            {rows.map((widget) => (
+                                    {rows.map((widget) => (
+                                        <WidgetRow key={widget.id} widget={widget} onDelete={setConfirmDelete} />
+                                    ))}
+                                </>
+                            }
+                            cards={rows.map((widget) => (
                                 <WidgetCard key={widget.id} widget={widget} onDelete={setConfirmDelete} />
                             ))}
-                        </div>
-                    </>
+                        />
+                    </div>
                 )}
 
                 {/* ----------------------------------------------- paginacion */}

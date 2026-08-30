@@ -1,5 +1,5 @@
 import { CaretDown, MagnifyingGlass } from '@phosphor-icons/react';
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { formatCurrency, formatNumber } from '@/lib/utils';
 import type { ExpensePeriod } from '@/lib/expenses';
 
@@ -30,6 +30,8 @@ interface Props {
     categories: CategoryOption[];
     total: number;
     filteredTotal: number;
+    /** Controles que van al extremo derecho de la barra (hoy, el conmutador de vista). */
+    trailing?: ReactNode;
 }
 
 /**
@@ -39,7 +41,7 @@ interface Props {
  * una peticion por letra. El rango de fechas deja de ser dos campos sueltos siempre
  * visibles y se abre desde «Todos».
  */
-export function ExpenseFilterBar({ filters, onChange, categories, total, filteredTotal }: Props) {
+export function ExpenseFilterBar({ filters, onChange, categories, total, filteredTotal, trailing }: Props) {
     const [term, setTerm] = useState(filters.search);
     const [rangeOpen, setRangeOpen] = useState(Boolean(filters.date_from || filters.date_to));
 
@@ -128,6 +130,8 @@ export function ExpenseFilterBar({ filters, onChange, categories, total, filtere
                 <span className="shrink-0 text-[12px] max-sm:hidden sm:ml-auto" style={{ color: 'var(--emp-subtle)' }}>
                     {formatNumber(total)} {total === 1 ? 'gasto' : 'gastos'} · {formatCurrency(filteredTotal)}
                 </span>
+
+                {trailing}
             </div>
 
             {/* El rango vive dentro de «Todos»: es donde tiene sentido acotar a mano. */}

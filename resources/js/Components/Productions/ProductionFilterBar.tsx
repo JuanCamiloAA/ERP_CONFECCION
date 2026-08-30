@@ -89,6 +89,8 @@ interface Props {
     exportUrl: string;
     /** Conmutador de vista; se pinta pegado a la derecha de la barra. */
     viewSwitch?: ReactNode;
+    /** Controles que van al extremo derecho de la barra (hoy, el conmutador de vista). */
+    trailing?: ReactNode;
 }
 
 /**
@@ -115,6 +117,7 @@ export function ProductionFilterBar({
     operations,
     exportUrl,
     viewSwitch,
+    trailing,
 }: Props) {
     const [term, setTerm] = useState('');
     const [open, setOpen] = useState(false);
@@ -293,6 +296,8 @@ export function ProductionFilterBar({
                         </a>
                     </div>
                 </div>
+
+                {trailing}
             </div>
 
             {/* ------------------------------------------------ panel de filtros */}
