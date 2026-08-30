@@ -1,5 +1,7 @@
 import { Head } from '@inertiajs/react';
 import { useEffect, useState } from 'react';
+import { BankLogo } from '@/Components/UI/BankLogo';
+import { maskAccountDisplay } from '@/lib/banks';
 import { mediaUrl } from '@/lib/mediaUrl';
 import {
     clockLabel,

@@ -8,6 +8,7 @@ import {
     createAccessPasswordData,
     stripAccessPasswordData,
 } from '@/Components/Employees/AccessPasswordFields';
+import { BankAccountFields } from '@/Components/Forms/BankAccountFields';
 import { EmpDocumentField, EmpInput, EmpSelect, EmpSwitch, EmpTextarea } from '@/Components/UI/ModuleFields';
 import {
     EmployeeAsideCard,
@@ -25,6 +26,7 @@ import { Can } from '@/Components/UI/Can';
 import { collectUnmappedErrors, FormErrorAlert } from '@/Components/UI/FormErrorAlert';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatRoleSelectLabel } from '@/lib/utils';
+import type { BankOption } from '@/types';
 
 interface Role {
     id: number;
@@ -34,12 +36,6 @@ interface Role {
     color: string;
     is_system: boolean;
     company?: { id: number; name: string } | null;
-}
-
-interface BankOption {
-    id: number;
-    name: string;
-    is_active: boolean;
 }
 
 interface Props {
@@ -78,6 +74,7 @@ export default function EmployeeCreate({ roles, banks }: Props) {
         is_active: true,
         notes: '',
         bank_id: '' as string | number,
+        bank_account_type: '',
         bank_account_number: '',
         bank_key: '',
         create_user_account: false,
@@ -485,7 +482,8 @@ export default function EmployeeCreate({ roles, banks }: Props) {
                     }
                 >
                     <p className="mb-3 text-[12px]" style={{ color: 'var(--emp-muted)' }}>
-                        Los tres campos van juntos o ninguno.
+                        Banco, cuenta y clave van juntos o los tres vacíos. La clave solo se pide si el banco la
+                        exige.
                     </p>
 
                     {banks.length === 0 ? (
@@ -502,36 +500,20 @@ export default function EmployeeCreate({ roles, banks }: Props) {
                             </Can>
                         </p>
                     ) : (
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_1fr_1fr]">
-                            <div>
-                                <EmpSelect
-                                    label="Banco"
-                                    placeholder="Seleccione un banco"
-                                    value={data.bank_id === '' || data.bank_id === null ? '' : String(data.bank_id)}
-                                    onChange={(e) => setData('bank_id', e.target.value === '' ? '' : Number(e.target.value))}
-                                    error={errors.bank_id}
-                                    options={banks.map((b) => ({ value: b.id, label: b.name }))}
-                                />
-                                {selectedBank && !selectedBank.is_active ? (
-                                    <span className="emp-pill emp-pill-warn mt-1.5">Banco inactivo</span>
-                                ) : null}
-                            </div>
-                            <EmpInput
-                                label="Número de cuenta"
-                                inputMode="numeric"
-                                value={data.bank_account_number}
-                                onChange={(e) => setData('bank_account_number', e.target.value.replace(/\D/g, ''))}
-                                error={errors.bank_account_number}
-                                help="Solo números"
-                            />
-                            <EmpInput
-                                label="Llave bancaria"
-                                value={data.bank_key}
-                                onChange={(e) => setData('bank_key', e.target.value.replace(/[^0-9A-Za-z]/g, ''))}
-                                error={errors.bank_key}
-                                help="Letras y números, sin espacios"
-                            />
-                        </div>
+                        <BankAccountFields
+                            banks={banks}
+                            bankId={data.bank_id}
+                            accountType={data.bank_account_type}
+                            accountNumber={data.bank_account_number}
+                            bankKey={data.bank_key}
+                            onChange={(next) => setData((current) => ({ ...current, ...next }))}
+                            errors={{
+                                bank_id: errors.bank_id,
+                                bank_account_type: (errors as Record<string, string>).bank_account_type,
+                                bank_account_number: errors.bank_account_number,
+                                bank_key: errors.bank_key,
+                            }}
+                        />
                     )}
                 </EmployeeFormSection>
             </div>

@@ -22,6 +22,7 @@ import { usePermissions } from '@/contexts/PermissionsContext';
 import { cardsViewClass, tableViewClass } from '@/Components/UI/ListViewSwitch';
 import { ViewToggle } from '@/Components/UI/ViewToggle';
 import { useViewMode } from '@/hooks/useViewMode';
+import { BankLogo } from '@/Components/UI/BankLogo';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatNumber } from '@/lib/utils';
 import type { Employee, PaginatedResponse } from '@/types';
@@ -54,9 +55,16 @@ function hireMonth(date: string | null | undefined): string {
     return y && m ? `${m}/${y}` : '—';
 }
 
-/** Los tres campos de pago van juntos: con uno vacio no se puede dispersar. */
+/**
+ * Banco y cuenta son imprescindibles para dispersar; la clave solo cuenta si el banco la
+ * exige (las billeteras digitales no la piden).
+ */
 function hasPaymentData(employee: Employee): boolean {
-    return Boolean(employee.bank_id && employee.bank_account_number && employee.bank_key);
+    if (! employee.bank_id || ! employee.bank_account_number) {
+        return false;
+    }
+
+    return employee.bank?.requires_key === false ? true : Boolean(employee.bank_key);
 }
 
 /** Etiqueta de pagina de Laravel, sin entidades ni las palabras de navegacion. */
@@ -241,7 +249,20 @@ export default function EmployeesIndex({ employees, filters, metrics }: Props) {
     const paymentCell = (employee: Employee) =>
         hasPaymentData(employee) ? (
             <span className="text-[13px]" style={{ color: 'var(--emp-text)' }}>
-                {employee.bank?.name ?? '—'}
+                {employee.bank ? (
+                    <span className="inline-flex items-center gap-1.5">
+                        <BankLogo
+                            name={employee.bank.name}
+                            initials={employee.bank.initials}
+                            logoUrl={employee.bank.logo_url}
+                            brandColor={employee.bank.brand_color}
+                            size={30}
+                        />
+                        <span className="truncate">{employee.bank.name}</span>
+                    </span>
+                ) : (
+                    '—'
+                )}
                 {employee.bank && !employee.bank.is_active ? (
                     <span className="ml-1.5 emp-pill emp-pill-warn">Inactivo</span>
                 ) : null}

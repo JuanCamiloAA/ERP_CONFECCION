@@ -2,12 +2,16 @@
 
 namespace App\Http\Requests\Bank;
 
+use App\Http\Requests\Bank\Concerns\ValidatesBankLogo;
 use App\Models\Bank;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 class UpdateBankRequest extends FormRequest
 {
+    use ValidatesBankLogo;
+
     public function authorize(): bool
     {
         return $this->user()?->can('banks.index.edit') || $this->user()?->isSuperAdmin();
@@ -19,7 +23,7 @@ class UpdateBankRequest extends FormRequest
         /** @var Bank|null $bank */
         $bank = $this->route('bank');
 
-        return [
+        return array_merge([
             'name' => [
                 'required',
                 'string',
@@ -30,6 +34,19 @@ class UpdateBankRequest extends FormRequest
             ],
             'code' => ['nullable', 'string', 'max:40'],
             'is_active' => ['nullable', 'boolean'],
-        ];
+        ], $this->brandRules());
+    }
+
+    public function messages(): array
+    {
+        return array_merge([
+            'name.required' => 'El nombre del banco es obligatorio.',
+            'name.unique' => 'Ya existe un banco con ese nombre en esta empresa.',
+        ], $this->brandMessages());
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(fn (Validator $v) => $this->validateLogoContent($v));
     }
 }

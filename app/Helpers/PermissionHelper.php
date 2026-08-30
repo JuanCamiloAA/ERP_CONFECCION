@@ -101,12 +101,13 @@ class PermissionHelper
                     'index' => [
                         'display' => 'Bancos',
                         'route' => 'banks.index',
-                        'actions' => ['view', 'create', 'edit', 'delete'],
+                        'actions' => ['view', 'create', 'edit', 'delete', 'toggle'],
                         'labels' => [
                             'view' => 'Ver bancos',
                             'create' => 'Crear banco',
                             'edit' => 'Editar banco',
                             'delete' => 'Eliminar banco',
+                            'toggle' => 'Activar / desactivar',
                         ],
                     ],
                 ],

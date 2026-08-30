@@ -52,6 +52,7 @@ class Employee extends Model
         'is_exempt_from_overtime',
         'scheduled_work_days',
         'bank_id',
+        'bank_account_type',
         'bank_account_number',
         'bank_key',
         'is_active',

@@ -33,6 +33,14 @@ class CompanyController extends Controller
     /** Porcentaje del limite de staff a partir del cual la empresa «esta al limite». */
     protected const AT_LIMIT_RATIO = 0.9;
 
+    /** Ordenaciones que acepta el listado, con la etiqueta que ve el usuario. */
+    protected const SORTS = [
+        'name' => 'Nombre',
+        'staff_usage' => 'Uso de staff',
+        'employees' => 'Empleados',
+        'expiring' => 'Vencimiento',
+    ];
+
     public function index(Request $request): Response
     {
         $search = trim((string) $request->input('search', ''));
@@ -45,14 +53,29 @@ class CompanyController extends Controller
         $plan = $request->input('plan');
         $plan = is_string($plan) && $plan !== '' ? $plan : null;
 
+        $sort = (string) $request->input('sort', 'name');
+        if (! array_key_exists($sort, self::SORTS)) {
+            $sort = 'name';
+        }
+
+        $direction = $request->input('direction') === 'desc' ? 'desc' : 'asc';
+
         $query = $this->companyBaseQuery();
         $this->applyIndexFilters($query, $search, $status, $plan);
+        $this->applySort($query, $sort, $direction);
 
-        $companies = $query->orderBy('name')->paginate(15)->withQueryString();
+        $companies = $query->paginate(15)->withQueryString();
 
         return Inertia::render('Companies/Index', [
             'companies' => $companies,
-            'filters' => ['search' => $search, 'status' => $status, 'plan' => $plan],
+            'filters' => [
+                'search' => $search,
+                'status' => $status,
+                'plan' => $plan,
+                'sort' => $sort,
+                'direction' => $direction,
+            ],
+            'sorts' => collect(self::SORTS)->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values(),
             'stats' => $this->indexStats(),
             'summary' => $this->indexSummary(),
             'chipCounts' => $this->chipCounts($search, $plan),
@@ -61,6 +84,34 @@ class CompanyController extends Controller
                 ->orderBy('name')
                 ->get(['id', 'name', 'slug']),
         ]);
+    }
+
+    /**
+     * Ordena el listado.
+     *
+     * «Uso de staff» ordena por la proporcion usado/tope, no por el numero suelto: una
+     * empresa con 4 de 5 esta mas apretada que una con 30 de 100, y es la primera la que hay
+     * que mirar. Sin tope no hay proporcion, asi que esas quedan al final.
+     */
+    protected function applySort(Builder $query, string $sort, string $direction): void
+    {
+        $dir = $direction === 'desc' ? 'desc' : 'asc';
+
+        match ($sort) {
+            'staff_usage' => $query->orderByRaw(
+                '(select count(*) from users where users.company_id = companies.id and users.employee_id is null and users.deleted_at is null) '
+                .'/ nullif((select max_staff_users from membership_plans where membership_plans.id = companies.membership_plan_id), 0) '
+                .$dir.' , companies.name asc'
+            ),
+            'employees' => $query->orderByRaw(
+                '(select count(*) from employees where employees.company_id = companies.id and employees.deleted_at is null) '
+                .$dir.' , companies.name asc'
+            ),
+            'expiring' => $query->orderByRaw('companies.membership_ends_at is null asc')
+                ->orderBy('companies.membership_ends_at', $dir)
+                ->orderBy('companies.name'),
+            default => $query->orderBy('companies.name', $dir),
+        };
     }
 
     /**

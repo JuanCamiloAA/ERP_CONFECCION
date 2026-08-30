@@ -36,22 +36,13 @@ import { Select } from '@/Components/UI/Select';
 import { Tabs } from '@/Components/UI/Tabs';
 import { RoleBadge } from '@/Components/Roles/RoleBadge';
 import { Can } from '@/Components/UI/Can';
+import { BankLogo } from '@/Components/UI/BankLogo';
+import { maskAccountDisplay, maskKeyDisplay } from '@/lib/banks';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatDate, formatDateTime, formatRoleSelectLabel } from '@/lib/utils';
 import type { Advance, Employee, PayrollEmployee, Production } from '@/types';
 import '../../../css/module-ui.css';
 
-function maskAccountDisplay(num: string | null | undefined): string {
-    if (!num) return '—';
-    if (num.length <= 4) return '****';
-    return `${'*'.repeat(Math.min(6, num.length - 4))}${num.slice(-4)}`;
-}
-
-function maskKeyDisplay(key: string | null | undefined): string {
-    if (!key) return '—';
-    if (key.length <= 4) return '****';
-    return `${'*'.repeat(Math.min(4, key.length - 4))}${key.slice(-4)}`;
-}
 
 const DAY_LABELS: Record<number, string> = { 1: 'Lun', 2: 'Mar', 3: 'Mié', 4: 'Jue', 5: 'Vie', 6: 'Sáb', 7: 'Dom' };
 
@@ -342,10 +333,25 @@ export default function EmployeeShow({ employee, productions, monthSummary, adva
                             <CardHeader title="Datos para pago" />
                             <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <Dato label="Banco">
-                                    {employee.bank?.name ?? '-'}
-                                    {employee.bank && !employee.bank.is_active ? (
-                                        <span className="ml-1 text-xs text-amber-600 dark:text-amber-400">(inactivo)</span>
-                                    ) : null}
+                                    {employee.bank ? (
+                                        <span className="inline-flex items-center gap-2">
+                                            <BankLogo
+                                                name={employee.bank.name}
+                                                initials={employee.bank.initials}
+                                                logoUrl={employee.bank.logo_url}
+                                                brandColor={employee.bank.brand_color}
+                                                size={30}
+                                            />
+                                            <span>{employee.bank.name}</span>
+                                            {! employee.bank.is_active ? (
+                                                <span className="text-xs text-amber-600 dark:text-amber-400">
+                                                    (inactivo)
+                                                </span>
+                                            ) : null}
+                                        </span>
+                                    ) : (
+                                        '-'
+                                    )}
                                 </Dato>
                                 <Dato label="Cuenta (enmascarada)" mono>
                                     {maskAccountDisplay(employee.bank_account_number ?? undefined)}

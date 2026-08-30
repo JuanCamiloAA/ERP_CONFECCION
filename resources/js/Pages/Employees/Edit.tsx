@@ -2,6 +2,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { CaretRight, Key, Warning } from '@phosphor-icons/react';
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
+import { BankAccountFields } from '@/Components/Forms/BankAccountFields';
 import { EmpDocumentField, EmpInput, EmpSelect, EmpSwitch, EmpTextarea } from '@/Components/UI/ModuleFields';
 import {
     EmployeeAsideCard,
@@ -17,13 +18,7 @@ import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatRelativeDate } from '@/lib/utils';
-import type { Employee } from '@/types';
-
-interface BankOption {
-    id: number;
-    name: string;
-    is_active: boolean;
-}
+import type { BankOption, Employee } from '@/types';
 
 interface Props {
     /** `user.roles` viene del controlador para poder decir con que rol entra al sistema. */
@@ -48,7 +43,7 @@ const SECTION_FIELDS = {
         'is_exempt_from_overtime',
         'scheduled_work_days',
     ],
-    pago: ['bank_id', 'bank_account_number', 'bank_key'],
+    pago: ['bank_id', 'bank_account_type', 'bank_account_number', 'bank_key'],
 } as const;
 
 /**
@@ -88,6 +83,7 @@ export default function EmployeeEdit({ employee, banks, hasProductions = false }
         is_active: employee.is_active,
         notes: employee.notes ?? '',
         bank_id: employee.bank_id != null ? String(employee.bank_id) : '',
+        bank_account_type: employee.bank_account_type ?? '',
         bank_account_number: employee.bank_account_number ?? '',
         bank_key: employee.bank_key ?? '',
     });
@@ -137,6 +133,7 @@ export default function EmployeeEdit({ employee, banks, hasProductions = false }
             is_exempt_from_overtime: employee.is_exempt_from_overtime ?? false,
             scheduled_work_days: employee.scheduled_work_days ?? [1, 2, 3, 4, 5, 6],
             bank_id: employee.bank_id != null ? String(employee.bank_id) : '',
+            bank_account_type: employee.bank_account_type ?? '',
             bank_account_number: employee.bank_account_number ?? '',
             bank_key: employee.bank_key ?? '',
         }),
@@ -482,7 +479,8 @@ export default function EmployeeEdit({ employee, banks, hasProductions = false }
                         summary={selectedBank ? <span className="emp-pill">{selectedBank.name}</span> : undefined}
                     >
                         <p className="mb-3 text-[12px]" style={{ color: 'var(--emp-muted)' }}>
-                            Los tres campos van juntos o ninguno.
+                            Banco, cuenta y clave van juntos o los tres vacíos. La clave solo se pide si el banco la
+                            exige.
                         </p>
 
                         {banks.length === 0 ? (
@@ -499,36 +497,20 @@ export default function EmployeeEdit({ employee, banks, hasProductions = false }
                                 </Can>
                             </p>
                         ) : (
-                            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_1fr_1fr]">
-                                <div>
-                                    <EmpSelect
-                                        label="Banco"
-                                        placeholder="Seleccione un banco"
-                                        value={data.bank_id}
-                                        onChange={(e) => setData('bank_id', e.target.value)}
-                                        error={errors.bank_id}
-                                        options={banks.map((b) => ({ value: b.id, label: b.name }))}
-                                    />
-                                    {selectedBank && !selectedBank.is_active ? (
-                                        <span className="emp-pill emp-pill-warn mt-1.5">Banco inactivo</span>
-                                    ) : null}
-                                </div>
-                                <EmpInput
-                                    label="Número de cuenta"
-                                    inputMode="numeric"
-                                    value={data.bank_account_number}
-                                    onChange={(e) => setData('bank_account_number', e.target.value.replace(/\D/g, ''))}
-                                    error={errors.bank_account_number}
-                                    help="Solo números"
-                                />
-                                <EmpInput
-                                    label="Llave bancaria"
-                                    value={data.bank_key}
-                                    onChange={(e) => setData('bank_key', e.target.value.replace(/[^0-9A-Za-z]/g, ''))}
-                                    error={errors.bank_key}
-                                    help="Letras y números, sin espacios"
-                                />
-                            </div>
+                            <BankAccountFields
+                                banks={banks}
+                                bankId={data.bank_id}
+                                accountType={data.bank_account_type}
+                                accountNumber={data.bank_account_number}
+                                bankKey={data.bank_key}
+                                onChange={(next) => setData((current) => ({ ...current, ...next }))}
+                                errors={{
+                                    bank_id: errors.bank_id,
+                                    bank_account_type: (errors as Record<string, string>).bank_account_type,
+                                    bank_account_number: errors.bank_account_number,
+                                    bank_key: errors.bank_key,
+                                }}
+                            />
                         )}
                     </EmployeeFormSection>
                 </div>

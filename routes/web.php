@@ -121,6 +121,11 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Bancos (catalogo empresa)
     Route::middleware('permission:banks.index.view')->group(function () {
+        // Antes del resource: `banks/{id}` capturaria «toggle» como si fuera una clave.
+        Route::patch('/banks/{bank}/toggle', [BankController::class, 'toggle'])
+            ->name('banks.toggle')
+            ->middleware('permission:banks.index.toggle');
+
         Route::resource('banks', BankController::class)->except(['show'])
             ->middlewareFor(['create', 'store'], 'permission:banks.index.create')
             ->middlewareFor(['edit', 'update'], 'permission:banks.index.edit')

@@ -41,7 +41,7 @@ class EmployeeController extends Controller
             // El listado muestra el rol con que entra cada persona, no un «tiene cuenta»:
             // saber que es «Operaria» o «Aux. contable» es justo lo que se va a buscar.
             'user.roles:id,name,display_name',
-            'bank:id,name,is_active',
+            'bank:id,name,code,is_active,logo_path,brand_color,type,requires_key',
             'company:id,name',
         ]);
 
@@ -476,9 +476,13 @@ class EmployeeController extends Controller
     }
 
     /**
-     * Bancos activos para selects; en edición incluye el banco actual aunque esté inactivo (histórico).
+     * Bancos activos para el selector de datos de pago; en edición incluye el banco actual
+     * aunque esté inactivo (histórico).
      *
-     * @return list<array{id: int, name: string, is_active: bool}>
+     * Viajan también el logo y las reglas de cuenta de cada banco: el selector pinta el logo
+     * y cambia el formato, la ayuda y la nota al elegir, sin una petición por banco.
+     *
+     * @return list<array<string, mixed>>
      */
     protected function banksOptionsForEmployee(?Employee $employee = null): array
     {
@@ -487,16 +491,23 @@ class EmployeeController extends Controller
             return [];
         }
 
+        $columns = [
+            'id', 'name', 'code', 'is_active', 'logo_path', 'brand_color',
+            'type', 'account_format', 'account_hint', 'requires_key', 'notes',
+        ];
+
         $banks = Bank::query()
             ->where('is_active', true)
+            ->withCount('employees')
             ->orderBy('name')
-            ->get(['id', 'name', 'is_active']);
+            ->get($columns);
 
         if ($employee?->bank_id) {
             $current = Bank::withoutGlobalScopes()
                 ->where('company_id', $companyId)
                 ->where('id', $employee->bank_id)
-                ->first(['id', 'name', 'is_active']);
+                ->withCount('employees')
+                ->first($columns);
             if ($current && ! $banks->contains(fn ($b) => (int) $b->id === (int) $current->id)) {
                 $banks->push($current);
                 $banks = $banks->sortBy('name')->values();
@@ -504,11 +515,31 @@ class EmployeeController extends Controller
         }
 
         return $banks
-            ->map(fn ($b) => [
-                'id' => $b->id,
-                'name' => $b->is_active ? $b->name : $b->name.' (inactivo)',
-                'is_active' => (bool) $b->is_active,
-            ])
+            ->map(function (Bank $bank) {
+                // `toArray` resuelve `logo_url` e `initials`; el resto se toma de ahi para no
+                // duplicar la forma del payload en dos sitios.
+                $row = $bank->toArray();
+
+                return [
+                    'id' => $bank->id,
+                    // El sufijo «(inactivo)» solo aparece en el nombre del desplegable viejo;
+                    // el selector nuevo usa `name` limpio y una insignia aparte.
+                    'name' => $bank->is_active ? $bank->name : $bank->name.' (inactivo)',
+                    'display_name' => $bank->name,
+                    'code' => $bank->code,
+                    'is_active' => (bool) $bank->is_active,
+                    'logo_url' => $row['logo_url'] ?? null,
+                    'initials' => $row['initials'] ?? '??',
+                    'brand_color' => $bank->brand_color,
+                    'type' => $bank->type,
+                    'type_label' => $row['type_label'] ?? 'Banco',
+                    'account_format' => $bank->account_format,
+                    'account_hint' => $bank->account_hint,
+                    'requires_key' => (bool) $bank->requires_key,
+                    'notes' => $bank->notes,
+                    'employees_count' => (int) ($bank->employees_count ?? 0),
+                ];
+            })
             ->values()
             ->all();
     }

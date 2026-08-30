@@ -22,17 +22,29 @@ class StoreEmployeeRequest extends FormRequest
     {
         $acct = trim((string) $this->input('bank_account_number', ''));
         $key = trim((string) $this->input('bank_key', ''));
+        $type = trim((string) $this->input('bank_account_type', ''));
         $bankId = $this->input('bank_id');
 
         $merge = [
             'bank_account_number' => $acct === '' ? null : $acct,
             'bank_key' => $key === '' ? null : $key,
+            'bank_account_type' => $type === '' ? null : mb_strtolower($type),
             'bank_id' => ($bankId === '' || $bankId === null) ? null : (int) $bankId,
         ];
 
         $emptyGroup = $merge['bank_id'] === null && $merge['bank_account_number'] === null && $merge['bank_key'] === null;
         if ($emptyGroup) {
-            $merge = ['bank_id' => null, 'bank_account_number' => null, 'bank_key' => null];
+            $merge = [
+                'bank_id' => null,
+                'bank_account_number' => null,
+                'bank_key' => null,
+                'bank_account_type' => null,
+            ];
+        }
+
+        // Una billetera digital no tiene tipo de cuenta; si llegara, se descarta.
+        if ($merge['bank_id'] !== null && $this->selectedBank()?->type === 'wallet') {
+            $merge['bank_account_type'] = null;
         }
 
         $this->merge($merge);
@@ -58,11 +70,15 @@ class StoreEmployeeRequest extends FormRequest
             ],
             'bank_key' => [
                 'nullable',
-                'required_with:bank_id,bank_account_number',
+                // Condicional y no `required_with`: hay entidades que no piden clave de
+                // dispersion (Nequi y demas billeteras), y exigirla dejaria esos datos de
+                // pago sin poder guardarse.
+                Rule::requiredIf(fn () => $this->input('bank_id') !== null && $this->bankRequiresKey()),
                 'string',
                 'max:100',
                 'regex:/^[0-9A-Za-z]+$/',
             ],
+            'bank_account_type' => ['nullable', 'string', Rule::in(['ahorros', 'corriente'])],
         ];
 
         return [
@@ -151,6 +167,29 @@ class StoreEmployeeRequest extends FormRequest
             'user_role_id.required_if' => 'Debes seleccionar un rol para el usuario.',
             'base_salary.required_if' => 'El salario base es obligatorio para la modalidad por horas (legal).',
             'ordinary_hours_per_day.required_if' => 'Indica la jornada ordinaria diaria para la modalidad por horas (legal).',
+            'bank_key.required' => 'Este banco exige clave de dispersión.',
+            'bank_account_type.in' => 'El tipo de cuenta debe ser ahorros o corriente.',
         ] + $this->accessPasswordMessages();
+    }
+
+    /** Banco elegido en la peticion, si existe y es de la empresa. */
+    protected function selectedBank(): ?Bank
+    {
+        $bankId = $this->input('bank_id');
+
+        if ($bankId === null || $bankId === '') {
+            return null;
+        }
+
+        return Bank::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $this->user()?->company_id)
+            ->find((int) $bankId);
+    }
+
+    /** Por defecto se exige clave: es lo que hacia la regla anterior para todos los bancos. */
+    protected function bankRequiresKey(): bool
+    {
+        return $this->selectedBank()?->requires_key ?? true;
     }
 }

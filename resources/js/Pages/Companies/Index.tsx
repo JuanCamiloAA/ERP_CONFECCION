@@ -19,6 +19,7 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
 import { RowActionsMenu } from '@/Components/UI/RowActionsMenu';
 import { SearchInput } from '@/Components/UI/SearchInput';
+import { SortSelect, type SortDirection, type SortOption } from '@/Components/UI/SortSelect';
 import { StatBand, type Stat } from '@/Components/UI/StatBand';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import { UsageBar } from '@/Components/UI/UsageBar';
@@ -47,7 +48,8 @@ interface CompanyRow {
 
 interface Props {
     companies: PaginatedResponse<CompanyRow>;
-    filters: { search: string; status: string; plan: string | null };
+    filters: { search: string; status: string; plan: string | null; sort: string; direction: SortDirection };
+    sorts: SortOption[];
     stats: Stat[];
     chipCounts: Record<string, number>;
     summary: { total: number; active: number; staff_used: number; staff_limit: number | null };
@@ -62,7 +64,7 @@ const STATUS_CHIPS = [
     { key: 'expiring', label: 'Por vencer' },
 ];
 
-export default function CompaniesIndex({ companies, filters, stats, chipCounts, summary, plans }: Props) {
+export default function CompaniesIndex({ companies, filters, sorts, stats, chipCounts, summary, plans }: Props) {
     const [search, setSearch] = useState(filters.search ?? '');
     const [confirmDelete, setConfirmDelete] = useState<CompanyRow | null>(null);
     const [view, setView] = useViewMode('companies');
@@ -74,13 +76,24 @@ export default function CompaniesIndex({ companies, filters, stats, chipCounts, 
      * puede borrar la busqueda que se acaba de escribir. La pagina no se arrastra a proposito
      * (la 4 de «Todas» no es la 4 de «Por vencer»).
      */
-    const applyFilters = (next: Partial<{ search: string; status: string; plan: string | null }>) => {
-        const merged = { search, status: filters.status, plan: filters.plan, ...next };
+    const applyFilters = (
+        next: Partial<{ search: string; status: string; plan: string | null; sort: string; direction: SortDirection }>,
+    ) => {
+        const merged = {
+            search,
+            status: filters.status,
+            plan: filters.plan,
+            sort: filters.sort ?? 'name',
+            direction: filters.direction ?? 'asc',
+            ...next,
+        };
         const params: Record<string, string> = {};
 
         if (merged.search) params.search = merged.search;
         if (merged.status && merged.status !== 'all') params.status = merged.status;
         if (merged.plan) params.plan = merged.plan;
+        if (merged.sort !== 'name') params.sort = merged.sort;
+        if (merged.direction !== 'asc') params.direction = merged.direction;
 
         router.get(route('companies.index'), params, { preserveState: true, preserveScroll: true, replace: true });
     };
@@ -193,7 +206,16 @@ export default function CompaniesIndex({ companies, filters, stats, chipCounts, 
                         </div>
                     ) : null}
 
-                    <ViewToggle value={view} onChange={setView} className="lg:ml-auto" />
+                    <div className="flex items-center gap-2 lg:ml-auto">
+                        <SortSelect
+                            options={sorts}
+                            value={filters.sort ?? 'name'}
+                            direction={filters.direction ?? 'asc'}
+                            onChange={(sort, direction) => applyFilters({ sort, direction })}
+                        />
+
+                        <ViewToggle value={view} onChange={setView} />
+                    </div>
                 </div>
 
                 {companies.data.length === 0 ? (

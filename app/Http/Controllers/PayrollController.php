@@ -522,7 +522,7 @@ class PayrollController extends Controller
 
         $payrollEmployee->load([
             'employee',
-            'employee.bank:id,name,is_active',
+            'employee.bank:id,name,code,is_active,logo_path,brand_color,type,requires_key',
             'advances',
             'adjustments.payrollConcept:id,name,code',
         ]);
@@ -566,7 +566,7 @@ class PayrollController extends Controller
         $payroll->load('company:id,name,nit,address,phone,logo');
         $payrollEmployee->load([
             'employee',
-            'employee.bank:id,name,is_active',
+            'employee.bank:id,name,code,is_active,logo_path,brand_color,type,requires_key',
             'advances',
             'adjustments.payrollConcept:id,name,code',
         ]);

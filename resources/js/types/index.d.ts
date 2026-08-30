@@ -137,15 +137,48 @@ export interface DataImportBatch {
     user?: { id: number; name: string; last_name: string | null; email?: string };
 }
 
+export type BankType = 'bank' | 'wallet' | 'coop';
+
 export interface Bank {
     id: number;
     company_id: number;
     code: string | null;
     name: string;
     is_active: boolean;
+    /** Ya resuelta por el backend; `null` = se pinta el monograma. */
+    logo_url: string | null;
+    /** Dos letras del codigo (o del nombre); nunca vacio. */
+    initials: string;
+    brand_color: string | null;
+    type: BankType;
+    type_label: string;
+    account_format: string | null;
+    account_hint: string | null;
+    requires_key: boolean;
+    notes: string | null;
     created_at: string;
     updated_at: string;
     employees_count?: number;
+}
+
+/** Banco tal como llega al selector de datos de pago de la ficha del empleado. */
+export interface BankOption {
+    id: number;
+    /** Con el sufijo «(inactivo)» cuando corresponde. */
+    name: string;
+    display_name: string;
+    code: string | null;
+    is_active: boolean;
+    logo_url: string | null;
+    initials: string;
+    brand_color: string | null;
+    type: BankType;
+    type_label: string;
+    account_format: string | null;
+    account_hint: string | null;
+    requires_key: boolean;
+    notes: string | null;
+    employees_count: number;
 }
 
 export interface ExpenseCategory {
@@ -208,9 +241,13 @@ export interface Employee {
     /** Dias ISO (1=lunes...7=domingo) en que se espera marcacion de jornada; fixed_daily/hourly_legal. */
     scheduled_work_days?: number[];
     bank_id?: number | null;
+    bank_account_type?: string | null;
     bank_account_number?: string | null;
     bank_key?: string | null;
-    bank?: Pick<Bank, 'id' | 'name' | 'is_active'> | null;
+    bank?: Pick<
+        Bank,
+        'id' | 'name' | 'code' | 'is_active' | 'logo_url' | 'initials' | 'brand_color' | 'type' | 'requires_key'
+    > | null;
     is_active: boolean;
     notes: string | null;
     user?: AuthUser | null;
