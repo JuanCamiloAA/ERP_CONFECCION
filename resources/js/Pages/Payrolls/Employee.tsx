@@ -181,7 +181,7 @@ export default function PayrollEmployeePage({
         <AppLayout title={name}>
             <Head title={`${name} · ${payroll.name}`} />
 
-            <div className="emp-form -m-4 min-h-screen px-4 pb-28 pt-5 sm:-m-6 sm:px-[34px] lg:-m-8">
+            <div className="emp-form emp-bleed min-h-screen px-4 pb-28 pt-5 sm:px-[34px]">
                 {/* -------------------------------------------------- cabecera */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -514,7 +514,7 @@ export default function PayrollEmployeePage({
             {/* Movil: guardar al alcance del pulgar. */}
             {canRecalculate ? (
                 <div
-                    className="emp-form fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 lg:hidden"
+                    className="emp-form fixed inset-x-0 bottom-[var(--tabbar-h)] z-30 flex items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 lg:hidden"
                     style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
                 >
                     <button

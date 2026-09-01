@@ -93,7 +93,7 @@ export default function ProductionEdit({ production, employees, references, pric
         <AppLayout title="Editar producción">
             <Head title="Editar producción" />
 
-            <form onSubmit={submit} className="emp-form -m-4 min-h-screen sm:-m-6 lg:-m-8">
+            <form onSubmit={submit} className="emp-form emp-bleed min-h-screen">
                 <header
                     className="sticky top-0 z-30 px-4 py-3 sm:px-[34px] sm:py-4"
                     style={{ backgroundColor: 'var(--emp-bar)', borderBottom: '1px solid var(--emp-border)' }}

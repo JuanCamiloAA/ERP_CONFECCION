@@ -27,7 +27,7 @@ export function StickySaveBar({
     return (
         <div
             className={cn(
-                'sticky bottom-0 z-10 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur',
+                'sticky bottom-[var(--tabbar-h)] z-10 -mx-4 mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white/90 px-4 py-3 backdrop-blur',
                 'dark:border-slate-700 dark:bg-slate-800/90',
                 className,
             )}

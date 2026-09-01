@@ -16,7 +16,7 @@ interface Props {
  */
 export function CatalogFormLayout({ header, children, aside, mobileBar }: Props) {
     return (
-        <div className="emp-form -m-4 min-h-screen sm:-m-6 lg:-m-8">
+        <div className="emp-form emp-bleed min-h-screen">
             {header}
 
             <div className="flex flex-col items-start gap-5 px-4 pb-32 pt-5 sm:px-[34px] sm:pb-[34px] sm:pt-6 lg:flex-row lg:gap-[26px]">
@@ -31,7 +31,7 @@ export function CatalogFormLayout({ header, children, aside, mobileBar }: Props)
 
             {mobileBar ? (
                 <div
-                    className="fixed inset-x-0 bottom-0 z-40 sm:hidden"
+                    className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-40 sm:hidden"
                     style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
                 >
                     {mobileBar}

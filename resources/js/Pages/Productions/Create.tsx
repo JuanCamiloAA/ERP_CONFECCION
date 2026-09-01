@@ -18,7 +18,7 @@ export default function ProductionCreate({ employees, references, workDaySelecta
         <AppLayout title="Registrar producción">
             <Head title="Registrar producción" />
 
-            <div className="emp-form -m-4 min-h-screen sm:-m-6 lg:-m-8">
+            <div className="emp-form emp-bleed min-h-screen">
                 <header
                     className="sticky top-0 z-30 px-4 py-3 sm:px-[34px] sm:py-4"
                     style={{ backgroundColor: 'var(--emp-bar)', borderBottom: '1px solid var(--emp-border)' }}

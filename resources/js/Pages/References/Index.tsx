@@ -427,7 +427,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
             </div>
 
             <Can permission="references.index.create">
-                <div className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white px-4 pb-5 pt-3 lg:hidden dark:border-slate-700 dark:bg-slate-800">
+                <div className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-30 border-t border-slate-200 bg-white px-4 pb-5 pt-3 lg:hidden dark:border-slate-700 dark:bg-slate-800">
                     <Link href={route('references.create')} className="block">
                         <Button icon={<PlusIcon className="h-5 w-5" />} fullWidth className="min-h-12 text-base">
                             Nueva referencia

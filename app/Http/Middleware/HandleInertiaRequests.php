@@ -178,15 +178,17 @@ class HandleInertiaRequests extends Middleware
             return null;
         }
 
+        // El plan viaja con la empresa porque el sidebar lo pinta bajo el nombre; sin el
+        // eager load haria una consulta por render o, peor, no saldria nada.
         if ($user->isSuperAdmin()) {
             $companyId = TenantContext::superAdminSelectedCompanyId();
             if ($companyId) {
-                return Company::find($companyId);
+                return Company::query()->with('membershipPlan:id,name')->find($companyId);
             }
 
             return null;
         }
 
-        return $user->company;
+        return $user->company?->loadMissing('membershipPlan:id,name');
     }
 }

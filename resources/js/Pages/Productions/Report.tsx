@@ -254,7 +254,7 @@ export default function ProductionReport({ filters, summary, byEmployee, byRefer
     return (
         <AppLayout title="Reporte de Produccion">
             <Head title="Reporte de Produccion" />
-            <div className="emp-form -m-4 min-h-screen space-y-5 p-4 sm:-m-6 sm:p-6 lg:-m-8 lg:p-8">
+            <div className="emp-form emp-bleed min-h-screen space-y-5 p-4 sm:p-6 lg:p-8">
                 <header
                     className="-mx-4 mb-1 px-4 py-3 sm:-mx-6 sm:px-6"
                     style={{ backgroundColor: 'var(--emp-bar)', borderBottom: '1px solid var(--emp-border)' }}

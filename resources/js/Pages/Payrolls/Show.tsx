@@ -135,7 +135,7 @@ export default function PayrollShow({
         <AppLayout title={payroll.name}>
             <Head title={payroll.name} />
 
-            <div className="emp-form -m-4 min-h-screen px-4 pb-28 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8 lg:pb-8">
+            <div className="emp-form emp-bleed min-h-screen px-4 pb-28 pt-5 sm:px-[34px] sm:pb-8 lg:pb-8">
                 {/* -------------------------------------------------- cabecera */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -299,7 +299,7 @@ export default function PayrollShow({
 
             {/* Movil: la accion del estado, al alcance del pulgar. */}
             <div
-                className="emp-form fixed inset-x-0 bottom-0 z-30 flex items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 lg:hidden"
+                className="emp-form fixed inset-x-0 bottom-[var(--tabbar-h)] z-30 flex items-center gap-2 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 lg:hidden"
                 style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
             >
                 <a

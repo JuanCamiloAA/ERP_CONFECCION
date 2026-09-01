@@ -225,3 +225,150 @@
         color: black !important;
     }
 }
+
+/* ============================================================================
+ * Marco de la aplicacion: sidebar, navbar y contenido.
+ *
+ * Todo el ajuste vive en variables de `:root` y no en clases repartidas por los
+ * componentes: cambiar `data-density` en <html> reajusta a la vez el ancho del
+ * sidebar, el alto del navbar, la altura de fila, los margenes y el titulo, sin
+ * recompilar nada ni tocar un solo componente.
+ *
+ * `data-chrome` decide cuanto se separa visualmente la navegacion del contenido.
+ * ========================================================================== */
+
+:root {
+    /* --- medidas -------------------------------------------------------- */
+    --rail-w: 236px;        /* sidebar expandido (variante A) */
+    --rail-collapsed: 56px; /* sidebar colapsado: solo iconos */
+    --rail-icon-w: 62px;    /* rail de areas (variante B) */
+    --panel-w: 214px;       /* panel de modulos (variante B) */
+    --bar-h: 56px;          /* navbar */
+
+    --item-pad: 7px 10px;
+    --item-font: 13px;
+    --item-gap: 2px;
+    --group-gap: 14px;
+    --item-radius: 8px;
+
+    --main-pad-top: 24px;
+    --main-pad-x: 20px;
+    --main-pad-bottom: 48px;
+    --main-pad: var(--main-pad-top) var(--main-pad-x) var(--main-pad-bottom);
+    --main-max: 1180px;
+
+    /* Alto de la barra inferior de movil. En escritorio no existe, y las barras de
+     * accion de cada pantalla se apoyan en esta variable para no quedar debajo. */
+    --tabbar-h: calc(56px + env(safe-area-inset-bottom));
+    --stack: 24px;
+    --title: 15px;
+
+    /* --- color ----------------------------------------------------------
+     *
+     * Los valores salen de la escala `emp-*` de `module-ui.css`, no de la paleta
+     * `slate` de Tailwind. Los modulos rediseñados pintan su propio fondo con esa
+     * escala; si el marco usara otra familia, sidebar, canal del contenido y modulo
+     * serian tres fondos distintos chocando entre si. Un solo tono de referencia:
+     * `--app-bg` es el mismo `--emp-bg`.
+     */
+    --app-bg: #f6f7fb;
+    --side-bg: #ffffff;
+    --rail-bg: #fbfbfe;
+    --bar-bg: #ffffff;
+    --edge: #e2e8f0;
+
+    --on-bg: rgba(91, 79, 196, 0.1); /* fondo del item activo */
+    --on-fg: #4c40b5;                /* texto del item activo */
+    --on-mark: #5b4fc4;              /* filete / marca del item activo */
+}
+
+:root[data-density='compacta'] {
+    --rail-w: 212px;
+    --bar-h: 48px;
+    --item-pad: 5px 9px;
+    --item-font: 12.5px;
+    --item-gap: 1px;
+    --group-gap: 10px;
+    --main-pad-top: 18px;
+    --main-pad-x: 16px;
+    --main-pad-bottom: 40px;
+    --stack: 18px;
+    --title: 14px;
+}
+
+:root[data-density='amplia'] {
+    --rail-w: 272px;
+    --bar-h: 68px;
+    --item-pad: 10px 12px;
+    --item-font: 14px;
+    --item-gap: 4px;
+    --group-gap: 20px;
+    --main-pad-top: 34px;
+    --main-pad-x: 28px;
+    --main-pad-bottom: 60px;
+    --stack: 32px;
+    --title: 17px;
+}
+
+/* Sin costuras: navegacion y contenido al mismo tono, separados por un filete. */
+:root[data-chrome='seamless'] {
+    --side-bg: var(--app-bg);
+    --rail-bg: var(--app-bg);
+    --bar-bg: var(--app-bg);
+}
+
+/* Acento: la navegacion tenida del morado del sistema. */
+:root[data-chrome='accent'] {
+    --side-bg: #eeecf9;
+    --rail-bg: #e6e3f5;
+    --edge: #cfcbe8;
+    --on-bg: #ffffff;
+}
+
+.dark {
+    --app-bg: #161826;
+    /* Un escalon por debajo del contenido, no un salto de familia: la navegacion se
+     * distingue sin partir la pantalla en dos. */
+    --side-bg: #12141f;
+    --rail-bg: #101220;
+    --bar-bg: #1a1c29;
+    --edge: #3f424d;
+
+    --on-bg: rgba(145, 132, 217, 0.13);
+    --on-fg: #d2cefd;
+    --on-mark: #9184d9;
+}
+
+.dark:where([data-chrome='seamless']) {
+    --side-bg: var(--app-bg);
+    --rail-bg: var(--app-bg);
+    --bar-bg: var(--app-bg);
+}
+
+.dark:where([data-chrome='accent']) {
+    --side-bg: #1d1a33;
+    --rail-bg: #191630;
+    --edge: #3a3560;
+    --on-bg: rgba(145, 132, 217, 0.2);
+}
+
+@media (min-width: 1024px) {
+    :root {
+        --tabbar-h: 0px;
+    }
+}
+
+/*
+ * Sangrado a los bordes del area de contenido.
+ *
+ * Las pantallas con piel `emp-*` pintan su propio fondo de borde a borde y para eso tienen
+ * que cancelar el relleno del `<main>`. Antes lo hacian con `-m-4 sm:-m-6 lg:-m-8`, tres
+ * numeros fijos copiados en treinta archivos que dejaron de cuadrar en cuanto el relleno
+ * paso a depender de la densidad. Aqui se cancela justo lo que hay puesto, sea el que sea.
+ */
+.emp-bleed {
+    margin-top: calc(var(--main-pad-top) * -1);
+    margin-right: calc(var(--main-pad-x) * -1);
+    margin-bottom: calc(var(--main-pad-bottom) * -1);
+    margin-left: calc(var(--main-pad-x) * -1);
+}

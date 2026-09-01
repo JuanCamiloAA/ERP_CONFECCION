@@ -46,7 +46,7 @@ interface Props {
  */
 export function EmployeeFormLayout({ header, children, aside, nav, mobileBar }: Props) {
     return (
-        <div className="emp-form -m-4 min-h-screen sm:-m-6 lg:-m-8">
+        <div className="emp-form emp-bleed min-h-screen">
             {header}
 
             {/*
@@ -72,7 +72,7 @@ export function EmployeeFormLayout({ header, children, aside, nav, mobileBar }: 
             {/* La barra fija es del modo por pasos, que solo existe por debajo de 640px. */}
             {mobileBar ? (
                 <div
-                    className="fixed inset-x-0 bottom-0 z-40 sm:hidden"
+                    className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-40 sm:hidden"
                     style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
                 >
                     {mobileBar}

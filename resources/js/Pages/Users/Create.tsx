@@ -55,7 +55,7 @@ export default function UserCreate({ roles, companies }: Props) {
 
             <form
                 onSubmit={submit}
-                className="emp-form -m-4 min-h-screen px-4 pb-28 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8 lg:pb-8"
+                className="emp-form emp-bleed min-h-screen px-4 pb-28 pt-5 sm:px-[34px] sm:pb-8 lg:pb-8"
             >
                 {/* -------------------------------------------------- cabecera */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
@@ -294,7 +294,7 @@ export default function UserCreate({ roles, companies }: Props) {
 
                 {/* Movil: crear al alcance del pulgar. */}
                 <div
-                    className="fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:hidden"
+                    className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:hidden"
                     style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
                 >
                     <button type="submit" disabled={processing} className="emp-btn emp-btn-primary w-full">

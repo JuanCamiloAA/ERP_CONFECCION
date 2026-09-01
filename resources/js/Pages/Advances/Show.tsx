@@ -95,7 +95,7 @@ export default function AdvanceShow({
         <AppLayout title={`Anticipo de ${employeeName}`}>
             <Head title={`Anticipo · ${employeeName}`} />
 
-            <div className="emp-form -m-4 min-h-screen px-4 pb-10 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8">
+            <div className="emp-form emp-bleed min-h-screen px-4 pb-10 pt-5 sm:px-[34px] sm:pb-8">
                 {/* -------------------------------------------------- cabecera */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">

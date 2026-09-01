@@ -9,6 +9,7 @@ use App\Http\Controllers\DashboardWidgetDataController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
+use App\Http\Controllers\GlobalSearchController;
 use App\Http\Controllers\HolidayController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\LandingPlanInquiryController;
@@ -58,6 +59,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     Route::put('/dashboard/layout', [DashboardLayoutController::class, 'update'])
         ->name('dashboard.layout.update')
         ->middleware('permission:dashboard.index.customize');
+
+    // Buscador global del navbar. Cada bloque se filtra por su propio permiso dentro del
+    // controlador, asi que la ruta solo exige estar autenticado.
+    Route::get('/buscar', GlobalSearchController::class)->name('search.global');
 
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');

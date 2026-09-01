@@ -163,7 +163,7 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
         <AppLayout title="Categorías de gastos">
             <Head title="Categorías de gastos" />
 
-            <div className="emp-form -m-4 min-h-screen px-4 pb-28 pt-5 sm:-m-6 sm:px-[34px] sm:pb-8 lg:-m-8 lg:pb-8">
+            <div className="emp-form emp-bleed min-h-screen px-4 pb-28 pt-5 sm:px-[34px] sm:pb-8 lg:pb-8">
                 {/* -------------------------------------------------- cabecera */}
                 <div className="flex flex-wrap items-start justify-between gap-3">
                     <div className="min-w-0">
@@ -454,7 +454,7 @@ export default function ExpenseCategoriesIndex({ categories, filters, summary }:
             {!isConsolidatedView ? (
                 <Can permission="expenses.categories.create">
                     <div
-                        className="emp-form fixed inset-x-0 bottom-0 z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:hidden"
+                        className="emp-form fixed inset-x-0 bottom-[var(--tabbar-h)] z-30 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3 sm:hidden"
                         style={{ backgroundColor: 'var(--emp-bar)', borderTop: '1px solid var(--emp-border)' }}
                     >
                         <Link href={route('expense-categories.create')} className="emp-btn emp-btn-primary w-full">

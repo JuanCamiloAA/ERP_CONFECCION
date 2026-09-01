@@ -25,7 +25,7 @@ interface Props {
  */
 export function ReferenceFormLayout({ header, children, aside, mobileBar }: Props) {
     return (
-        <div className="ref-form -m-4 min-h-screen sm:-m-6 lg:-m-8">
+        <div className="ref-form emp-bleed min-h-screen">
             {header}
 
             <div className="flex items-start">
@@ -44,7 +44,7 @@ export function ReferenceFormLayout({ header, children, aside, mobileBar }: Prop
 
             {mobileBar ? (
                 <div
-                    className="fixed inset-x-0 bottom-0 z-40 lg:hidden"
+                    className="fixed inset-x-0 bottom-[var(--tabbar-h)] z-40 lg:hidden"
                     style={{ backgroundColor: 'var(--ref-surface-head)', borderTop: '1px solid var(--ref-border)' }}
                 >
                     {mobileBar}
