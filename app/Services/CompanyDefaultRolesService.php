@@ -62,6 +62,9 @@ class CompanyDefaultRolesService
             'productions.report.view',
             'productions.report.export',
             'productions.ranking.view',
+            // Ver el ranking trae ajustar su propio filtro; fijar el del equipo, exportarlo
+            // y ver los agregados los reparte el administrador de la empresa.
+            PermissionHelper::RANKING_OWN_FILTER_PERMISSION,
             'reports.production.view',
             'reports.production.export',
         ]);

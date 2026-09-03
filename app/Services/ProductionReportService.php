@@ -43,8 +43,14 @@ class ProductionReportService
      * Ranking de empleados por unidades producidas, ponderadas por el grado de dificultad de cada
      * operacion (el de la referencia si esta definido, si no el del dato maestro de la operacion).
      */
-    public function rankingByEmployee(string $start, string $end, ?int $companyId = null, bool $onlyConfirmed = false): Collection
-    {
+    public function rankingByEmployee(
+        string $start,
+        string $end,
+        ?int $companyId = null,
+        bool $onlyConfirmed = false,
+        ?int $referenceId = null,
+        ?string $shift = null,
+    ): Collection {
         $query = Production::query();
 
         if ($companyId) {
@@ -57,6 +63,14 @@ class ProductionReportService
         // reportes de todo periodo cuya nomina ya se cerro.
         if ($onlyConfirmed) {
             $query->whereIn('productions.status', Production::COUNTED_STATUSES);
+        }
+
+        if ($referenceId) {
+            $query->where('productions.reference_id', $referenceId);
+        }
+
+        if ($shift) {
+            $query->where('productions.shift', $shift);
         }
 
         return $query
@@ -76,6 +90,35 @@ class ProductionReportService
             ->with('employee:id,first_name,last_name,document_number,photo')
             ->orderByDesc('total_points')
             ->get();
+    }
+
+    /**
+     * Periodo inmediatamente anterior al dado, del mismo numero de dias.
+     *
+     * Es lo que hace comparable la variacion: si el rango son quince dias, se compara con
+     * los quince anteriores, no con «el mes pasado», que tendria otra cantidad de dias
+     * habiles y haria subir o bajar el porcentaje sin que nadie hubiera producido distinto.
+     *
+     * @return array{start: string, end: string}
+     */
+    public function previousPeriod(string $start, string $end): array
+    {
+        $from = Carbon::parse($start)->startOfDay();
+        $to = Carbon::parse($end)->startOfDay();
+
+        if ($to->lt($from)) {
+            [$from, $to] = [$to, $from];
+        }
+
+        $days = $from->diffInDays($to) + 1;
+
+        $previousEnd = $from->copy()->subDay();
+        $previousStart = $previousEnd->copy()->subDays($days - 1);
+
+        return [
+            'start' => $previousStart->toDateString(),
+            'end' => $previousEnd->toDateString(),
+        ];
     }
 
     public function summary(string $start, string $end, ?int $companyId = null, ?int $employeeId = null, bool $onlyConfirmed = false): array

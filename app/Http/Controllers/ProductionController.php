@@ -2,19 +2,23 @@
 
 namespace App\Http\Controllers;
 
+use App\Helpers\PermissionHelper;
 use App\Http\Requests\Production\StoreProductionRequest;
 use App\Http\Requests\Production\UpdateProductionRequest;
 use App\Models\Employee;
 use App\Models\Operation;
 use App\Models\Payroll;
 use App\Models\Production;
+use App\Models\ProductionRankingTeamFilter;
 use App\Models\Reference;
+use App\Models\Scopes\CompanyScope;
 use App\Models\User;
 use App\Services\ProductionReportService;
 use App\Services\WorkDaySessionService;
 use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -24,6 +28,9 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ProductionController extends Controller
 {
+    /** Turnos que acepta el filtro del ranking; cualquier otro valor se ignora. */
+    protected const RANKING_SHIFTS = ['manana', 'tarde', 'noche'];
+
     public function index(Request $request): Response
     {
         $user = $request->user();
@@ -340,18 +347,157 @@ class ProductionController extends Controller
         ]);
     }
 
+    /**
+     * Ranking de produccion.
+     *
+     * El rango que se pinta sale de tres sitios, en este orden: lo que trae la URL (si el
+     * usuario puede ajustar su filtro), el filtro que un administrador fijo para toda la
+     * empresa, y por ultimo la quincena en curso. Quien no puede ajustar el suyo se queda
+     * en los dos ultimos, sin panel de filtros.
+     */
     public function ranking(Request $request, ProductionReportService $service): Response
     {
         $user = $request->user();
         $companyId = TenantContext::effectiveCompanyId($user);
 
-        $start = $request->input('start', now()->startOfMonth()->toDateString());
-        $end = $request->input('end', now()->endOfMonth()->toDateString());
-        $onlyConfirmed = $request->boolean('only_confirmed', false);
+        $teamFilter = $this->rankingTeamFilter($companyId);
+        $canFilterOwn = (bool) $user?->can(PermissionHelper::RANKING_OWN_FILTER_PERMISSION);
 
-        $ranking = $service->rankingByEmployee($start, $end, $companyId, $onlyConfirmed)
+        $filters = $this->resolveRankingFilters($request, $teamFilter, $canFilterOwn);
+
+        return Inertia::render('Productions/Ranking', [
+            'filters' => $filters,
+            'ranking' => $this->rankingRows($service, $filters, $companyId),
+            'teamFilter' => $this->rankingTeamFilterPayload($teamFilter),
+            'defaultRange' => $this->currentFortnight(),
+            'previousPeriod' => $service->previousPeriod($filters['start'], $filters['end']),
+            // Solo las referencias que se pueden elegir en el panel; el turno es fijo.
+            'references' => Reference::active()->orderBy('code')->get(['id', 'code', 'name']),
+        ]);
+    }
+
+    /**
+     * Fija (o cambia) el filtro de fechas que ven todos los que abran el ranking.
+     */
+    public function storeRankingTeamFilter(Request $request): RedirectResponse
+    {
+        $companyId = TenantContext::requireCompanyIdForWrite($request->user());
+
+        $data = $request->validate([
+            'date_start' => ['required', 'date'],
+            'date_end' => ['required', 'date', 'after_or_equal:date_start'],
+        ], [
+            'date_end.after_or_equal' => 'La fecha final no puede ser anterior a la inicial.',
+        ]);
+
+        ProductionRankingTeamFilter::withoutGlobalScope(CompanyScope::class)->updateOrCreate(
+            ['company_id' => $companyId],
+            [
+                'date_start' => Carbon::parse($data['date_start'])->toDateString(),
+                'date_end' => Carbon::parse($data['date_end'])->toDateString(),
+                'set_by_user_id' => $request->user()?->id,
+            ]
+        );
+
+        return back()->with('success', 'El filtro quedo fijado para todo el equipo.');
+    }
+
+    /**
+     * Quita el filtro de equipo; cada quien vuelve a su propio rango.
+     */
+    public function destroyRankingTeamFilter(Request $request): RedirectResponse
+    {
+        $companyId = TenantContext::requireCompanyIdForWrite($request->user());
+
+        $removed = ProductionRankingTeamFilter::withoutGlobalScope(CompanyScope::class)
+            ->where('company_id', $companyId)
+            ->delete();
+
+        if ($removed === 0) {
+            return back()->with('warning', 'No habia ningun filtro de equipo puesto.');
+        }
+
+        return back()->with('success', 'Se quito el filtro del equipo.');
+    }
+
+    /**
+     * El mismo ranking que se ve en pantalla, en CSV.
+     *
+     * El BOM va porque Excel en Windows abre el CSV en la codificacion del sistema y sin el
+     * rompe cada tilde.
+     */
+    public function exportRanking(Request $request, ProductionReportService $service): StreamedResponse
+    {
+        $user = $request->user();
+        $companyId = TenantContext::effectiveCompanyId($user);
+
+        $teamFilter = $this->rankingTeamFilter($companyId);
+        $canFilterOwn = (bool) $user?->can(PermissionHelper::RANKING_OWN_FILTER_PERMISSION);
+
+        $filters = $this->resolveRankingFilters($request, $teamFilter, $canFilterOwn);
+        $rows = $this->rankingRows($service, $filters, $companyId);
+
+        $filename = 'ranking-produccion-'.now()->format('Ymd-Hi').'.csv';
+
+        return response()->streamDownload(function () use ($rows) {
+            $writer = Writer::createFromStream(fopen('php://output', 'w'));
+            $writer->setOutputBOM(Bom::Utf8);
+            $writer->insertOne([
+                'Posicion', 'Empleado', 'Documento', 'Unidades', 'Puntos', 'Registros', 'Valor', 'Variacion %',
+            ]);
+
+            foreach ($rows as $row) {
+                $writer->insertOne([
+                    $row['position'],
+                    $row['employee']['full_name'] ?? ('Empleado #'.$row['employee_id']),
+                    $row['employee']['document_number'] ?? '',
+                    $row['total_quantity'],
+                    $row['total_points'],
+                    $row['records'],
+                    $row['total_value'],
+                    $row['change_percent'] === null ? '' : $row['change_percent'],
+                ]);
+            }
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
+    /**
+     * Filas del ranking con la variacion de cada empleado frente al periodo anterior.
+     *
+     * @param  array{start: string, end: string, only_confirmed: bool, reference_id: int|null, shift: string|null}  $filters
+     * @return list<array<string, mixed>>
+     */
+    protected function rankingRows(ProductionReportService $service, array $filters, ?int $companyId): array
+    {
+        $current = $service->rankingByEmployee(
+            $filters['start'],
+            $filters['end'],
+            $companyId,
+            $filters['only_confirmed'],
+            $filters['reference_id'],
+            $filters['shift'],
+        );
+
+        $previous = $service->previousPeriod($filters['start'], $filters['end']);
+
+        $previousPoints = $service->rankingByEmployee(
+            $previous['start'],
+            $previous['end'],
+            $companyId,
+            $filters['only_confirmed'],
+            $filters['reference_id'],
+            $filters['shift'],
+        )->mapWithKeys(fn ($row) => [(int) $row->employee_id => (int) $row->total_points]);
+
+        return $current
             ->values()
-            ->map(function ($row, int $index) {
+            ->map(function ($row, int $index) use ($previousPoints) {
+                $points = (int) $row->total_points;
+                $before = (int) ($previousPoints[(int) $row->employee_id] ?? 0);
+
                 return [
                     'position' => $index + 1,
                     'employee_id' => (int) $row->employee_id,
@@ -363,15 +509,147 @@ class ProductionController extends Controller
                     ] : null,
                     'total_quantity' => (int) $row->total_quantity,
                     'total_value' => (float) $row->total_value,
-                    'total_points' => (int) $row->total_points,
+                    'total_points' => $points,
                     'records' => (int) $row->records,
+                    'previous_points' => $before,
+                    'change_percent' => self::changePercent($points, $before),
                 ];
-            });
+            })
+            ->all();
+    }
 
-        return Inertia::render('Productions/Ranking', [
-            'filters' => ['start' => $start, 'end' => $end, 'only_confirmed' => $onlyConfirmed],
-            'ranking' => $ranking,
-        ]);
+    /**
+     * Variacion porcentual entre dos periodos.
+     *
+     * Sin produccion antes no hay porcentaje que calcular —dividir por cero da «infinito»,
+     * no «subio mucho»—: se devuelve null y la pantalla lo escribe como «nuevo».
+     */
+    protected static function changePercent(int $current, int $previous): ?float
+    {
+        if ($previous === 0) {
+            return null;
+        }
+
+        return round((($current - $previous) / $previous) * 100, 1);
+    }
+
+    /**
+     * Que rango y que filtros se aplican, segun lo que trae la URL y lo que puede el usuario.
+     *
+     * @return array{start: string, end: string, only_confirmed: bool, reference_id: int|null, shift: string|null}
+     */
+    protected function resolveRankingFilters(Request $request, ?ProductionRankingTeamFilter $teamFilter, bool $canFilterOwn): array
+    {
+        $fallback = $this->currentFortnight();
+
+        $baseStart = $teamFilter?->date_start?->toDateString() ?? $fallback['start'];
+        $baseEnd = $teamFilter?->date_end?->toDateString() ?? $fallback['end'];
+
+        // Sin permiso para su propio filtro la URL no manda: se le deja el del equipo.
+        if (! $canFilterOwn) {
+            return [
+                'start' => $baseStart,
+                'end' => $baseEnd,
+                'only_confirmed' => false,
+                'reference_id' => null,
+                'shift' => null,
+            ];
+        }
+
+        $start = $this->normalizeDate($request->input('start')) ?? $baseStart;
+        $end = $this->normalizeDate($request->input('end')) ?? $baseEnd;
+
+        if ($start > $end) {
+            [$start, $end] = [$end, $start];
+        }
+
+        // La referencia se comprueba contra el catalogo de la empresa: un id de otra
+        // empresa vaciaria el ranking sin decir por que.
+        $referenceId = (int) $request->input('reference_id');
+        if ($referenceId <= 0 || ! Reference::query()->whereKey($referenceId)->exists()) {
+            $referenceId = null;
+        }
+
+        $shift = $request->input('shift');
+        if (! in_array($shift, self::RANKING_SHIFTS, true)) {
+            $shift = null;
+        }
+
+        return [
+            'start' => $start,
+            'end' => $end,
+            'only_confirmed' => $request->boolean('only_confirmed', false),
+            'reference_id' => $referenceId,
+            'shift' => $shift,
+        ];
+    }
+
+    protected function rankingTeamFilter(?int $companyId): ?ProductionRankingTeamFilter
+    {
+        if (! $companyId) {
+            return null;
+        }
+
+        return ProductionRankingTeamFilter::withoutGlobalScope(CompanyScope::class)
+            ->with('setBy:id,name,last_name')
+            ->where('company_id', $companyId)
+            ->first();
+    }
+
+    /**
+     * @return array{date_start: string, date_end: string, set_by: string|null, updated_at: string|null}|null
+     */
+    protected function rankingTeamFilterPayload(?ProductionRankingTeamFilter $teamFilter): ?array
+    {
+        if (! $teamFilter) {
+            return null;
+        }
+
+        return [
+            'date_start' => $teamFilter->date_start?->toDateString() ?? '',
+            'date_end' => $teamFilter->date_end?->toDateString() ?? '',
+            'set_by' => $teamFilter->setBy?->full_name ?: null,
+            'updated_at' => $teamFilter->updated_at?->toIso8601String(),
+        ];
+    }
+
+    /**
+     * Quincena en curso: del 1 al 15, o del 16 al fin de mes.
+     *
+     * Es el rango por defecto del ranking porque coincide con el corte de nomina: mirar
+     * «el mes» a dia 3 daba un podio de tres dias.
+     *
+     * @return array{start: string, end: string}
+     */
+    protected function currentFortnight(): array
+    {
+        $today = now();
+
+        if ($today->day <= 15) {
+            return [
+                'start' => $today->copy()->startOfMonth()->toDateString(),
+                'end' => $today->copy()->startOfMonth()->addDays(14)->toDateString(),
+            ];
+        }
+
+        return [
+            'start' => $today->copy()->startOfMonth()->addDays(15)->toDateString(),
+            'end' => $today->copy()->endOfMonth()->toDateString(),
+        ];
+    }
+
+    /** Una fecha de la URL solo se usa si de verdad lo es; si no, manda el valor por defecto. */
+    protected function normalizeDate(mixed $value): ?string
+    {
+        if (! is_string($value) || trim($value) === '') {
+            return null;
+        }
+
+        try {
+            return Carbon::parse($value)->toDateString();
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     protected function applyEmployeeRestriction($query, $user): void

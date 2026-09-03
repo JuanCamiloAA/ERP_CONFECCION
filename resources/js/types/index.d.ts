@@ -362,6 +362,10 @@ export interface EmployeeRankingRow {
     total_value: number;
     total_points: number;
     records: number;
+    /** Puntos del mismo empleado en el periodo inmediatamente anterior, de igual duracion. */
+    previous_points: number;
+    /** Variacion frente a ese periodo. Null cuando antes no produjo nada: no hay porcentaje. */
+    change_percent: number | null;
 }
 
 export interface Production {

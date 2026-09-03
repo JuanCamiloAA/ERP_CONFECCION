@@ -14,12 +14,28 @@ export type ProductionFilterKey =
 export type ProductionFilterState = Record<ProductionFilterKey, string>;
 
 export interface FilterChip {
-    key: ProductionFilterKey;
+    /**
+     * Clave del filtro que quita el aspa. Es `string` y no `ProductionFilterKey` porque el
+     * ranking reusa la barra con filtros propios («solo confirmadas») que el listado no tiene.
+     */
+    key: string;
     label: string;
 }
 
 /** Rango rapido: escribe date_start / date_end, los parametros que el backend ya entiende. */
-type RangeKey = 'today' | 'week' | 'month' | 'custom';
+export type RangeKey = 'today' | 'week' | 'fortnight' | 'month' | 'custom';
+
+export type QuickRangeKey = Exclude<RangeKey, 'custom'>;
+
+const RANGE_LABELS: Record<QuickRangeKey, string> = {
+    today: 'Hoy',
+    week: 'Semana',
+    fortnight: 'Quincena',
+    month: 'Mes',
+};
+
+/** Los tres de siempre. El ranking pide ademas «Quincena», que es su corte natural. */
+const DEFAULT_RANGES: QuickRangeKey[] = ['today', 'week', 'month'];
 
 function isoDate(date: Date): string {
     // Fecha local, no UTC: `toISOString()` en Bogota (UTC-5) devuelve el dia anterior
@@ -31,7 +47,7 @@ function isoDate(date: Date): string {
     return `${y}-${m}-${d}`;
 }
 
-export function rangeFor(key: Exclude<RangeKey, 'custom'>): { date_start: string; date_end: string } {
+export function rangeFor(key: QuickRangeKey): { date_start: string; date_end: string } {
     const today = new Date();
     const end = isoDate(today);
 
@@ -48,16 +64,35 @@ export function rangeFor(key: Exclude<RangeKey, 'custom'>): { date_start: string
         return { date_start: isoDate(start), date_end: end };
     }
 
+    if (key === 'fortnight') {
+        // Quincena cerrada, no «los ultimos quince dias»: del 1 al 15 o del 16 al fin de
+        // mes, que es como corta la nomina. Debe coincidir con `currentFortnight()` del
+        // controlador, o el segmentado no se encenderia con el rango por defecto.
+        const first = today.getDate() <= 15;
+        const start = new Date(today.getFullYear(), today.getMonth(), first ? 1 : 16);
+        const last = first
+            ? new Date(today.getFullYear(), today.getMonth(), 15)
+            : new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+        return { date_start: isoDate(start), date_end: isoDate(last) };
+    }
+
     const start = new Date(today.getFullYear(), today.getMonth(), 1);
 
     return { date_start: isoDate(start), date_end: end };
 }
 
-/** Que boton del segmentado corresponde al rango que hay puesto. */
-export function activeRange(filters: ProductionFilterState): RangeKey | null {
+/**
+ * Que boton del segmentado corresponde al rango que hay puesto.
+ *
+ * `keys` limita la comparacion a los botones que esa pantalla pinta: si se comprobara
+ * siempre la lista entera, una quincena marcaria «quincena» en el listado de produccion,
+ * que no tiene ese boton, y no se encenderia nada.
+ */
+export function activeRange(filters: ProductionFilterState, keys: QuickRangeKey[] = DEFAULT_RANGES): RangeKey | null {
     if (!filters.date_start && !filters.date_end) return null;
 
-    for (const key of ['today', 'week', 'month'] as const) {
+    for (const key of keys) {
         const r = rangeFor(key);
         if (r.date_start === filters.date_start && r.date_end === filters.date_end) {
             return key;
@@ -78,15 +113,20 @@ interface Props {
     filters: ProductionFilterState;
     /** Aplica y recarga; el boton «Filtrar» ya no existe. */
     onApply: (next: ProductionFilterState) => void;
-    onClearFilter: (key: ProductionFilterKey) => void;
+    onClearFilter: (key: string) => void;
     onReset: () => void;
     chips: FilterChip[];
     /** Los seis selects de siempre; se muestran dentro del panel. */
     fields: ReactNode;
-    employees: Employee[];
-    references: Reference[];
-    operations: Operation[];
-    exportUrl: string;
+    employees?: Employee[];
+    references?: Reference[];
+    operations?: Operation[];
+    /** Sin URL no hay boton de exportar: el ranking lo condiciona a su propio permiso. */
+    exportUrl?: string;
+    /** Botones del segmentado de rango rapido. Por defecto, Hoy · Semana · Mes. */
+    ranges?: QuickRangeKey[];
+    /** El ranking filtra por rango y referencia, no por persona: ahi la busqueda sobra. */
+    showSearch?: boolean;
     /** Conmutador de vista; se pinta pegado a la derecha de la barra. */
     viewSwitch?: ReactNode;
     /** Controles que van al extremo derecho de la barra (hoy, el conmutador de vista). */
@@ -112,10 +152,12 @@ export function ProductionFilterBar({
     onReset,
     chips,
     fields,
-    employees,
-    references,
-    operations,
+    employees = [],
+    references = [],
+    operations = [],
     exportUrl,
+    ranges = DEFAULT_RANGES,
+    showSearch = true,
     viewSwitch,
     trailing,
 }: Props) {
@@ -124,7 +166,7 @@ export function ProductionFilterBar({
     const [panelOpen, setPanelOpen] = useState(false);
     const boxRef = useRef<HTMLDivElement>(null);
 
-    const range = activeRange(filters);
+    const range = activeRange(filters, ranges);
     const activeCount = chips.length;
 
     const suggestions = useMemo<Suggestion[]>(() => {
@@ -190,7 +232,10 @@ export function ProductionFilterBar({
               */}
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                 {/* -------------------------------------------------- busqueda */}
-                <div ref={boxRef} className="relative min-w-0 sm:max-w-[340px] sm:flex-1">
+                <div
+                    ref={boxRef}
+                    className={`relative min-w-0 sm:max-w-[340px] sm:flex-1 ${showSearch ? '' : 'hidden'}`}
+                >
                     <MagnifyingGlass
                         size={15}
                         className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2"
@@ -243,20 +288,14 @@ export function ProductionFilterBar({
                 <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-1 sm:overflow-visible sm:px-0">
                 {/* --------------------------------------------------- rangos */}
                 <div className="emp-seg shrink-0">
-                    {(
-                        [
-                            { key: 'today', label: 'Hoy' },
-                            { key: 'week', label: 'Semana' },
-                            { key: 'month', label: 'Mes' },
-                        ] as { key: Exclude<RangeKey, 'custom'>; label: string }[]
-                    ).map((item) => (
+                    {ranges.map((key) => (
                         <button
-                            key={item.key}
+                            key={key}
                             type="button"
-                            onClick={() => setRange(item.key)}
-                            className={`emp-seg-item ${range === item.key ? 'emp-seg-on' : ''}`}
+                            onClick={() => setRange(key)}
+                            className={`emp-seg-item ${range === key ? 'emp-seg-on' : ''}`}
                         >
-                            {item.label}
+                            {RANGE_LABELS[key]}
                         </button>
                     ))}
                     <button
@@ -290,10 +329,12 @@ export function ProductionFilterBar({
 
                     <div className="ml-auto flex shrink-0 items-center gap-2">
                         {viewSwitch}
-                        <a href={exportUrl} className="emp-btn emp-btn-sm">
-                            <DownloadSimple size={14} />
-                            <span className="max-sm:sr-only">Exportar</span>
-                        </a>
+                        {exportUrl ? (
+                            <a href={exportUrl} className="emp-btn emp-btn-sm">
+                                <DownloadSimple size={14} />
+                                <span className="max-sm:sr-only">Exportar</span>
+                            </a>
+                        ) : null}
                     </div>
                 </div>
 

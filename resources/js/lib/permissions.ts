@@ -38,6 +38,28 @@ export interface PresetDefinition {
     build: (all: string[]) => string[];
 }
 
+/**
+ * Permisos del ranking, por nombre.
+ *
+ * Se consumen fuera de `<Can>` —para decidir si la barra de filtros llega a pintarse— y
+ * en las plantillas de rol, asi que viven aqui y no sueltos en la pantalla. El espejo en
+ * PHP es `PermissionHelper::RANKING_MANAGED_PERMISSIONS`.
+ */
+export const RANKING_PERMISSIONS = {
+    view: 'productions.ranking.view',
+    stats: 'productions.ranking.stats.view',
+    export: 'productions.ranking.export',
+    teamFilter: 'productions.ranking.filter_team.manage',
+    ownFilter: 'productions.ranking.filter_own.manage',
+} as const;
+
+/** Nacen apagados: los reparte el administrador de cada empresa, no una plantilla. */
+const RANKING_MANAGED = [
+    RANKING_PERMISSIONS.stats,
+    RANKING_PERMISSIONS.export,
+    RANKING_PERMISSIONS.teamFilter,
+] as string[];
+
 const OPERATOR_PERMISSIONS = [
     'dashboard.index.view',
     'productions.index.view',
@@ -46,6 +68,7 @@ const OPERATOR_PERMISSIONS = [
     'productions.index.workday_close',
     'productions.report.view',
     'productions.ranking.view',
+    RANKING_PERMISSIONS.ownFilter,
     'payrolls.index.view',
     'payrolls.show.view',
     'payrolls.employee.view',
@@ -64,7 +87,10 @@ export const PRESETS: PresetDefinition[] = [
         key: 'read_only',
         label: 'Solo lectura',
         description: 'Solo los permisos de ver, en todos los módulos.',
-        build: (all) => all.filter((name) => actionOf(name) === 'view'),
+        // Ajustar el propio filtro del ranking acompaña a «ver»: sin él la pantalla queda
+        // congelada en el rango que otro haya fijado, que no es «solo lectura» sino menos.
+        build: (all) =>
+            all.filter((name) => actionOf(name) === 'view' || name === RANKING_PERMISSIONS.ownFilter),
     },
     {
         key: 'operator',
@@ -80,7 +106,8 @@ export const PRESETS: PresetDefinition[] = [
             all.filter(
                 (name) =>
                     ! SUPERVISOR_EXCLUDED_MODULES.includes(moduleOf(name)) &&
-                    ! SUPERVISOR_EXCLUDED_ACTIONS.includes(actionOf(name)),
+                    ! SUPERVISOR_EXCLUDED_ACTIONS.includes(actionOf(name)) &&
+                    ! RANKING_MANAGED.includes(name),
             ),
     },
     {

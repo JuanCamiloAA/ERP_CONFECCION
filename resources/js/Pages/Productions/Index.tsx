@@ -120,7 +120,7 @@ export default function ProductionsIndex({
     };
 
     /** Quita un filtro puntual desde su chip y recarga de inmediato. */
-    const clearFilter = (key: FilterKey) => {
+    const clearFilter = (key: string) => {
         apply({ ...localFilters, [key]: '' });
     };
 

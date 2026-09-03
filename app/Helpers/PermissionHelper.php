@@ -21,6 +21,25 @@ namespace App\Helpers;
  */
 class PermissionHelper
 {
+    /**
+     * Permisos del ranking que no se reparten solos.
+     *
+     * El filtro de equipo lo ven todos, asi que fijarlo, exportar el listado completo y
+     * mirar los agregados de la empresa nacen apagados: los enciende el administrador de
+     * cada empresa a quien decida. Por eso quedan fuera de las plantillas «solo lectura»,
+     * «operario» y «supervisor».
+     *
+     * @var list<string>
+     */
+    public const RANKING_MANAGED_PERMISSIONS = [
+        'productions.ranking.stats.view',
+        'productions.ranking.export',
+        'productions.ranking.filter_team.manage',
+    ];
+
+    /** Ajustar el filtro propio acompana siempre a «ver ranking»: sin el, la pantalla es fija. */
+    public const RANKING_OWN_FILTER_PERMISSION = 'productions.ranking.filter_own.manage';
+
     /** Etiqueta por defecto de los verbos que se repiten en todos los modulos. */
     protected const DEFAULT_ACTION_LABELS = [
         'view' => 'Ver',
@@ -219,8 +238,14 @@ class PermissionHelper
                     'ranking' => [
                         'display' => 'Ranking de Produccion',
                         'route' => 'productions.ranking',
-                        'actions' => ['view'],
-                        'labels' => ['view' => 'Ver ranking'],
+                        'actions' => ['view', 'stats.view', 'export', 'filter_team.manage', 'filter_own.manage'],
+                        'labels' => [
+                            'view' => 'Ver ranking',
+                            'stats.view' => 'Ver las metricas agregadas',
+                            'export' => 'Exportar el ranking',
+                            'filter_team.manage' => 'Fijar el filtro de todo el equipo',
+                            'filter_own.manage' => 'Ajustar su propio filtro',
+                        ],
                     ],
                 ],
             ],
@@ -705,6 +730,7 @@ class PermissionHelper
                         }
                     }
                 }
+                $permissions[] = self::RANKING_OWN_FILTER_PERMISSION;
                 break;
 
             case 'operator':
@@ -716,6 +742,7 @@ class PermissionHelper
                     'productions.index.workday_close',
                     'productions.report.view',
                     'productions.ranking.view',
+                    self::RANKING_OWN_FILTER_PERMISSION,
                     'payrolls.index.view',
                     'payrolls.show.view',
                     'payrolls.employee.view',
@@ -733,9 +760,14 @@ class PermissionHelper
                     }
                     foreach ($config['pages'] as $page => $pageConfig) {
                         foreach ($pageConfig['actions'] as $action) {
-                            if (! in_array($action, ['delete', 'approve', 'pay'], true)) {
-                                $permissions[] = "{$module}.{$page}.{$action}";
+                            $name = "{$module}.{$page}.{$action}";
+                            if (in_array($action, ['delete', 'approve', 'pay'], true)) {
+                                continue;
                             }
+                            if (in_array($name, self::RANKING_MANAGED_PERMISSIONS, true)) {
+                                continue;
+                            }
+                            $permissions[] = $name;
                         }
                     }
                 }

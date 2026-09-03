@@ -17,3 +17,7 @@ php artisan productions:reopen-unpaid --status=pendiente
 
 memory_limit = 512M
 max_execution_time = 300
+
+
+php artisan migrate --force    # 2 migraciones nuevas
+php artisan optimize           # obligatorio: routes/web.php cambió mucho

@@ -222,6 +222,16 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     Route::middleware('permission:productions.ranking.view')->group(function () {
         Route::get('/productions/ranking', [ProductionController::class, 'ranking'])->name('productions.ranking');
+        Route::get('/productions/ranking/export', [ProductionController::class, 'exportRanking'])
+            ->name('productions.ranking.export')
+            ->middleware('permission:productions.ranking.export');
+        // Filtro que se le fija a toda la empresa: lo ve cualquiera, lo cambia quien puede.
+        Route::post('/productions/ranking/team-filter', [ProductionController::class, 'storeRankingTeamFilter'])
+            ->name('productions.ranking.team-filter.store')
+            ->middleware('permission:productions.ranking.filter_team.manage');
+        Route::delete('/productions/ranking/team-filter', [ProductionController::class, 'destroyRankingTeamFilter'])
+            ->name('productions.ranking.team-filter.destroy')
+            ->middleware('permission:productions.ranking.filter_team.manage');
     });
 
     // Nomina
