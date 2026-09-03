@@ -1,6 +1,7 @@
 import { Head, router } from '@inertiajs/react';
-import { DownloadSimple, Medal, PushPin, TrendDown, TrendUp, X } from '@phosphor-icons/react';
+import { Medal, PushPin, TrendDown, TrendUp, X } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
+import { RankingExportMenu } from '@/Components/Productions/RankingExportMenu';
 import { RankingFilterBar, SHIFT_LABEL, type RankingFilterState } from '@/Components/Productions/RankingFilterBar';
 import { Avatar } from '@/Components/UI/Avatar';
 import { Can } from '@/Components/UI/Can';
@@ -143,7 +144,7 @@ export default function ProductionRanking({
         };
     }, [ranking]);
 
-    const exportUrl = useMemo(() => route('productions.ranking.export', queryFor(local)), [local]);
+    const exportParams = useMemo(() => queryFor(local), [local]);
 
     // Del prop, no del estado local: esta linea describe lo que la lista de abajo esta
     // mostrando, y entre el clic y la respuesta el estado local va por delante.
@@ -169,10 +170,7 @@ export default function ProductionRanking({
                     </div>
 
                     <Can permission={RANKING_PERMISSIONS.export}>
-                        <a href={exportUrl} className="emp-btn emp-btn-sm">
-                            <DownloadSimple size={15} />
-                            Exportar CSV
-                        </a>
+                        <RankingExportMenu params={exportParams} />
                     </Can>
                 </div>
 

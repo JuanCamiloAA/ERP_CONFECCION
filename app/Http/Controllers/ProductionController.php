@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Helpers\PermissionHelper;
 use App\Http\Requests\Production\StoreProductionRequest;
 use App\Http\Requests\Production\UpdateProductionRequest;
+use App\Models\Company;
 use App\Models\Employee;
 use App\Models\Operation;
 use App\Models\Payroll;
@@ -13,11 +14,13 @@ use App\Models\ProductionRankingTeamFilter;
 use App\Models\Reference;
 use App\Models\Scopes\CompanyScope;
 use App\Models\User;
+use App\Services\Productions\ProductionRankingExport;
 use App\Services\ProductionReportService;
 use App\Services\WorkDaySessionService;
 use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Inertia\Inertia;
@@ -421,12 +424,44 @@ class ProductionController extends Controller
     }
 
     /**
-     * El mismo ranking que se ve en pantalla, en CSV.
+     * El mismo ranking que se ve en pantalla, en Excel.
      *
-     * El BOM va porque Excel en Windows abre el CSV en la codificacion del sistema y sin el
-     * rompe cada tilde.
+     * Los numeros salen como numeros —no como texto ya formateado— para que quien reciba
+     * el archivo pueda sumar, ordenar y hacer tabla dinamica, igual que en Referencias.
      */
-    public function exportRanking(Request $request, ProductionReportService $service): StreamedResponse
+    public function exportRankingExcel(Request $request, ProductionReportService $service, ProductionRankingExport $export): HttpResponse
+    {
+        [$rows, $filters, $previous, $company, $referenceLabel] = $this->rankingExportPayload($request, $service);
+
+        return $this->rankingDownload(
+            $export->xlsx($rows, $filters, $previous, $company, $referenceLabel),
+            $export->filename($filters, 'xlsx'),
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        );
+    }
+
+    /**
+     * El mismo ranking, en Word: paginado y con el encabezado repetido, para imprimirlo o
+     * pegarlo en un informe.
+     */
+    public function exportRankingWord(Request $request, ProductionReportService $service, ProductionRankingExport $export): HttpResponse
+    {
+        [$rows, $filters, $previous, $company, $referenceLabel] = $this->rankingExportPayload($request, $service);
+
+        return $this->rankingDownload(
+            $export->docx($rows, $filters, $previous, $company, $referenceLabel),
+            $export->filename($filters, 'docx'),
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        );
+    }
+
+    /**
+     * Lo que necesitan los dos formatos: las mismas filas, filtros y contexto que la
+     * pantalla. Vive aparte para que el Excel y el Word no puedan divergir.
+     *
+     * @return array{0: list<array<string, mixed>>, 1: array<string, mixed>, 2: array{start: string, end: string}, 3: Company|null, 4: string|null}
+     */
+    protected function rankingExportPayload(Request $request, ProductionReportService $service): array
     {
         $user = $request->user();
         $companyId = TenantContext::effectiveCompanyId($user);
@@ -435,31 +470,26 @@ class ProductionController extends Controller
         $canFilterOwn = (bool) $user?->can(PermissionHelper::RANKING_OWN_FILTER_PERMISSION);
 
         $filters = $this->resolveRankingFilters($request, $teamFilter, $canFilterOwn);
-        $rows = $this->rankingRows($service, $filters, $companyId);
 
-        $filename = 'ranking-produccion-'.now()->format('Ymd-Hi').'.csv';
+        $reference = $filters['reference_id']
+            ? Reference::query()->find($filters['reference_id'], ['id', 'code', 'name'])
+            : null;
 
-        return response()->streamDownload(function () use ($rows) {
-            $writer = Writer::createFromStream(fopen('php://output', 'w'));
-            $writer->setOutputBOM(Bom::Utf8);
-            $writer->insertOne([
-                'Posicion', 'Empleado', 'Documento', 'Unidades', 'Puntos', 'Registros', 'Valor', 'Variacion %',
-            ]);
+        return [
+            $this->rankingRows($service, $filters, $companyId),
+            $filters,
+            $service->previousPeriod($filters['start'], $filters['end']),
+            $companyId ? Company::query()->find($companyId) : null,
+            $reference ? $reference->code.' - '.$reference->name : null,
+        ];
+    }
 
-            foreach ($rows as $row) {
-                $writer->insertOne([
-                    $row['position'],
-                    $row['employee']['full_name'] ?? ('Empleado #'.$row['employee_id']),
-                    $row['employee']['document_number'] ?? '',
-                    $row['total_quantity'],
-                    $row['total_points'],
-                    $row['records'],
-                    $row['total_value'],
-                    $row['change_percent'] === null ? '' : $row['change_percent'],
-                ]);
-            }
-        }, $filename, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
+    protected function rankingDownload(string $bytes, string $filename, string $contentType): HttpResponse
+    {
+        return response($bytes, 200, [
+            'Content-Type' => $contentType,
+            'Content-Disposition' => 'attachment; filename="'.$filename.'"',
+            // Un ranking cambia cada dia: no debe quedarse cacheado en el navegador.
             'Cache-Control' => 'no-store, no-cache, must-revalidate',
         ]);
     }

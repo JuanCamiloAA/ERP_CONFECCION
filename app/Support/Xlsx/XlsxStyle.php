@@ -56,4 +56,16 @@ final class XlsxStyle
 
     /** Texto resaltado (fila de totales). */
     public const BOX_TOTAL = 15;
+
+    /**
+     * Porcentaje con un decimal y signo (+4,2% / -4,2%).
+     *
+     * Aparte de PERCENT porque las variaciones no se pueden redondear a entero —«+0%» y
+     * «+0,4%» dicen cosas distintas— ni pueden perder el signo. El valor se escribe como
+     * fraccion, igual que en PERCENT.
+     */
+    public const PERCENT_ONE = 16;
+
+    /** El mismo porcentaje, resaltado (fila de totales). */
+    public const PERCENT_ONE_TOTAL = 17;
 }

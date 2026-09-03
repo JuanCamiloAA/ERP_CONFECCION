@@ -272,16 +272,57 @@ class ProductionRankingTest extends TestCase
     {
         $sin = $this->actorWith(['productions.ranking.view', 'productions.ranking.filter_own.manage']);
 
-        $this->actingAs($sin)
-            ->get(route('productions.ranking.export'))
-            ->assertForbidden();
+        $this->actingAs($sin)->get(route('productions.ranking.export.excel'))->assertForbidden();
+        $this->actingAs($sin)->get(route('productions.ranking.export.word'))->assertForbidden();
+    }
 
-        $con = $this->actorWith(self::ALL_RANKING_PERMISSIONS);
+    public function test_el_ranking_se_exporta_a_excel_y_a_word(): void
+    {
+        $user = $this->actorWith(self::ALL_RANKING_PERMISSIONS);
 
-        $this->actingAs($con)
-            ->get(route('productions.ranking.export'))
-            ->assertOk()
-            ->assertHeader('content-type', 'text/csv; charset=UTF-8');
+        $excel = $this->actingAs($user)->get(route('productions.ranking.export.excel'));
+        $excel->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+
+        $word = $this->actingAs($user)->get(route('productions.ranking.export.word'));
+        $word->assertOk()
+            ->assertHeader('content-type', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+        // Los dos son paquetes OOXML: un ZIP con las partes que Excel y Word esperan.
+        $this->assertOoxml($excel->getContent(), 'xl/workbook.xml');
+        $this->assertOoxml($word->getContent(), 'word/document.xml');
+    }
+
+    public function test_lo_exportado_respeta_el_filtro_de_la_pantalla(): void
+    {
+        $user = $this->actorWith(self::ALL_RANKING_PERMISSIONS);
+
+        $response = $this->actingAs($user)
+            ->get(route('productions.ranking.export.word', ['start' => '2026-02-01', 'end' => '2026-02-15']));
+
+        $response->assertOk();
+        // El nombre lleva el rango: dos descargas del mismo dia no se pisan en la carpeta.
+        $response->assertHeader(
+            'content-disposition',
+            'attachment; filename="ranking-produccion-2026-02-01-a-2026-02-15-'.now()->format('Ymd-Hi').'.docx"',
+        );
+    }
+
+    /** El archivo abre de verdad: se descomprime y trae la parte principal del formato. */
+    protected function assertOoxml(string $bytes, string $part): void
+    {
+        $path = tempnam(sys_get_temp_dir(), 'ooxml');
+        file_put_contents($path, $bytes);
+
+        try {
+            $zip = new \ZipArchive;
+            $this->assertTrue($zip->open($path) === true, 'El archivo exportado no es un paquete OOXML válido.');
+            $this->assertNotFalse($zip->locateName($part), "Al paquete le falta {$part}.");
+            $this->assertNotFalse($zip->locateName('[Content_Types].xml'));
+            $zip->close();
+        } finally {
+            @unlink($path);
+        }
     }
 
     public function test_cada_fila_trae_su_variacion_contra_el_periodo_anterior(): void

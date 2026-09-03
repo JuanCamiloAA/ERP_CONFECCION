@@ -222,8 +222,13 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     Route::middleware('permission:productions.ranking.view')->group(function () {
         Route::get('/productions/ranking', [ProductionController::class, 'ranking'])->name('productions.ranking');
-        Route::get('/productions/ranking/export', [ProductionController::class, 'exportRanking'])
-            ->name('productions.ranking.export')
+        // Excel o Word, mismo contenido y mismo permiso: quien exporta elige con que
+        // programa lo abre, como en Referencias.
+        Route::get('/productions/ranking/export/excel', [ProductionController::class, 'exportRankingExcel'])
+            ->name('productions.ranking.export.excel')
+            ->middleware('permission:productions.ranking.export');
+        Route::get('/productions/ranking/export/word', [ProductionController::class, 'exportRankingWord'])
+            ->name('productions.ranking.export.word')
             ->middleware('permission:productions.ranking.export');
         // Filtro que se le fija a toda la empresa: lo ve cualquiera, lo cambia quien puede.
         Route::post('/productions/ranking/team-filter', [ProductionController::class, 'storeRankingTeamFilter'])

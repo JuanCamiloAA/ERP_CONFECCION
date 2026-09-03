@@ -1,0 +1,1 @@
+import{r as i}from"./app-DpuheNpt.js";function r(e=1024){const[s,t]=i.useState(()=>typeof window>"u"?!1:window.innerWidth<e);return i.useEffect(()=>{const n=()=>t(window.innerWidth<e);return window.addEventListener("resize",n),n(),()=>window.removeEventListener("resize",n)},[e]),s}export{r as u};

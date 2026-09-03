@@ -280,9 +280,11 @@ class XlsxWorkbook
 
         return '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
             .'<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">'
-            .'<numFmts count="2">'
+            .'<numFmts count="3">'
             .'<numFmt numFmtId="164" formatCode="'.$currency.'"/>'
             .'<numFmt numFmtId="165" formatCode="#,##0.0"/>'
+            // Con signo: en una variacion, «-4,2 %» y «+4,2 %» son cosas opuestas.
+            .'<numFmt numFmtId="166" formatCode="+0.0%;-0.0%;0.0%"/>'
             .'</numFmts>'
             .'<fonts count="6">'
             .'<font><sz val="11"/><color rgb="FF1F2937"/><name val="Calibri"/></font>'
@@ -310,7 +312,7 @@ class XlsxWorkbook
             .'</border>'
             .'</borders>'
             .'<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>'
-            .'<cellXfs count="16">'
+            .'<cellXfs count="18">'
             // 0 DEFAULT
             .'<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'
             // 1 BOLD
@@ -357,6 +359,13 @@ class XlsxWorkbook
             // 15 BOX_TOTAL
             .'<xf numFmtId="0" fontId="1" fillId="4" borderId="1" xfId="0" applyFont="1" applyFill="1"'
             .' applyBorder="1" applyAlignment="1"><alignment vertical="center"/></xf>'
+            // 16 PERCENT_ONE (numFmtId 10 = 0.00%; el 166 lo recorta a un decimal)
+            .'<xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1"'
+            .' applyBorder="1" applyAlignment="1"><alignment horizontal="right" vertical="center"/></xf>'
+            // 17 PERCENT_ONE_TOTAL
+            .'<xf numFmtId="166" fontId="1" fillId="4" borderId="1" xfId="0" applyNumberFormat="1" applyFont="1"'
+            .' applyFill="1" applyBorder="1" applyAlignment="1">'
+            .'<alignment horizontal="right" vertical="center"/></xf>'
             .'</cellXfs>'
             .'<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>'
             .'</styleSheet>';
