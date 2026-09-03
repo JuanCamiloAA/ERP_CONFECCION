@@ -130,8 +130,8 @@ export default function MembershipPlansIndex({ plans, featuredPlanId }: Props) {
                             {plans.data.map((plan) => (
                                 <TableRow key={plan.id}>
                                     <TableCell>
-                                        <div className="font-medium text-slate-900 dark:text-slate-100">{plan.name}</div>
-                                        <div className="font-mono text-xs text-slate-500">{plan.slug}</div>
+                                        <div className="text-[14px] text-[color:var(--emp-text)]">{plan.name}</div>
+                                        <div className="font-mono text-[12px] text-[color:var(--emp-muted)]">{plan.slug}</div>
                                     </TableCell>
                                     <TableCell align="right">
                                         <span className="tabular-nums">{limit(plan.max_staff_users)}</span>

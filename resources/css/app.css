@@ -1,5 +1,16 @@
 @import 'tailwindcss';
 
+/*
+ * La piel `emp-*` pasa a ser global.
+ *
+ * Antes la importaba cada pagina que la usaba, y los componentes compartidos (`Table`,
+ * `EntityCard`) no podian apoyarse en ella: en Bancos o Empresas, que no la importaban,
+ * `var(--emp-surface)` no existia y la tabla se quedaba sin fondo. La hoja no pinta nada
+ * por si sola —solo declara variables en la raiz y clases `.emp-*`—, asi que traerla aqui
+ * no cambia ninguna pantalla; solo garantiza que los tokens esten siempre.
+ */
+@import './module-ui.css';
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 @theme {
@@ -134,17 +145,15 @@
             min-width: 0 !important;
         }
 
+        /* Tarjeta de fila en movil: misma piel que `.emp-card`, para que la tabla se vea
+         * igual en Bancos que en Empleados al bajar de 640px. */
         .responsive-table > :is(tbody, tfoot) > tr {
             margin-bottom: 0.75rem;
             padding: 0.75rem 1rem;
-            border: 1px solid theme('colors.slate.200');
-            border-radius: 0.75rem;
-            background-color: white;
-        }
-
-        .dark .responsive-table > :is(tbody, tfoot) > tr {
-            border-color: theme('colors.slate.700');
-            background-color: theme('colors.slate.800');
+            border: none;
+            border-radius: 0.875rem;
+            background-color: var(--emp-surface);
+            box-shadow: 0 0 0 1px var(--emp-border);
         }
 
         .responsive-table > :is(tbody, tfoot) > tr:last-child {
@@ -174,7 +183,7 @@
             text-transform: uppercase;
             letter-spacing: 0.03em;
             text-align: left;
-            color: theme('colors.slate.500');
+            color: var(--emp-subtle);
         }
 
         .responsive-table > :is(tbody, tfoot) > tr > td:first-child {
@@ -183,11 +192,7 @@
             padding-bottom: 0.5rem;
             text-align: left;
             font-weight: 600;
-            border-bottom: 1px solid theme('colors.slate.100') !important;
-        }
-
-        .dark .responsive-table > :is(tbody, tfoot) > tr > td:first-child {
-            border-bottom-color: theme('colors.slate.700') !important;
+            border-bottom: 1px solid var(--emp-border) !important;
         }
 
         .responsive-table > :is(tbody, tfoot) > tr > td[colspan] {

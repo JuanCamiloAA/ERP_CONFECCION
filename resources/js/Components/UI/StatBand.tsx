@@ -26,8 +26,10 @@ export function StatBand({ stats, className }: Props) {
     return (
         <div
             className={cn(
-                'grid grid-cols-2 divide-slate-200 overflow-hidden rounded-xl border border-slate-200',
-                'sm:grid-cols-4 sm:divide-x dark:divide-slate-700 dark:border-slate-700',
+                // El divisor sigue siendo `divide-x` y solo desde `sm`, como antes: apilado
+                // en dos columnas, una linea vertical separaria bloques de filas distintas.
+                'emp-card grid grid-cols-2 overflow-hidden sm:grid-cols-4',
+                'sm:divide-x sm:divide-[color:var(--emp-border)]',
                 stats.length === 2 && 'sm:grid-cols-2',
                 stats.length === 3 && 'sm:grid-cols-3',
                 className,
@@ -35,21 +37,19 @@ export function StatBand({ stats, className }: Props) {
         >
             {stats.map((stat) => (
                 <div key={stat.label} className="min-w-0 px-4 py-3">
-                    <p className="truncate text-[10px] uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
-                        {stat.label}
-                    </p>
+                    <p className="emp-kicker truncate">{stat.label}</p>
                     <p
-                        className={cn(
-                            'mt-0.5 truncate text-2xl font-semibold tabular-nums',
-                            stat.tone === 'warning'
-                                ? 'text-amber-600 dark:text-amber-400'
-                                : 'text-slate-900 dark:text-slate-100',
-                        )}
+                        className="mt-1 truncate text-[27px] leading-none tabular-nums"
+                        style={{ color: stat.tone === 'warning' ? 'var(--emp-danger)' : 'var(--emp-text)' }}
                     >
                         {stat.value}
                     </p>
                     {stat.note ? (
-                        <p className="mt-0.5 truncate text-xs text-slate-500 dark:text-slate-400" title={stat.note}>
+                        <p
+                            className="mt-1 truncate text-[12px]"
+                            style={{ color: 'var(--emp-muted)' }}
+                            title={stat.note}
+                        >
                             {stat.note}
                         </p>
                     ) : null}

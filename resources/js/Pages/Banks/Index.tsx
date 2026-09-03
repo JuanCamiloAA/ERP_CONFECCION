@@ -208,10 +208,10 @@ export default function BanksIndex({ banks, filters, sorts, stats, chipCounts }:
                                                     size={34}
                                                 />
                                                 <div className="min-w-0">
-                                                    <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+                                                    <p className="truncate text-[14px] text-[color:var(--emp-text)]">
                                                         {bank.name}
                                                     </p>
-                                                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                                    <p className="truncate text-[12px] text-[color:var(--emp-muted)]">
                                                         {bank.type_label}
                                                     </p>
                                                 </div>
@@ -276,7 +276,7 @@ export default function BanksIndex({ banks, filters, sorts, stats, chipCounts }:
                             </TableBody>
                         </Table>
 
-                        <p className="mt-2 px-1 text-xs text-slate-500 dark:text-slate-400">
+                        <p className="mt-2 px-1 text-[12px] text-[color:var(--emp-muted)]">
                             Los bancos sin logo muestran el monograma del código. Sube el logo desde Editar banco.
                         </p>
                     </div>

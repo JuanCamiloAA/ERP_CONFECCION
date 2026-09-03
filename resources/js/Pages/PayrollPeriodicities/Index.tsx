@@ -246,9 +246,9 @@ export default function PayrollPeriodicitiesIndex({ periodicities, filters, chip
                                     </TableCell>
 
                                     <TableCell>
-                                        <p className="font-medium text-slate-900 dark:text-slate-100">{row.name}</p>
+                                        <p className="text-[14px] text-[color:var(--emp-text)]">{row.name}</p>
                                         {row.description ? (
-                                            <p className="text-xs text-slate-500 dark:text-slate-400">{row.description}</p>
+                                            <p className="text-[12px] text-[color:var(--emp-muted)]">{row.description}</p>
                                         ) : null}
                                     </TableCell>
 
@@ -304,18 +304,18 @@ export default function PayrollPeriodicitiesIndex({ periodicities, filters, chip
                             {rows.map((row, index) => (
                                 <li
                                     key={row.id}
-                                    className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-800"
+                                    className="emp-card flex flex-wrap items-center gap-3 p-3"
                                 >
                                     {canReorder ? reorderButtons(index, row) : null}
 
                                     <div className="min-w-0 flex-1">
-                                        <p className="truncate font-medium text-slate-900 dark:text-slate-100">{row.name}</p>
+                                        <p className="truncate text-[14px] text-[color:var(--emp-text)]">{row.name}</p>
                                         <p className="truncate font-mono text-xs text-indigo-600 dark:text-indigo-300">
                                             {row.code}
                                         </p>
                                     </div>
 
-                                    <span className="shrink-0 text-xs tabular-nums text-slate-500 dark:text-slate-400">
+                                    <span className="shrink-0 text-[12px] tabular-nums text-[color:var(--emp-muted)]">
                                         {row.payrolls_count ?? 0} nóminas
                                     </span>
 

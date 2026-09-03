@@ -194,7 +194,14 @@ export default function CompaniesIndex({ companies, filters, sorts, stats, chipC
                                 value={filters.plan ?? ''}
                                 onChange={(e) => applyFilters({ plan: e.target.value || null })}
                                 aria-label="Filtrar por plan"
-                                className="h-8 w-full rounded-lg border border-slate-300 bg-white px-2 text-xs text-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
+                                // Sin `.emp-field`: esa clase fija 38/44px de alto y aqui el
+                                // select convive con los controles de filtro, que son de 32px.
+                                className="h-8 w-full rounded-lg border px-2 text-[12px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[color:var(--emp-accent)]"
+                                style={{
+                                    borderColor: 'var(--emp-border)',
+                                    backgroundColor: 'var(--emp-field)',
+                                    color: 'var(--emp-text)',
+                                }}
                             >
                                 <option value="">Todos los planes</option>
                                 {plans.map((plan) => (
@@ -279,14 +286,14 @@ export default function CompaniesIndex({ companies, filters, sorts, stats, chipC
                                                 )}
                                                 <div className="min-w-0">
                                                     <div className="flex items-center gap-2">
-                                                        <p className="truncate font-medium text-slate-900 dark:text-slate-100">
+                                                        <p className="truncate text-[14px] text-[color:var(--emp-text)]">
                                                             {company.name}
                                                         </p>
                                                         <Badge variant={company.is_active ? 'success' : 'danger'}>
                                                             {company.is_active ? 'Activa' : 'Inactiva'}
                                                         </Badge>
                                                     </div>
-                                                    <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+                                                    <p className="truncate text-[12px] text-[color:var(--emp-muted)]">
                                                         {[company.nit, company.address].filter(Boolean).join(' · ') || 'Sin NIT'}
                                                     </p>
                                                 </div>
@@ -315,7 +322,7 @@ export default function CompaniesIndex({ companies, filters, sorts, stats, chipC
                                                     'text-xs',
                                                     membership.tone === 'expired' && 'font-medium text-rose-600 dark:text-rose-400',
                                                     membership.tone === 'soon' && 'font-medium text-amber-600 dark:text-amber-400',
-                                                    membership.tone === 'default' && 'text-slate-500 dark:text-slate-400',
+                                                    membership.tone === 'default' && 'text-[color:var(--emp-muted)]',
                                                 )}
                                             >
                                                 {membership.text}

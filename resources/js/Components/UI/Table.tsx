@@ -63,16 +63,22 @@ function collectHeaderLabels(children: ReactNode): string[] {
     return labels;
 }
 
+/**
+ * Tabla de listado, con la piel compartida `emp-*`.
+ *
+ * Sin caja: la tabla se apoya en el fondo de la pagina y las filas se separan con una
+ * linea, igual que en Empleados, Produccion y Nomina. Antes iba dentro de un recuadro con
+ * la cabecera rellena, y al abrir dos modulos seguidos parecian dos aplicaciones.
+ */
 export function Table({ className, children, ...props }: TableHTMLAttributes<HTMLTableElement>) {
     const headerLabels = useMemo(() => collectHeaderLabels(children), [children]);
 
     return (
         <TableHeaderLabelsContext.Provider value={headerLabels}>
-            <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-700">
-                <table
-                    className={cn('responsive-table w-full divide-y divide-slate-200 text-sm dark:divide-slate-700', className)}
-                    {...props}
-                >
+            {/* El scroll horizontal se queda: en escritorio hay listados mas anchos que la
+              * pantalla. Lo que se va es el borde y el fondo, que son los que hacian caja. */}
+            <div className="overflow-x-auto">
+                <table className={cn('responsive-table w-full text-left', className)} {...props}>
                     {children}
                 </table>
             </div>
@@ -81,29 +87,22 @@ export function Table({ className, children, ...props }: TableHTMLAttributes<HTM
 }
 
 export function TableHead({ children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
-    return (
-        <thead className="bg-slate-50 dark:bg-slate-900/50" {...props}>
-            {children}
-        </thead>
-    );
+    return <thead {...props}>{children}</thead>;
 }
 
 export function TableBody({ children, className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
     return (
         <InTableBodyContext.Provider value={true}>
-            <tbody
-                className={cn('divide-y divide-slate-200 bg-white dark:divide-slate-700 dark:bg-slate-800', className)}
-                {...props}
-            >
+            <tbody className={className} {...props}>
                 {children}
             </tbody>
         </InTableBodyContext.Provider>
     );
 }
 
-export function TableFoot({ children, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+export function TableFoot({ children, className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
     return (
-        <tfoot className="bg-slate-50 dark:bg-slate-900/50 font-semibold" {...props}>
+        <tfoot className={cn('emp-strip', className)} {...props}>
             {children}
         </tfoot>
     );
@@ -125,8 +124,10 @@ export function TableRow({ className, children, ...props }: HTMLAttributes<HTMLT
           })
         : children;
 
+    // El separador y el realce son de las filas de datos: en la cabecera sobran, y en
+    // movil cada fila ya se pinta como tarjeta (ver `.responsive-table` en app.css).
     return (
-        <tr className={cn('transition-colors hover:bg-slate-50 dark:hover:bg-slate-700/30', className)} {...props}>
+        <tr className={cn(inBody && 'emp-row-sep emp-hover-row transition-colors', className)} {...props}>
             {content}
         </tr>
     );
@@ -141,7 +142,10 @@ export function TableHeader({ className, children, align = 'left', ...props }: T
         <th
             scope="col"
             className={cn(
-                'px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400',
+                // La linea va en cada celda y no en el <tr>: con `border-collapse`, el borde
+                // de una fila entera lo ignoran algunos navegadores, y el de las celdas no.
+                'border-b border-b-[color:var(--emp-border)] px-3 pb-2 text-[11px] font-medium uppercase',
+                'tracking-[0.09em] text-[color:var(--emp-subtle)]',
                 align === 'left' && 'text-left',
                 align === 'right' && 'text-right',
                 align === 'center' && 'text-center',
@@ -165,7 +169,9 @@ export function TableCell({ className, children, align = 'left', ...props }: Tab
     return (
         <td
             className={cn(
-                'whitespace-nowrap px-4 py-3 text-slate-700 dark:text-slate-300',
+                // El color va como clase y no en `style`: asi `cn` (tailwind-merge) deja que
+                // la pagina lo sustituya cuando pasa el suyo. En linea siempre ganaria este.
+                'whitespace-nowrap px-3 py-2.5 text-[13px] text-[color:var(--emp-text)]',
                 align === 'left' && 'text-left',
                 align === 'right' && 'text-right',
                 align === 'center' && 'text-center',
@@ -214,7 +220,7 @@ export function DataTable<T extends { id: number | string }>({
                     <tr>
                         <td
                             colSpan={columns.length}
-                            className="px-4 py-12 text-center text-sm text-slate-500 dark:text-slate-400"
+                            className="px-3 py-12 text-center text-[13px] text-[color:var(--emp-muted)]"
                         >
                             {emptyMessage}
                         </td>

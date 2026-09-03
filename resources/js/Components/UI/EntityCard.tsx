@@ -46,28 +46,34 @@ export function EntityCard({
 }: Props) {
     return (
         <article
-            className={cn(
-                'flex min-w-0 flex-col rounded-xl border bg-white p-4 transition-shadow dark:bg-slate-800',
+            className={cn('emp-card flex min-w-0 flex-col p-4', className)}
+            // La elevacion es borde, no sombra: la tarjeta destacada engorda el trazo de
+            // acento sobre el que ya trae `.emp-card`.
+            style={
                 highlighted
-                    ? 'border-indigo-500 shadow-md dark:border-indigo-500'
-                    : 'border-slate-200 dark:border-slate-700',
-                className,
-            )}
+                    ? { boxShadow: '0 0 0 1px var(--emp-accent), inset 0 0 0 1px var(--emp-accent-fill)' }
+                    : undefined
+            }
         >
             <header className="flex items-start gap-3">
                 {logo ?? (
                     <span
                         aria-hidden="true"
-                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-indigo-50 text-sm font-semibold text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm"
+                        style={{ backgroundColor: 'var(--emp-accent-fill)', color: 'var(--emp-accent-on)' }}
                     >
                         {initials}
                     </span>
                 )}
 
                 <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">{title}</div>
+                    <div className="truncate text-[14px]" style={{ color: 'var(--emp-text)' }}>
+                        {title}
+                    </div>
                     {subtitle ? (
-                        <div className="truncate text-xs text-slate-500 dark:text-slate-400">{subtitle}</div>
+                        <div className="truncate text-[12px]" style={{ color: 'var(--emp-muted)' }}>
+                            {subtitle}
+                        </div>
                     ) : null}
                 </div>
 
@@ -78,10 +84,11 @@ export function EntityCard({
                 <div className="mt-3 grid grid-cols-2 gap-3">
                     {metrics.map((metric) => (
                         <div key={metric.label} className="min-w-0">
-                            <p className="truncate text-[10px] uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">
-                                {metric.label}
-                            </p>
-                            <p className="truncate text-lg font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+                            <p className="emp-kicker truncate">{metric.label}</p>
+                            <p
+                                className="mt-0.5 truncate text-[19px] leading-none tabular-nums"
+                                style={{ color: 'var(--emp-text)' }}
+                            >
                                 {metric.value}
                             </p>
                         </div>
@@ -94,8 +101,13 @@ export function EntityCard({
             {children ? <div className="mt-3 min-w-0">{children}</div> : null}
 
             {tag || actions ? (
-                <footer className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3 dark:border-slate-700">
-                    <div className="min-w-0 text-xs text-slate-500 dark:text-slate-400">{tag}</div>
+                <footer
+                    className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-3"
+                    style={{ borderColor: 'var(--emp-border)' }}
+                >
+                    <div className="min-w-0 text-[12px]" style={{ color: 'var(--emp-muted)' }}>
+                        {tag}
+                    </div>
                     {actions ? <div className="flex shrink-0 items-center gap-1.5">{actions}</div> : null}
                 </footer>
             ) : null}
