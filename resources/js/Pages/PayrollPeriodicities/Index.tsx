@@ -299,7 +299,7 @@ export default function PayrollPeriodicitiesIndex({ periodicities, filters, chip
                         </TableBody>
                     </Table>
                 ) : (
-                    <div className="grid gap-6 xl:grid-cols-[1fr,320px]">
+                    <div className="grid gap-6 xl:grid-cols-[1fr_320px]">
                         <ul className="min-w-0 space-y-2">
                             {rows.map((row, index) => (
                                 <li

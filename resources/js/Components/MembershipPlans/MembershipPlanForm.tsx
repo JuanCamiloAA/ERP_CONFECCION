@@ -133,7 +133,7 @@ export function MembershipPlanForm({ plan }: Props) {
                 }
             />
 
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr,320px]">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
                 <div className="min-w-0 space-y-6">
                     <Card>
                         <CardHeader title="Datos" />

@@ -73,17 +73,11 @@ export function SideIndex({ items, className }: Props) {
                         type="button"
                         onClick={() => goTo(item.id)}
                         aria-current={on ? 'true' : undefined}
-                        className={cn(
-                            'border-l py-2 pl-3 text-left text-sm transition-colors',
-                            'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500',
-                            on
-                                ? 'border-indigo-500 font-medium text-slate-900 dark:text-slate-100'
-                                : 'border-slate-200 text-slate-500 hover:text-slate-700 dark:border-slate-700 dark:text-slate-400 dark:hover:text-slate-200',
-                        )}
+                        className={cn('emp-nav-item mb-0.5', on && 'emp-nav-on')}
                     >
-                        <span className="block truncate">{item.label}</span>
+                        <span className="block truncate text-[13px]">{item.label}</span>
                         {item.meta ? (
-                            <span className="block truncate text-xs text-slate-400 dark:text-slate-500">
+                            <span className="block truncate text-[11px]" style={{ color: 'var(--emp-subtle)' }}>
                                 {item.meta}
                             </span>
                         ) : null}

@@ -504,6 +504,12 @@ class PermissionHelper
                         'actions' => ['view', 'edit'],
                         'labels' => ['view' => 'Ver datos', 'edit' => 'Editar datos'],
                     ],
+                    'membership' => [
+                        'display' => 'Membresia y cobro',
+                        'route' => 'settings.index',
+                        'actions' => ['manage_payment'],
+                        'labels' => ['manage_payment' => 'Cambiar la tarjeta y el debito automatico'],
+                    ],
                 ],
             ],
 

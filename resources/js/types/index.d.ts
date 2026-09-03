@@ -354,6 +354,50 @@ export interface ReferenceOperationPivot extends Operation {
     };
 }
 
+/** Tarjeta de cobro de la membresia. Nunca lleva el numero completo ni el CVC. */
+export interface PaymentMethod {
+    brand: string;
+    last4: string;
+    expiry_month: number;
+    expiry_year: number;
+    /** MM/AA, como viene impreso en la tarjeta. */
+    expiry_label: string;
+    holder_name: string;
+}
+
+export type BillingChargeStatus = 'pendiente' | 'pagado' | 'fallido';
+
+export interface BillingCharge {
+    id: number;
+    amount: number;
+    currency: string;
+    concept: string;
+    status: BillingChargeStatus;
+    charged_at: string | null;
+}
+
+/** Estado de la membresia de la empresa que pinta «Mi empresa». */
+export interface Membership {
+    plan: { name: string; slug: string; price_monthly: number | null; features: string[] } | null;
+    started_at: string | null;
+    ends_at: string | null;
+    /** Dias hasta el vencimiento; negativo si ya paso, null si no hay fecha limite. */
+    days_left: number | null;
+    is_expired: boolean;
+    is_active: boolean;
+    usage: {
+        staff_used: number;
+        staff_limit: number | null;
+        employees_used: number;
+        employees_limit: number | null;
+    };
+    payment_method: PaymentMethod | null;
+    auto_debit_enabled: boolean;
+    next_charge_at: string | null;
+    next_charge_amount: number | null;
+    billing_charges: BillingCharge[];
+}
+
 export interface EmployeeRankingRow {
     position: number;
     employee_id: number;

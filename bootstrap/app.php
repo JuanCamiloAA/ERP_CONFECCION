@@ -35,6 +35,16 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
+        /*
+         * Datos que nunca se reenvian a la sesion al fallar una validacion.
+         *
+         * Laravel flashea todo el input menos las contraseñas, asi que sin esto el numero
+         * de tarjeta y el CVC de «Mi empresa» quedarian guardados en la sesion —en disco o
+         * en base de datos, segun el driver— cada vez que el formulario se rechazara. Es
+         * exactamente lo que PCI-DSS prohibe, y ocurriria sin que nadie lo pidiera.
+         */
+        $exceptions->dontFlash(['card_number', 'cvc']);
+
         $exceptions->respond(function (Response $response, Throwable $exception, $request) {
             if (! app()->environment(['local', 'testing']) && in_array($response->getStatusCode(), [500, 503, 404, 403])) {
                 if ($request->expectsJson()) {

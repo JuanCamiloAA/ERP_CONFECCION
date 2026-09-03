@@ -105,7 +105,7 @@ export function BankAccountFields({
     };
 
     return (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px,minmax(0,1fr)]">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[340px_minmax(0,1fr)]">
             {/* ------------------------------------------------ lista de bancos */}
             <div className="min-w-0">
                 <div className="relative">

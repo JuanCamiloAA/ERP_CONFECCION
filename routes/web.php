@@ -401,6 +401,14 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     // Mi empresa (solo datos de la compania del usuario; empresas globales = superadmin)
     Route::middleware('permission:settings.index.view')->get('/settings', [SettingController::class, 'index'])->name('settings.index');
     Route::middleware('permission:settings.index.edit')->put('/settings', [SettingController::class, 'update'])->name('settings.update');
+    // Mas restrictivo que `settings.index.edit` a proposito: quien edita los parametros de
+    // nomina no tiene por que poder cambiar la tarjeta con la que se cobra la empresa.
+    Route::middleware('permission:settings.membership.manage_payment')
+        ->put('/settings/payment-method', [SettingController::class, 'updatePaymentMethod'])
+        ->name('settings.payment-method.update');
+    Route::middleware('permission:settings.membership.manage_payment')
+        ->post('/settings/auto-debit', [SettingController::class, 'toggleAutoDebit'])
+        ->name('settings.auto-debit.toggle');
 
     // Importacion masiva CSV (solo super_admin)
     Route::middleware('super.admin')->prefix('super-admin')->name('super-admin.')->group(function () {

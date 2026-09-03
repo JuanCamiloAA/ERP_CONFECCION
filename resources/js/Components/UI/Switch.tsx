@@ -15,12 +15,14 @@ export function Switch({ checked, onChange, label, description, disabled }: Swit
             {(label || description) && (
                 <div>
                     {label && (
-                        <label className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                        <label className="block text-[13px]" style={{ color: 'var(--emp-text)' }}>
                             {label}
                         </label>
                     )}
                     {description && (
-                        <p className="text-xs text-slate-500 dark:text-slate-400">{description}</p>
+                        <p className="text-[11px]" style={{ color: 'var(--emp-subtle)' }}>
+                            {description}
+                        </p>
                     )}
                 </div>
             )}
@@ -30,10 +32,9 @@ export function Switch({ checked, onChange, label, description, disabled }: Swit
                 disabled={disabled}
                 className={cn(
                     'relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors',
-                    'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
-                    checked ? 'bg-indigo-600' : 'bg-slate-300 dark:bg-slate-600',
                     disabled && 'cursor-not-allowed opacity-50',
                 )}
+                style={{ backgroundColor: checked ? 'var(--emp-accent)' : 'var(--emp-border)' }}
             >
                 <span
                     className={cn(

@@ -50,6 +50,32 @@ class ModuleRedesignTest extends TestCase
             ->where('filters.status', 'all'));
     }
 
+    public function test_mi_empresa_entrega_el_estado_de_la_membresia(): void
+    {
+        $user = User::query()
+            ->whereNotNull('company_id')
+            ->get()
+            ->first(fn (User $u) => $u->isSuperAdmin() || $u->can('settings.index.view'));
+
+        if ($user === null) {
+            $this->markTestSkipped('No hay usuario de empresa con permiso settings.index.view.');
+        }
+
+        $response = $this->actingAs($user)->get(route('settings.index'));
+
+        $response->assertOk();
+        $response->assertInertia(fn ($page) => $page
+            ->component('Settings/Index')
+            ->has('membership.plan')
+            ->has('membership.ends_at')
+            ->has('membership.days_left')
+            ->has('membership.is_expired')
+            ->has('membership.usage.staff_used')
+            ->has('membership.usage.staff_limit')
+            ->has('membership.usage.employees_used')
+            ->has('membership.usage.employees_limit'));
+    }
+
     public function test_companies_index_expone_los_conteos_de_staff_y_empleados_por_fila(): void
     {
         $response = $this->actingAs($this->superAdmin())->get(route('companies.index'));

@@ -31,6 +31,10 @@ class CompanyDefaultRolesService
                 'is_system' => true,
             ]
         );
+        // Incluye `settings.membership.manage_payment`: el rol «admin» es el propietario de
+        // la cuenta. Ningun otro rol de esta lista debe llevarlo, ni siquiera si algun dia
+        // se le da `settings.index.edit` — cambiar la tarjeta con la que se cobra la empresa
+        // no es parte de administrar sus parametros de nomina.
         $admin->syncPermissions(PermissionHelper::presetPermissions('admin'));
 
         $supervisor = Role::updateOrCreate(

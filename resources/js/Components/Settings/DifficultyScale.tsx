@@ -1,19 +1,17 @@
 import { DIFFICULTY_LABELS } from '@/lib/difficulty';
-import { cn } from '@/lib/utils';
 
 interface Props {
     /** Los cuatro topes; el quinto grado es «mas de» el ultimo. */
     thresholds: number[];
 }
 
-/** De claro a oscuro, un tono por grado. En dark se invierte el sentido del degradado. */
-const BAND_TONES = [
-    'bg-indigo-200 dark:bg-indigo-900',
-    'bg-indigo-300 dark:bg-indigo-800',
-    'bg-indigo-400 dark:bg-indigo-700',
-    'bg-indigo-500 dark:bg-indigo-500',
-    'bg-indigo-600 dark:bg-indigo-400',
-];
+/**
+ * Un tono por grado, del acento diluido al acento pleno.
+ *
+ * Sale de `--emp-accent` con `color-mix` y no de una escala propia: asi el degradado sigue
+ * al tema —claro u oscuro— sin declarar dos juegos de color.
+ */
+const BAND_MIX = [22, 40, 60, 80, 100];
 
 /**
  * Barra escalonada de los cinco grados, proporcional a los umbrales.
@@ -34,18 +32,23 @@ export function DifficultyScale({ thresholds }: Props) {
 
     return (
         <div>
-            <div className="flex h-3 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+            <div className="flex h-3 overflow-hidden rounded-full" style={{ backgroundColor: 'var(--emp-row)' }}>
                 {widths.map((width, index) => (
                     <div
                         key={index}
-                        className={cn(BAND_TONES[index])}
-                        style={{ width: `${Math.min(100, width * 100)}%` }}
+                        style={{
+                            width: `${Math.min(100, width * 100)}%`,
+                            backgroundColor: `color-mix(in srgb, var(--emp-accent) ${BAND_MIX[index]}%, transparent)`,
+                        }}
                         title={`${index + 1} — ${DIFFICULTY_LABELS[index + 1]}`}
                     />
                 ))}
             </div>
 
-            <div className="mt-1.5 flex justify-between text-[10px] tabular-nums text-slate-400 dark:text-slate-500">
+            <div
+                className="mt-1.5 flex justify-between text-[10px] tabular-nums"
+                style={{ color: 'var(--emp-subtle)' }}
+            >
                 <span>0 min</span>
                 <span>más de {last} min</span>
             </div>

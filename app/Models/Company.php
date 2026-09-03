@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 
@@ -31,6 +32,10 @@ class Company extends Model
         'membership_plan_id',
         'membership_started_at',
         'membership_ends_at',
+        'payment_gateway',
+        'payment_customer_id',
+        'auto_debit_enabled',
+        'next_charge_at',
     ];
 
     protected $casts = [
@@ -38,11 +43,24 @@ class Company extends Model
         'settings' => 'array',
         'membership_started_at' => 'datetime',
         'membership_ends_at' => 'datetime',
+        'auto_debit_enabled' => 'boolean',
+        'next_charge_at' => 'date',
     ];
 
     public function membershipPlan(): BelongsTo
     {
         return $this->belongsTo(MembershipPlan::class, 'membership_plan_id');
+    }
+
+    /** Una tarjeta activa por empresa; la tabla admite historico si algun dia hay varias. */
+    public function paymentMethod(): HasOne
+    {
+        return $this->hasOne(CompanyPaymentMethod::class);
+    }
+
+    public function billingCharges(): HasMany
+    {
+        return $this->hasMany(CompanyBillingCharge::class)->orderByDesc('charged_at')->orderByDesc('id');
     }
 
     public function users(): HasMany
