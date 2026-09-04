@@ -218,6 +218,13 @@ export const NAV_AREAS: AreaDefinition[] = [
                 superAdminOnly: true,
             },
             {
+                key: 'payment-gateway',
+                label: 'Pasarela de pagos',
+                route: 'super-admin.payment-gateway.index',
+                icon: BanknotesIcon,
+                superAdminOnly: true,
+            },
+            {
                 key: 'landing-editor',
                 label: 'Landing pública',
                 route: 'super-admin.landing.index',

@@ -25,6 +25,13 @@ return Application::configure(basePath: dirname(__DIR__))
             AddLinkHeadersForPreloadedAssets::class,
         ]);
 
+        /*
+         * El webhook de Wompi llega de fuera, sin sesion ni token: exigir CSRF lo haria
+         * fallar siempre. Lo que lo autentica es la firma del evento, que
+         * `WompiWebhookController` valida contra el secreto antes de mirar nada mas.
+         */
+        $middleware->validateCsrfTokens(except: ['webhooks/wompi']);
+
         $middleware->alias([
             'permission' => CheckPermission::class,
             'company' => EnsureUserBelongsToCompany::class,

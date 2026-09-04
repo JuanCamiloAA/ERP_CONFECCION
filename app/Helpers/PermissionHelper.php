@@ -565,6 +565,21 @@ class PermissionHelper
                 ],
             ],
 
+            'payment_gateway' => [
+                'display' => 'Pasarela de pagos',
+                'icon' => 'CreditCardIcon',
+                'order' => 87,
+                'super_admin_only' => true,
+                'pages' => [
+                    'index' => [
+                        'display' => 'Credenciales de cobro',
+                        'route' => 'super-admin.payment-gateway.index',
+                        'actions' => ['view', 'edit'],
+                        'labels' => ['view' => 'Ver la configuracion', 'edit' => 'Cambiar llaves y entorno'],
+                    ],
+                ],
+            ],
+
             'dashboard_builder' => [
                 'display' => 'Constructor de Dashboards',
                 'icon' => 'Cog6ToothIcon',

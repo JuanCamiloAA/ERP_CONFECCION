@@ -32,7 +32,9 @@ use App\Http\Controllers\SuperAdmin\DataImportPresetController;
 use App\Http\Controllers\SuperAdmin\LandingAdminController;
 use App\Http\Controllers\SuperAdmin\LandingCmsController;
 use App\Http\Controllers\SuperAdmin\MembershipPlanController;
+use App\Http\Controllers\SuperAdmin\PaymentGatewayController;
 use App\Http\Controllers\UserController;
+use App\Http\Controllers\WompiWebhookController;
 use App\Http\Controllers\WorkDaySessionController;
 use App\Models\DataImportBatch;
 use Illuminate\Support\Facades\Route;
@@ -41,6 +43,14 @@ Route::get('/', [LandingController::class, 'show'])->name('landing');
 Route::post('/landing/plan-inquiry', LandingPlanInquiryController::class)
     ->name('landing.plan-inquiry')
     ->middleware('throttle:10,1');
+
+/*
+ * Webhook de Wompi: publico, sin sesion y exento de CSRF (ver bootstrap/app.php).
+ * Lo que lo protege es la firma del evento, que el controlador valida antes de nada.
+ */
+Route::post('/webhooks/wompi', WompiWebhookController::class)
+    ->name('webhooks.wompi')
+    ->middleware('throttle:120,1');
 
 Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     Route::get('/profile/change-password', [ProfileController::class, 'showChangePassword'])->name('profile.change-password.show');
@@ -415,6 +425,12 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::post('active-company', [ActiveCompanyController::class, 'store'])
             ->middleware('throttle:60,1')
             ->name('active-company');
+        Route::get('payment-gateway', [PaymentGatewayController::class, 'index'])->name('payment-gateway.index');
+        Route::put('payment-gateway', [PaymentGatewayController::class, 'update'])->name('payment-gateway.update');
+        // Un guardado por entorno: pruebas y produccion no comparten credenciales.
+        Route::put('payment-gateway/credentials/{environment}', [PaymentGatewayController::class, 'updateCredentials'])
+            ->whereIn('environment', \App\Models\PaymentGatewaySetting::ENVIRONMENTS)
+            ->name('payment-gateway.credentials.update');
         Route::get('data-imports', [DataImportController::class, 'index'])->name('data-imports.index');
         Route::get('data-imports/templates/zip', [DataImportController::class, 'downloadTemplatesZip'])->name('data-imports.templates.zip');
         Route::get('data-imports/templates/{type}', [DataImportController::class, 'downloadTemplate'])->whereIn('type', DataImportBatch::types())->name('data-imports.templates');
