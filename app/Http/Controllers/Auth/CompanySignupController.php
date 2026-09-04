@@ -17,7 +17,7 @@ use Illuminate\Validation\Rules;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Inertia\Response;
-use Symfony\Component\HttpFoundation\RedirectResponse as SymfonyRedirect;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 /**
  * Alta de empresa con pago del primer mes.
@@ -62,7 +62,7 @@ class CompanySignupController extends Controller
     /**
      * Guarda el alta pendiente y manda al checkout de Wompi.
      */
-    public function store(Request $request): SymfonyRedirect
+    public function store(Request $request): SymfonyResponse
     {
         $wompi = $this->gateways->wompi();
 
