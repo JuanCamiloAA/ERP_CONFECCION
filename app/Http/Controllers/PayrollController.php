@@ -13,6 +13,7 @@ use App\Models\PayrollPeriodicity;
 use App\Models\Production;
 use App\Models\Scopes\CompanyScope;
 use App\Models\WorkDaySession;
+use App\Services\Payroll\PayrollPeriodData;
 use App\Services\PayrollCalculationService;
 use App\Support\CompanyContext;
 use App\Support\TenantContext;
@@ -29,7 +30,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class PayrollController extends Controller
 {
-    public function __construct(protected PayrollCalculationService $calculator) {}
+    public function __construct(
+        protected PayrollCalculationService $calculator,
+        protected PayrollPeriodData $periodData,
+    ) {}
 
     public function index(Request $request): Response
     {
@@ -456,7 +460,9 @@ class PayrollController extends Controller
 
         $payrollEmployeeRows = (clone $peBase)
             ->with([
-                'employee:id,first_name,last_name,document_type,document_number,payroll_mode,base_salary,daily_salary,minutes_per_full_workday,ordinary_hours_per_day,is_exempt_from_overtime,scheduled_work_days',
+                // `email` alimenta el envio de comprobantes: la pantalla necesita saber
+                // quien tiene correo antes de dejar seleccionarlo.
+                'employee:id,first_name,last_name,email,document_type,document_number,payroll_mode,base_salary,daily_salary,minutes_per_full_workday,ordinary_hours_per_day,is_exempt_from_overtime,scheduled_work_days',
                 'advances',
                 'adjustments.payrollConcept:id,name,code',
             ])
@@ -661,24 +667,7 @@ class PayrollController extends Controller
      */
     protected function workSessionsFor(Payroll $payroll, array $employeeIds): array
     {
-        if ($employeeIds === []) {
-            return [];
-        }
-
-        return WorkDaySession::query()
-            ->withoutGlobalScopes()
-            ->where('company_id', $payroll->company_id)
-            ->whereBetween('work_date', [
-                $payroll->period_start->format('Y-m-d'),
-                $payroll->period_end->format('Y-m-d'),
-            ])
-            ->whereIn('employee_id', $employeeIds)
-            ->orderBy('work_date')
-            ->orderBy('id')
-            ->get()
-            ->groupBy(fn ($s) => (string) $s->employee_id)
-            ->map(fn ($sessions) => $sessions->values()->all())
-            ->all();
+        return $this->periodData->workSessionsFor($payroll, $employeeIds);
     }
 
     /**
@@ -687,30 +676,7 @@ class PayrollController extends Controller
      */
     protected function productionsFor(Payroll $payroll, array $employeeIds): array
     {
-        if ($employeeIds === []) {
-            return [];
-        }
-
-        return Production::query()
-            ->withoutGlobalScope(CompanyScope::class)
-            ->with(['reference:id,code,name', 'operation:id,name'])
-            ->whereBetween('date', [
-                $payroll->period_start->format('Y-m-d'),
-                $payroll->period_end->format('Y-m-d'),
-            ])
-            ->whereIn('status', Production::PAYABLE_STATUSES)
-            ->where(function ($q) use ($payroll) {
-                $cid = (int) $payroll->company_id;
-                $q->where('company_id', $cid)
-                    ->orWhereHas('reference', fn ($r) => $r->where('company_id', $cid));
-            })
-            ->whereIn('employee_id', $employeeIds)
-            ->orderBy('date')
-            ->orderBy('id')
-            ->get()
-            ->groupBy(fn ($p) => (string) $p->employee_id)
-            ->map(fn ($rows) => $rows->values()->all())
-            ->all();
+        return $this->periodData->productionsFor($payroll, $employeeIds);
     }
 
     public function calculate(CalculatePayrollRequest $request, Payroll $payroll): RedirectResponse

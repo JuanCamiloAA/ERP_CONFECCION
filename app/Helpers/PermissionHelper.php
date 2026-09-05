@@ -269,7 +269,7 @@ class PermissionHelper
                     'show' => [
                         'display' => 'Detalle de Nomina',
                         'route' => 'payrolls.show',
-                        'actions' => ['view', 'calculate', 'approve', 'pay', 'export', 'edit_time', 'manage_adjustments'],
+                        'actions' => ['view', 'calculate', 'approve', 'pay', 'export', 'edit_time', 'manage_adjustments', 'send_receipts'],
                         'labels' => [
                             'view' => 'Ver detalle',
                             'calculate' => 'Calcular / recalcular',
@@ -278,6 +278,7 @@ class PermissionHelper
                             'export' => 'Imprimir informes',
                             'edit_time' => 'Ajustar minutos de jornada',
                             'manage_adjustments' => 'Gestionar conceptos y anticipos',
+                            'send_receipts' => 'Enviar comprobantes por correo',
                         ],
                     ],
                     'employee' => [

@@ -1,1 +1,0 @@
-import{c as f,j as c}from"./app-BefA7fK2.js";function u({permission:r,role:i,any:t,all:s,fallback:o=null,children:a}){const e=f();let n=!0;return r&&(n=n&&e.can(r)),i&&(n=n&&e.hasRole(i)),t&&t.length>0&&(n=n&&e.canAny(t)),s&&s.length>0&&(n=n&&e.canAll(s)),c.jsx(c.Fragment,{children:n?a:o})}export{u as C};

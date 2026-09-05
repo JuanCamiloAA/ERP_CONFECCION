@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\ResolvesMediaUrlsInArray;
+use App\Notifications\ResetPasswordNotification;
 use App\Services\EffectivePermissionService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -201,5 +202,13 @@ class User extends Authenticatable
         }
 
         return array_values(array_unique($pages));
+    }
+
+    /**
+     * Correo de recuperacion con la plantilla de la aplicacion en vez de la de Laravel.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        $this->notify(new ResetPasswordNotification($token));
     }
 }

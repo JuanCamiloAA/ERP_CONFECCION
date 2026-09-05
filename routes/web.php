@@ -6,6 +6,7 @@ use App\Http\Controllers\CompanyController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardLayoutController;
 use App\Http\Controllers\DashboardWidgetDataController;
+use App\Http\Controllers\Dev\MailPreviewController;
 use App\Http\Controllers\EmployeeController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
@@ -19,6 +20,7 @@ use App\Http\Controllers\PayrollController;
 use App\Http\Controllers\PayrollEmployeeAdjustmentController;
 use App\Http\Controllers\PayrollLegalParameterController;
 use App\Http\Controllers\PayrollPeriodicityController;
+use App\Http\Controllers\PayrollReceiptController;
 use App\Http\Controllers\ProductionController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReferenceController;
@@ -51,6 +53,15 @@ Route::post('/landing/plan-inquiry', LandingPlanInquiryController::class)
 Route::post('/webhooks/wompi', WompiWebhookController::class)
     ->name('webhooks.wompi')
     ->middleware('throttle:120,1');
+
+/*
+ * Comprobante de nomina que abre el empleado desde su correo. Publico porque el empleado
+ * no tiene usuario en la plataforma: lo que autoriza la descarga es la firma de la URL,
+ * que Laravel valida en el middleware `signed` y que caduca (config branding.mail).
+ */
+Route::get('/comprobantes/{payroll}/{payrollEmployee}', [PayrollReceiptController::class, 'publicPdf'])
+    ->name('payrolls.receipt.public')
+    ->middleware(['signed', 'throttle:30,1']);
 
 Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     Route::get('/profile/change-password', [ProfileController::class, 'showChangePassword'])->name('profile.change-password.show');
@@ -278,6 +289,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::get('/payrolls/{payroll}/empleados/{payrollEmployee}/comprobante', [PayrollController::class, 'receipt'])
             ->name('payrolls.payroll-employees.receipt')
             ->middleware('permission:payrolls.employee.receipt');
+
+        Route::post('/payrolls/{payroll}/enviar-comprobantes', [PayrollReceiptController::class, 'send'])
+            ->name('payrolls.receipts.send')
+            ->middleware('permission:payrolls.show.send_receipts');
     });
 
     Route::middleware('permission:payrolls.show.manage_adjustments')->group(function () {
@@ -486,5 +501,11 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::resource('dashboard-widgets', DashboardWidgetController::class)->except(['show']);
     });
 });
+
+// Vista previa del maquetado de los correos. Solo en local: expone datos de
+// ejemplo y no debe existir como URL en produccion.
+if (app()->isLocal()) {
+    Route::get('dev/emails/{email?}', MailPreviewController::class)->name('dev.emails.preview');
+}
 
 require __DIR__.'/auth.php';

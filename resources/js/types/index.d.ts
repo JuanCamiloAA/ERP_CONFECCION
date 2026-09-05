@@ -522,6 +522,10 @@ export interface PayrollEmployee {
     is_paid: boolean;
     paid_at: string | null;
     notes: string | null;
+    /** Ultimo envio del comprobante por correo; null si nunca se ha enviado. */
+    receipt_sent_at?: string | null;
+    receipt_sent_to?: string | null;
+    receipt_sent_count?: number;
     employee?: Employee;
     adjustments?: PayrollEmployeeAdjustment[];
     advances?: Advance[];

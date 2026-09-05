@@ -1,5 +1,5 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowLeft, FileText, Printer } from '@phosphor-icons/react';
+import { ArrowLeft, FileText, PaperPlaneTilt, Printer } from '@phosphor-icons/react';
 import { useMemo, useState } from 'react';
 import { EmployeeAsideCard } from '@/Components/Employees/EmployeeFormLayout';
 import { PayrollActionIcon, PayrollStatePill } from '@/Components/Payrolls/PayrollFlowBar';
@@ -11,6 +11,7 @@ import {
 import { PayrollEmployeePanel } from '@/Components/Payrolls/PayrollEmployeePanel';
 import { PayrollEmployeeSheet } from '@/Components/Payrolls/PayrollEmployeeSheet';
 import { PayrollTotalsStrip, type PayrollEmployeeTotals } from '@/Components/Payrolls/PayrollTotalsStrip';
+import { SendReceiptsDialog } from '@/Components/Payrolls/SendReceiptsDialog';
 import { usePayrollEdits } from '@/Components/Payrolls/usePayrollEdits';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
 import { usePermissions } from '@/contexts/PermissionsContext';
@@ -64,10 +65,15 @@ export default function PayrollShow({
     const [search, setSearch] = useState('');
     const [mode, setMode] = useState<EmployeeModeFilter>('all');
     const [openSheet, setOpenSheet] = useState<number | null>(null);
+    const [sendOpen, setSendOpen] = useState(false);
 
     const rows = payrollEmployees.data;
     const status = payroll.status as PayrollStatus;
     const action = nextAction(status);
+
+    /** El comprobante se manda cuando la nomina ya esta pagada; antes las cifras cambian. */
+    const canSendReceipts =
+        status === 'pagado' && rows.length > 0 && perms.can('payrolls.show.send_receipts');
 
     /** Ajustes y conceptos solo se tocan con la nomina calculada; despues de aprobar, no. */
     const canEditTime = status === 'calculado' && perms.can('payrolls.show.edit_time');
@@ -176,6 +182,18 @@ export default function PayrollShow({
                             <FileText size={15} />
                             Imprimir detallado
                         </a>
+                        {/* Solo con la nomina pagada: antes de eso las cifras todavia cambian
+                            y el comprobante que reciba el empleado quedaria desactualizado. */}
+                        {canSendReceipts && (
+                            <button
+                                type="button"
+                                onClick={() => setSendOpen(true)}
+                                className="emp-btn emp-btn-sm emp-btn-primary"
+                            >
+                                <PaperPlaneTilt size={15} />
+                                Enviar comprobantes
+                            </button>
+                        )}
                     </div>
                 </div>
 
@@ -312,6 +330,17 @@ export default function PayrollShow({
                     <Printer size={17} />
                 </a>
 
+                {canSendReceipts && (
+                    <button
+                        type="button"
+                        onClick={() => setSendOpen(true)}
+                        aria-label="Enviar comprobantes por correo"
+                        className="emp-btn w-12 shrink-0 px-0"
+                    >
+                        <PaperPlaneTilt size={17} />
+                    </button>
+                )}
+
                 {action.action === 'export' ? (
                     <a
                         href={route('payrolls.export', { payroll: payroll.id, mode: 'detailed' })}
@@ -363,6 +392,15 @@ export default function PayrollShow({
                 confirmText="Marcar pagada"
                 variant="success"
             />
+
+            {canSendReceipts && (
+                <SendReceiptsDialog
+                    open={sendOpen}
+                    onClose={() => setSendOpen(false)}
+                    payroll={payroll}
+                    rows={rows}
+                />
+            )}
         </AppLayout>
     );
 }

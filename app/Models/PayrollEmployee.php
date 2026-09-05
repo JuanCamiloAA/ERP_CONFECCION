@@ -27,6 +27,9 @@ class PayrollEmployee extends Model
         'is_paid',
         'paid_at',
         'notes',
+        'receipt_sent_at',
+        'receipt_sent_to',
+        'receipt_sent_count',
     ];
 
     protected $casts = [
@@ -45,6 +48,8 @@ class PayrollEmployee extends Model
         'net_payment' => 'decimal:2',
         'is_paid' => 'boolean',
         'paid_at' => 'datetime',
+        'receipt_sent_at' => 'datetime',
+        'receipt_sent_count' => 'integer',
     ];
 
     public function payroll(): BelongsTo

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Mail\TestMail;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
@@ -52,12 +53,7 @@ class SendTestMail extends Command
         }
 
         try {
-            Mail::raw(
-                'Prueba de configuracion de correo de '.config('app.name').".\n\n"
-                ."Si lees esto, el envio de correo funciona.\n"
-                .'Enviado el '.now()->format('d/m/Y H:i:s').".\n",
-                fn ($message) => $message->to($to)->subject('Prueba de correo — '.config('app.name')),
-            );
+            Mail::to($to)->send(new TestMail($mailer));
         } catch (Throwable $e) {
             $this->newLine();
             $this->error('Fallo el envio: '.$e->getMessage());

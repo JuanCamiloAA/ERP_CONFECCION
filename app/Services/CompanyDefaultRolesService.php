@@ -98,6 +98,7 @@ class CompanyDefaultRolesService
             'payrolls.show.export',
             'payrolls.show.edit_time',
             'payrolls.show.manage_adjustments',
+            'payrolls.show.send_receipts',
             'payroll_concepts.index.view',
             'payroll_concepts.index.create',
             'payroll_concepts.index.edit',
