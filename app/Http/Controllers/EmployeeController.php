@@ -3,14 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Contracts\ObjectStorageInterface;
-use App\Http\Requests\Employee\StoreEmployeeAccessRequest;
 use App\Http\Requests\Employee\StoreEmployeeRequest;
 use App\Http\Requests\Employee\UpdateEmployeeRequest;
 use App\Models\Bank;
 use App\Models\Employee;
+use App\Models\EmployeeAuditLog;
 use App\Models\Production;
 use App\Models\Role;
-use App\Models\User;
+use App\Services\Employee\EmployeeAccessService;
+use App\Services\Employee\EmployeeAuditLogger;
 use App\Services\Files\StoredFileDeleter;
 use App\Services\Membership\MembershipEmployeeLimiter;
 use App\Support\TenantContext;
@@ -18,8 +19,6 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -28,6 +27,8 @@ class EmployeeController extends Controller
     public function __construct(
         protected ObjectStorageInterface $objectStorage,
         protected StoredFileDeleter $storedFileDeleter,
+        protected EmployeeAccessService $access,
+        protected EmployeeAuditLogger $audit,
     ) {}
 
     public function index(Request $request): Response
@@ -191,28 +192,16 @@ class EmployeeController extends Controller
             $temporaryPassword = null;
 
             if ($createUser) {
-                $account = $this->resolveAccountPassword($request);
+                $account = $this->access->resolvePassword($request);
                 $temporaryPassword = $account['reveal'] ? $account['plain'] : null;
 
-                $newUser = User::create([
-                    'company_id' => $employee->company_id,
-                    'employee_id' => $employee->id,
-                    'name' => $employee->first_name,
-                    'last_name' => $employee->last_name,
-                    'email' => $request->validated('user_email'),
-                    'password' => Hash::make($account['plain']),
-                    'phone' => $employee->phone,
-                    'is_active' => true,
-                    'password_change_required' => $account['require_change'],
-                ]);
-
-                $role = Role::find($request->validated('user_role_id'));
-                if ($role) {
-                    $newUser->assignRole($role);
-                }
-
-                $employee->user_id = $newUser->id;
-                $employee->save();
+                $this->access->createAccount(
+                    $employee,
+                    $request->validated('user_email'),
+                    Role::find($request->validated('user_role_id')),
+                    $account,
+                    $user,
+                );
             }
 
             return redirect()->route('employees.show', $employee)->with([
@@ -222,44 +211,11 @@ class EmployeeController extends Controller
         });
     }
 
-    public function show(Employee $employee): Response
-    {
-        $employee->load(['user.roles', 'bank']);
-
-        $monthStart = now()->startOfMonth()->toDateString();
-        $monthEnd = now()->endOfMonth()->toDateString();
-
-        $productions = Production::query()
-            ->withoutGlobalScopes()
-            ->where('employee_id', $employee->id)
-            ->with(['reference:id,code,name', 'operation:id,name'])
-            ->orderByDesc('date')
-            ->limit(50)
-            ->get();
-
-        $monthSummary = Production::query()
-            ->withoutGlobalScopes()
-            ->where('employee_id', $employee->id)
-            ->whereBetween('date', [$monthStart, $monthEnd])
-            ->selectRaw('SUM(quantity) as total_quantity, SUM(total_value) as total_value, COUNT(DISTINCT date) as days_worked')
-            ->first();
-
-        $advances = $employee->advances()->orderByDesc('date')->limit(20)->get();
-        $payrolls = $employee->payrollEmployees()->with('payroll:id,name,period_start,period_end,status,paid_at')->orderByDesc('id')->limit(20)->get();
-
-        return Inertia::render('Employees/Show', [
-            'employee' => $employee,
-            'productions' => $productions,
-            'monthSummary' => [
-                'total_quantity' => (int) ($monthSummary->total_quantity ?? 0),
-                'total_value' => (float) ($monthSummary->total_value ?? 0),
-                'days_worked' => (int) ($monthSummary->days_worked ?? 0),
-            ],
-            'advances' => $advances,
-            'payrolls' => $payrolls,
-            'roles' => $this->companyRoles($employee->company_id),
-        ]);
-    }
+    /*
+     * `show` vive ahora en `EmployeeProfileController`: la ficha de un empleado y «mi
+     * perfil» son la misma pantalla, y armar su payload en dos controladores era lo que
+     * las hacia divergir. La ruta `employees.show` y sus permisos no cambiaron.
+     */
 
     public function edit(Employee $employee): Response
     {
@@ -299,7 +255,16 @@ class EmployeeController extends Controller
             $data['photo'] = $uploaded['path'];
         }
 
+        // El formulario completo tambien deja bitacora: si solo la dejara el guardado por
+        // seccion, editar el salario desde aqui seria la via para que no quedara registro.
+        $before = [];
+        foreach (array_keys($data) as $field) {
+            $before[$field] = $employee->getAttribute($field);
+        }
+
         $employee->update($data);
+
+        $this->audit->logChanges($employee, $before, $data, EmployeeAuditLog::EVENT_SECTION_UPDATED, $request->user());
 
         return redirect()->route('employees.show', $employee)->with('success', 'Empleado actualizado.');
     }
@@ -343,112 +308,13 @@ class EmployeeController extends Controller
         return redirect()->route('employees.index')->with('success', 'Empleado eliminado.');
     }
 
-    public function storeAccess(StoreEmployeeAccessRequest $request, Employee $employee): RedirectResponse
-    {
-        if ($employee->user_id) {
-            return back()->with('error', 'Este empleado ya tiene una cuenta de usuario.');
-        }
-
-        $data = $request->validated();
-        $account = $this->resolveAccountPassword($request);
-
-        $newUser = User::create([
-            'company_id' => $employee->company_id,
-            'employee_id' => $employee->id,
-            'name' => $employee->first_name,
-            'last_name' => $employee->last_name,
-            'email' => $data['email'],
-            'password' => Hash::make($account['plain']),
-            'phone' => $employee->phone,
-            'is_active' => true,
-            'password_change_required' => $account['require_change'],
-        ]);
-
-        $role = Role::find($data['role_id']);
-        if ($role) {
-            $auth = $request->user();
-            if ($role->name === 'super_admin' && ! $auth->isSuperAdmin()) {
-                return back()->with('error', 'Rol no permitido.');
-            }
-            if ($role->company_id === null && ! $auth->isSuperAdmin()) {
-                return back()->with('error', 'Rol no valido para esta empresa.');
-            }
-            if ($role->company_id !== null && (int) $role->company_id !== (int) $employee->company_id) {
-                return back()->with('error', 'El rol no pertenece a la empresa del empleado.');
-            }
-            $newUser->assignRole($role);
-        }
-
-        $employee->user_id = $newUser->id;
-        $employee->save();
-
-        return back()->with([
-            'success' => 'Acceso creado correctamente.',
-            'temporary_password' => $account['reveal'] ? $account['plain'] : null,
-        ]);
-    }
-
-    public function toggleAccess(Employee $employee): RedirectResponse
-    {
-        if (! $employee->user_id) {
-            return back()->with('error', 'Este empleado no tiene cuenta de usuario.');
-        }
-
-        $employee->user->is_active = ! $employee->user->is_active;
-        $employee->user->save();
-
-        $msg = $employee->user->is_active ? 'Acceso activado.' : 'Acceso desactivado.';
-
-        return back()->with('success', $msg);
-    }
-
-    public function changeRole(Request $request, Employee $employee): RedirectResponse
-    {
-        $request->validate([
-            'role_id' => ['required', 'integer', 'exists:roles,id'],
-        ]);
-
-        if (! $employee->user_id) {
-            return back()->with('error', 'Este empleado no tiene cuenta de usuario.');
-        }
-
-        $role = Role::find($request->input('role_id'));
-        if (! $role) {
-            return back()->with('error', 'Rol no encontrado.');
-        }
-
-        $auth = $request->user();
-        if ($role->name === 'super_admin' && ! $auth->isSuperAdmin()) {
-            return back()->with('error', 'Rol no permitido.');
-        }
-        if ($role->company_id === null && ! $auth->isSuperAdmin()) {
-            return back()->with('error', 'Rol no valido.');
-        }
-        if ($role->company_id !== null && (int) $role->company_id !== (int) $employee->company_id) {
-            return back()->with('error', 'El rol no pertenece a la empresa del empleado.');
-        }
-
-        $employee->user->syncRoles([$role]);
-
-        return back()->with('success', 'Rol actualizado.');
-    }
-
-    public function resetPassword(Request $request, Employee $employee): RedirectResponse
-    {
-        if (! $employee->user_id) {
-            return back()->with('error', 'Este empleado no tiene cuenta de usuario.');
-        }
-
-        $temporaryPassword = $this->generateTemporaryPassword();
-        $employee->user->password = Hash::make($temporaryPassword);
-        $employee->user->password_change_required = $request->boolean('require_password_change', true);
-        $employee->user->save();
-
-        return back()->with([
-            'success' => 'Contrasena restablecida.',
-            'temporary_password' => $temporaryPassword,
-        ]);
-    }
+    /*
+     * Las acciones de la cuenta de acceso (crear, activar/desactivar, cambiar rol y
+     * restablecer contrasena) viven en `EmployeeAccessController`, sobre
+     * `EmployeeAccessService`. Las rutas y los permisos son los mismos; lo que se gano es
+     * que el alta de empleado y la ficha creen la cuenta con el mismo codigo, y que cada
+     * accion deje su linea en la bitacora.
+     */
 
     protected function companyRoles(?int $forCompanyId = null): Collection
     {
@@ -542,38 +408,5 @@ class EmployeeController extends Controller
             })
             ->values()
             ->all();
-    }
-
-    /**
-     * Contrasena de la cuenta: la enviada por el administrador o una temporal generada aqui.
-     *
-     * `reveal` indica si debe mostrarse al administrador (solo cuando no la definio el mismo).
-     *
-     * @return array{plain: string, require_change: bool, reveal: bool}
-     */
-    protected function resolveAccountPassword(Request $request): array
-    {
-        $plain = trim((string) $request->input('user_password', ''));
-        $wasGenerated = $plain === '';
-
-        if ($wasGenerated) {
-            $plain = $this->generateTemporaryPassword();
-        }
-
-        return [
-            'plain' => $plain,
-            'require_change' => $request->boolean('require_password_change', true),
-            'reveal' => $wasGenerated || $request->input('password_mode', 'auto') !== 'manual',
-        ];
-    }
-
-    protected function generateTemporaryPassword(): string
-    {
-        $upper = Str::upper(Str::random(2));
-        $lower = Str::lower(Str::random(4));
-        $number = (string) random_int(100, 999);
-        $special = collect(['#', '@', '$', '%', '!', '&'])->random();
-
-        return $upper.$lower.$number.$special;
     }
 }

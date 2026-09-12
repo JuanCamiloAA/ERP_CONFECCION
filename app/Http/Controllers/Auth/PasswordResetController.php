@@ -56,6 +56,11 @@ class PasswordResetController extends Controller
                     'password' => Hash::make($password),
                     'remember_token' => Str::random(60),
                     'password_change_required' => false,
+                    // La antiguedad que muestra «Mi perfil» sale de esta columna, asi que
+                    // TODOS los caminos que cambian la contrasena tienen que sellarla: si
+                    // uno se la salta, la pantalla acabaria diciendo que una contrasena
+                    // recien puesta lleva un ano sin tocarse.
+                    'password_changed_at' => now(),
                 ])->save();
 
                 event(new PasswordReset($user));

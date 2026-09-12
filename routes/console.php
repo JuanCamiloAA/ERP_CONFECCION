@@ -21,3 +21,17 @@ Artisan::command('inspire', function () {
 Schedule::command('membership:process-auto-debits')
     ->dailyAt('03:00')
     ->withoutOverlapping();
+
+/*
+ * Resumen semanal de produccion.
+ *
+ * Lunes temprano, cuando ya cerro la semana anterior y antes de que arranque el turno: es
+ * el momento en que el dato sirve para decidir algo. Solo lo recibe quien tenga activada la
+ * preferencia (ver NotificationPreferences).
+ *
+ * `withoutOverlapping` porque el envio es sincrono —el proyecto no tiene worker de colas— y
+ * en una instalacion con muchas empresas la corrida puede alargarse.
+ */
+Schedule::command('notifications:weekly-production-digest')
+    ->weeklyOn(1, '06:00')
+    ->withoutOverlapping();

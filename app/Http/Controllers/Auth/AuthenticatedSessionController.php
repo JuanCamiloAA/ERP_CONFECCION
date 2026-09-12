@@ -54,6 +54,33 @@ class AuthenticatedSessionController extends Controller
     public function store(LoginRequest $request): RedirectResponse
     {
         $request->authenticate();
+
+        /*
+         * Verificacion en dos pasos.
+         *
+         * Se intercepta DESPUES de `authenticate()`, no dentro: alli ya se comprobaron
+         * credenciales, cuenta activa, empresa existente y bloqueos de la empresa, y
+         * repetir eso aqui seria duplicar reglas que tienen que decidir igual.
+         *
+         * Se cierra la sesion autenticada y se deja solo el id pendiente: hasta que el
+         * codigo se valide, este navegador no tiene acceso a nada. La sesion se regenera
+         * igualmente para no arrastrar el identificador previo al login.
+         */
+        $user = Auth::user();
+
+        if ($user && $user->hasTwoFactorEnabled()) {
+            $remember = $request->boolean('remember');
+
+            Auth::guard('web')->logout();
+            $request->session()->regenerate();
+            $request->session()->put(TwoFactorChallengeController::SESSION_USER, $user->id);
+            $request->session()->put(TwoFactorChallengeController::SESSION_REMEMBER, $remember);
+
+            AccessLog::log('login_two_factor_challenged', $user->id);
+
+            return redirect()->route('two-factor.challenge');
+        }
+
         $request->session()->regenerate();
 
         AccessLog::log('login', Auth::id());

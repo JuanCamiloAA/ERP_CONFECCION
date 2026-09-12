@@ -32,6 +32,31 @@ class Employee extends Model
     /** Dias ISO (1=lunes...7=domingo) por defecto: lunes a sabado, domingo como descanso semanal. */
     public const DEFAULT_SCHEDULED_WORK_DAYS = [1, 2, 3, 4, 5, 6];
 
+    /**
+     * Ciclo de vida del empleado, en orden.
+     *
+     * Es independiente de `is_active`, que sigue decidiendo quien entra en nomina y en los
+     * listados: aqui se describe el proceso (falta documentacion, falta crear el acceso),
+     * alli si la persona cuenta o no. Solo `retirado` mueve tambien `is_active`.
+     */
+    public const LIFECYCLE_HIRED = 'contratado';
+
+    public const LIFECYCLE_DOCUMENTS_OK = 'documentos_ok';
+
+    public const LIFECYCLE_ACCESS_CREATED = 'acceso_creado';
+
+    public const LIFECYCLE_ACTIVE = 'activo';
+
+    public const LIFECYCLE_TERMINATED = 'retirado';
+
+    public const LIFECYCLE_FLOW = [
+        self::LIFECYCLE_HIRED,
+        self::LIFECYCLE_DOCUMENTS_OK,
+        self::LIFECYCLE_ACCESS_CREATED,
+        self::LIFECYCLE_ACTIVE,
+        self::LIFECYCLE_TERMINATED,
+    ];
+
     protected $fillable = [
         'company_id',
         'user_id',
@@ -42,8 +67,13 @@ class Employee extends Model
         'phone',
         'email',
         'address',
+        'emergency_contact_name',
+        'emergency_contact_phone',
         'hire_date',
         'photo',
+        'lifecycle_status',
+        'termination_date',
+        'termination_reason',
         'base_salary',
         'payroll_mode',
         'daily_salary',
@@ -61,6 +91,7 @@ class Employee extends Model
 
     protected $casts = [
         'hire_date' => 'date',
+        'termination_date' => 'date',
         'base_salary' => 'decimal:2',
         'daily_salary' => 'decimal:2',
         'minutes_per_full_workday' => 'integer',
@@ -166,6 +197,29 @@ class Employee extends Model
     public function workDaySessions(): HasMany
     {
         return $this->hasMany(WorkDaySession::class);
+    }
+
+    public function requests(): HasMany
+    {
+        return $this->hasMany(EmployeeRequest::class);
+    }
+
+    public function auditLogs(): HasMany
+    {
+        return $this->hasMany(EmployeeAuditLog::class);
+    }
+
+    /** Estado del ciclo de vida, con el valor por defecto de los registros antiguos. */
+    public function lifecycleStatus(): string
+    {
+        $status = $this->lifecycle_status;
+
+        return in_array($status, self::LIFECYCLE_FLOW, true) ? $status : self::LIFECYCLE_ACTIVE;
+    }
+
+    public function isTerminated(): bool
+    {
+        return $this->lifecycleStatus() === self::LIFECYCLE_TERMINATED;
     }
 
     public function isPayrollByOperations(): bool

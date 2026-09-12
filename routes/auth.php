@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\CompanySignupController;
 use App\Http\Controllers\Auth\PasswordResetController;
+use App\Http\Controllers\Auth\TwoFactorChallengeController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('guest')->group(function () {
@@ -19,6 +20,21 @@ Route::middleware('guest')->group(function () {
 
     Route::get('reset-password/{token}', [PasswordResetController::class, 'showReset'])->name('password.reset');
     Route::post('reset-password', [PasswordResetController::class, 'reset'])->name('password.store');
+
+    /*
+     * Segundo paso del inicio de sesion.
+     *
+     * Dentro de `guest` porque en este punto la sesion NO esta autenticada: las
+     * credenciales ya se validaron, pero hasta que el codigo se confirme lo unico que hay
+     * en la sesion es el id pendiente. Quien ya entro no tiene nada que hacer aqui, y el
+     * propio middleware lo manda al panel.
+     */
+    Route::get('two-factor-challenge', [TwoFactorChallengeController::class, 'create'])
+        ->name('two-factor.challenge');
+    Route::post('two-factor-challenge', [TwoFactorChallengeController::class, 'store'])
+        ->middleware('throttle:20,1');
+    Route::delete('two-factor-challenge', [TwoFactorChallengeController::class, 'destroy'])
+        ->name('two-factor.challenge.cancel');
 });
 
 /*

@@ -13,6 +13,7 @@ use App\Models\PayrollPeriodicity;
 use App\Models\Production;
 use App\Models\Scopes\CompanyScope;
 use App\Models\WorkDaySession;
+use App\Services\Account\AccountNotifier;
 use App\Services\Payroll\PayrollPeriodData;
 use App\Services\PayrollCalculationService;
 use App\Support\CompanyContext;
@@ -725,10 +726,26 @@ class PayrollController extends Controller
         $this->ensurePayrollBelongsToActiveCompany($request, $payroll);
 
         try {
-            $this->calculator->markAsPaid($payroll);
+            $payroll = $this->calculator->markAsPaid($payroll);
         } catch (\DomainException $e) {
             return back()->with('error', $e->getMessage());
         }
+
+        /*
+         * Aviso de cierre, FUERA de la transaccion de `markAsPaid`.
+         *
+         * Hablar con el proveedor de correo dentro de la transaccion mantendria abiertos
+         * los bloqueos de nomina, produccion y anticipos durante toda la entrega, que es
+         * sincrona. Y un fallo de correo no puede deshacer un pago ya consolidado: por eso
+         * `AccountNotifier` registra el error en vez de propagarlo.
+         */
+        $rows = $payroll->payrollEmployees()->get(['id', 'net_payment']);
+
+        app(AccountNotifier::class)->payrollClosed(
+            $payroll,
+            $rows->count(),
+            (float) $rows->sum(fn ($row) => (float) $row->net_payment),
+        );
 
         return back()->with('success', 'Nomina marcada como pagada.');
     }

@@ -109,6 +109,30 @@ class PermissionHelper
                             'toggle' => 'Activar / desactivar el acceso',
                         ],
                     ],
+                    // La ficha 360 separa «ver la ficha» de «ver el dinero»: un supervisor
+                    // de produccion necesita lo primero y no lo segundo. Sin estos permisos
+                    // la pantalla muestra «Restringido» con texto, no un hueco en blanco.
+                    'profile' => [
+                        'display' => 'Ficha 360 y perfil',
+                        'route' => 'employees.show',
+                        'actions' => ['view_salary', 'view_bank_account', 'edit_section', 'view_audit', 'manage_lifecycle'],
+                        'labels' => [
+                            'view_salary' => 'Ver salario y tarifa',
+                            'view_bank_account' => 'Ver datos bancarios',
+                            'edit_section' => 'Editar secciones de la ficha',
+                            'view_audit' => 'Ver la bitácora',
+                            'manage_lifecycle' => 'Cambiar el ciclo de vida y el retiro',
+                        ],
+                    ],
+                    'requests' => [
+                        'display' => 'Solicitudes del empleado',
+                        'route' => 'employees.show',
+                        'actions' => ['view', 'approve'],
+                        'labels' => [
+                            'view' => 'Ver las solicitudes',
+                            'approve' => 'Aprobar / rechazar solicitudes',
+                        ],
+                    ],
                 ],
             ],
 

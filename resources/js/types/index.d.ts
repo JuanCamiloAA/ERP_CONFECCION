@@ -631,4 +631,308 @@ export interface SelectOption {
     description?: string;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Ficha 360 / perfil                                                          */
+/*                                                                             */
+/* Un solo payload para «mi perfil» y para la ficha de otra persona: lo arma    */
+/* `EmployeeProfilePayload` y lo consumen las dos rutas. Los campos que pueden  */
+/* llegar en null no son opcionales por descuido —son los que el servidor no    */
+/* envia cuando falta el permiso, y la pantalla los pinta como «Restringido».   */
+/* -------------------------------------------------------------------------- */
+
+/** Permisos ya resueltos en servidor. El cliente los lee; nunca los deduce. */
+export interface ProfilePermissions {
+    isSelf: boolean;
+    canEditIdentity: boolean;
+    canEditContact: boolean;
+    canEditPayroll: boolean;
+    canEditBankAccount: boolean;
+    canEditNotes: boolean;
+    canEditOwnContact: boolean;
+    /** Edita por permiso administrativo, no por ser su propia ficha. */
+    canEditAsAdministrator: boolean;
+    canViewSalary: boolean;
+    canViewBankAccount: boolean;
+    canViewAudit: boolean;
+    canViewRequests: boolean;
+    canCreateRequests: boolean;
+    canApproveRequests: boolean;
+    canManageAccess: boolean;
+    canManageLifecycle: boolean;
+    canEditFullForm: boolean;
+    canCreateAccess: boolean;
+    canResetPassword: boolean;
+    canChangeRole: boolean;
+    canToggleAccess: boolean;
+}
+
+export interface ProfileIdentity {
+    first_name: string;
+    last_name: string;
+    full_name: string;
+    initials: string;
+    document_type: string;
+    document_number: string;
+    hire_date: string | null;
+    photo: string | null;
+    is_active: boolean;
+    company: { id: number; name: string } | null;
+}
+
+export interface ProfileContact {
+    phone: string | null;
+    email: string | null;
+    address: string | null;
+    emergency_contact_name: string | null;
+    emergency_contact_phone: string | null;
+}
+
+export interface ProfilePayroll {
+    payroll_mode: 'operations' | 'fixed_daily' | 'hourly_legal';
+    payroll_mode_label: string;
+    minutes_per_full_workday: number;
+    ordinary_hours_per_day: number | null;
+    is_exempt_from_overtime: boolean;
+    scheduled_work_days: number[];
+    /** true = el visor no tiene permiso; los importes llegan en null. */
+    restricted: boolean;
+    base_salary: number | null;
+    daily_salary: number | null;
+}
+
+export interface ProfileBankAccount {
+    restricted: boolean;
+    has_account: boolean;
+    bank: {
+        id: number;
+        name: string;
+        code: string | null;
+        is_active: boolean;
+        logo_url: string | null;
+        initials: string | null;
+        brand_color: string | null;
+        type: string | null;
+    } | null;
+    account_type: string | null;
+    /** Siempre enmascarado: el numero completo no sale del servidor. */
+    account_masked: string | null;
+    key_masked: string | null;
+}
+
+export interface ProfileAccount {
+    exists: boolean;
+    user_id: number | null;
+    is_active: boolean;
+    email: string | null;
+    last_login_at: string | null;
+    password_change_required: boolean;
+    role: { id: number; name: string; display_name: string; color: string } | null;
+    status_label: string;
+}
+
+export interface ProfileLifecycle {
+    status: string;
+    status_label: string;
+    flow: { key: string; label: string }[];
+    checklist: { key: string; label: string; done: boolean }[];
+    pending_steps: number;
+    termination_date: string | null;
+    termination_reason: string | null;
+}
+
+export interface ProfileMetrics {
+    period_label: string;
+    period_start: string;
+    period_end: string;
+    payroll_id: number | null;
+    units: number;
+    days_with_production: number;
+    units_goal: number;
+    units_goal_source: 'company' | 'previous_period' | 'none';
+    units_progress: number | null;
+    restricted: boolean;
+    produced_value: number | null;
+    earned_estimate: number | null;
+    advances_period: number | null;
+    advances_pending: number | null;
+    net_estimate: number | null;
+}
+
+export interface ProfileAlert {
+    key: string;
+    tone: 'warning' | 'info' | 'accent';
+    label: string;
+    detail: string;
+    action: string;
+    action_label: string;
+}
+
+export interface ProfileRequest {
+    id: number;
+    type: 'advance' | 'profile_change' | 'production_correction';
+    type_label: string;
+    status: 'pending' | 'approved' | 'rejected';
+    status_label: string;
+    summary: string;
+    created_at: string | null;
+    reviewed_at: string | null;
+    reviewer: string | null;
+    requester: string | null;
+    rejection_reason: string | null;
+}
+
+export interface ProfileAuditEntry {
+    id: number;
+    event: string;
+    event_label: string;
+    field: string | null;
+    field_label: string | null;
+    old_value: string | null;
+    new_value: string | null;
+    actor: string | null;
+    created_at: string | null;
+}
+
+export interface ProfileProductionRow {
+    id: number;
+    date: string | null;
+    reference: string | null;
+    operation: string | null;
+    quantity: number;
+    status: string;
+    total_value: number | null;
+}
+
+export interface ProfilePayrollRow {
+    id: number;
+    payroll_id: number;
+    name: string;
+    period_start: string | null;
+    period_end: string | null;
+    status: string;
+    is_paid: boolean;
+    production_total: number | null;
+    advances_discount: number | null;
+    net_payment: number | null;
+    receipt_available: boolean;
+}
+
+export interface ProfileAdvanceRow {
+    id: number;
+    date: string | null;
+    reason: string | null;
+    amount: number;
+    remaining_amount: number;
+    status: string;
+}
+
+export interface ProfileBankOption {
+    id: number;
+    name: string;
+    code: string | null;
+    logo_url: string | null;
+    initials: string | null;
+    brand_color: string | null;
+    type: string | null;
+    requires_key: boolean;
+    account_hint: string | null;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Mi perfil — cuenta de acceso                                                */
+/*                                                                             */
+/* Lo arma `AccountPayload` y lo tiene TODA cuenta, tenga ficha de empleado o   */
+/* no. Los estados de seguridad vienen calculados del servidor: la antigüedad   */
+/* de la contraseña y el estado de la 2FA no se deducen en el navegador.        */
+/* -------------------------------------------------------------------------- */
+
+export interface AccountUser {
+    id: number;
+    name: string;
+    lastName: string | null;
+    email: string;
+    phone: string | null;
+    jobTitle: string | null;
+    photoUrl: string | null;
+    initials: string;
+    fullName: string;
+    role: { id: number; name: string; display_name: string } | null;
+    company: { id: number; name: string | null } | null;
+}
+
+export interface AccountSecurity {
+    email: string;
+    emailVerifiedAt: string | null;
+    /** Correo propuesto en espera de confirmación; el vigente no ha cambiado. */
+    pendingEmail: string | null;
+    pendingEmailRequestedAt: string | null;
+    passwordChangedAt: string | null;
+    passwordAgeDays: number | null;
+    passwordIsStale: boolean;
+    passwordStaleAfterDays: number;
+    passwordChangeRequired: boolean;
+    twoFactorEnabled: boolean;
+    /** Secreto generado pero sin confirmar: el alta quedó a medias. */
+    twoFactorPending: boolean;
+    twoFactorConfirmedAt: string | null;
+    recoveryCodesLeft: number;
+}
+
+export interface AccountSession {
+    key: string;
+    device: string;
+    browser: string;
+    platform: string;
+    ip_address: string | null;
+    location: string;
+    last_activity: string;
+    is_current: boolean;
+    is_active: boolean;
+}
+
+export interface AccountPayloadData {
+    user: AccountUser;
+    security: AccountSecurity;
+    sessions: AccountSession[];
+    /** false cuando el driver de sesión no permite listarlas ni cerrarlas. */
+    sessionsSupported: boolean;
+    preferences: Record<string, boolean>;
+    preferenceCatalogue: { key: string; label: string; description: string }[];
+    employeeLinked: boolean;
+    linking: {
+        canLink: boolean;
+        candidates: { id: number; full_name: string; document: string }[];
+        reason: string | null;
+    };
+}
+
+export interface EmployeeProfile {
+    mode: 'self' | 'admin';
+    employeeId: number;
+    identity: ProfileIdentity;
+    contact: ProfileContact;
+    payroll: ProfilePayroll;
+    bankAccount: ProfileBankAccount;
+    /** Notas internas. null cuando el visor no debe verlas. */
+    notes: string | null;
+    account: ProfileAccount;
+    lifecycle: ProfileLifecycle;
+    metrics: ProfileMetrics;
+    alerts: ProfileAlert[];
+    permissions: ProfilePermissions;
+    requests: { mine: ProfileRequest[]; pending: ProfileRequest[]; can_approve: boolean };
+    auditLog: ProfileAuditEntry[];
+    history: {
+        productions: ProfileProductionRow[];
+        payrolls: ProfilePayrollRow[];
+        advances: ProfileAdvanceRow[];
+    };
+    options: {
+        roles: { id: number; name: string; display_name: string; color: string }[];
+        banks: ProfileBankOption[];
+        lifecycle_statuses: { value: string; label: string }[];
+        document_types: string[];
+    };
+}
+
 export {};

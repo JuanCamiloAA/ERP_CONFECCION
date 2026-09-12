@@ -44,6 +44,15 @@ class HandleInertiaRequests extends Middleware
                 'warning' => fn () => $request->session()->get('warning'),
                 'info' => fn () => $request->session()->get('info'),
                 'temporary_password' => fn () => $request->session()->get('temporary_password'),
+                /*
+                 * Alta de la verificacion en dos pasos.
+                 *
+                 * El QR, el secreto y los codigos de respaldo viajan UNA sola vez, por
+                 * flash, y no forman parte del payload de ninguna pantalla: son
+                 * equivalentes a contrasenas y no deben volver en cada carga del perfil.
+                 */
+                'two_factor_setup' => fn () => $request->session()->get('two_factor_setup'),
+                'two_factor_recovery_codes' => fn () => $request->session()->get('two_factor_recovery_codes'),
             ],
             'ziggy' => fn () => array_merge((new Ziggy)->toArray(), [
                 'location' => $request->url(),

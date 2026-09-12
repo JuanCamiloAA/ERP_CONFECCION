@@ -71,6 +71,11 @@ class CompanyDefaultRolesService
             PermissionHelper::RANKING_OWN_FILTER_PERMISSION,
             'reports.production.view',
             'reports.production.export',
+            // Aprueba las correcciones de produccion y los anticipos de su equipo, pero
+            // no recibe `employees.profile.view_salary` ni `view_bank_account`: en la
+            // ficha esos bloques le salen como «Restringido».
+            'employees.requests.view',
+            'employees.requests.approve',
         ]);
 
         $accountant = Role::updateOrCreate(
@@ -120,6 +125,12 @@ class CompanyDefaultRolesService
             'expenses.categories.create',
             'expenses.categories.edit',
             'expenses.categories.delete',
+            // Liquida nomina y anticipos: necesita el dinero de la ficha y la bandeja de
+            // aprobaciones, aunque no pueda editar al empleado.
+            'employees.profile.view_salary',
+            'employees.profile.view_bank_account',
+            'employees.requests.view',
+            'employees.requests.approve',
         ]);
 
         $viewer = Role::updateOrCreate(

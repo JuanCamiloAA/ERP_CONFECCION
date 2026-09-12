@@ -7,7 +7,10 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DashboardLayoutController;
 use App\Http\Controllers\DashboardWidgetDataController;
 use App\Http\Controllers\Dev\MailPreviewController;
+use App\Http\Controllers\EmployeeAccessController;
 use App\Http\Controllers\EmployeeController;
+use App\Http\Controllers\EmployeeProfileController;
+use App\Http\Controllers\EmployeeRequestController;
 use App\Http\Controllers\ExpenseCategoryController;
 use App\Http\Controllers\ExpenseController;
 use App\Http\Controllers\GlobalSearchController;
@@ -22,6 +25,12 @@ use App\Http\Controllers\PayrollLegalParameterController;
 use App\Http\Controllers\PayrollPeriodicityController;
 use App\Http\Controllers\PayrollReceiptController;
 use App\Http\Controllers\ProductionController;
+use App\Http\Controllers\Profile\EmployeeLinkController;
+use App\Http\Controllers\Profile\ProfileEmailController;
+use App\Http\Controllers\Profile\ProfilePasswordController;
+use App\Http\Controllers\Profile\ProfilePhotoController;
+use App\Http\Controllers\Profile\ProfileSessionController;
+use App\Http\Controllers\Profile\TwoFactorController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\ReferenceController;
 use App\Http\Controllers\ReportController;
@@ -85,8 +94,63 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
     // controlador, asi que la ruta solo exige estar autenticado.
     Route::get('/buscar', GlobalSearchController::class)->name('search.global');
 
+    /*
+     * Mi perfil.
+     *
+     * `edit`/`update` llevan identidad y preferencias. Todo lo que cambia COMO se entra a
+     * la cuenta —correo, contrasena, 2FA, sesiones— va por su propia ruta y exige
+     * reautenticacion en el controlador: si cupiera en `update`, bastaria anadir un campo
+     * al formulario del navegador para tomar una cuenta ajena desde una sesion olvidada.
+     */
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
-    Route::put('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+
+    Route::post('/profile/photo', [ProfilePhotoController::class, 'update'])->name('profile.photo.update');
+    Route::delete('/profile/photo', [ProfilePhotoController::class, 'destroy'])->name('profile.photo.destroy');
+
+    Route::patch('/profile/email', [ProfileEmailController::class, 'update'])->name('profile.email.update');
+    Route::delete('/profile/email', [ProfileEmailController::class, 'destroy'])->name('profile.email.cancel');
+
+    Route::put('/profile/password', [ProfilePasswordController::class, 'update'])->name('profile.password.update');
+
+    Route::post('/profile/two-factor', [TwoFactorController::class, 'store'])->name('profile.two-factor.store');
+    Route::post('/profile/two-factor/confirm', [TwoFactorController::class, 'confirm'])->name('profile.two-factor.confirm');
+    Route::delete('/profile/two-factor', [TwoFactorController::class, 'destroy'])->name('profile.two-factor.destroy');
+    Route::post('/profile/two-factor/recovery-codes', [TwoFactorController::class, 'recoveryCodes'])
+        ->name('profile.two-factor.recovery-codes');
+
+    Route::delete('/profile/sessions', [ProfileSessionController::class, 'destroyOthers'])->name('profile.sessions.destroy');
+
+    Route::post('/profile/link-employee', [EmployeeLinkController::class, 'store'])->name('profile.link-employee');
+
+    /*
+     * Confirmacion del correo nuevo. Va firmada y caduca; ademas exige sesion iniciada,
+     * porque la firma prueba que el enlace es autentico pero no quien lo esta abriendo.
+     * Si llega sin sesion, `auth` manda al login y vuelve aqui despues de entrar.
+     */
+    Route::get('/profile/email/confirm/{user}', [ProfileEmailController::class, 'confirm'])
+        ->name('profile.email.confirm')
+        ->middleware('signed');
+
+    /*
+     * Ficha de la persona: guardado por seccion, solicitudes y desprendible.
+     *
+     * Deliberadamente FUERA del grupo `permission:employees.index.view`. Un operario no
+     * tiene ese permiso —ni debe tenerlo, porque es el del listado de toda la plantilla—
+     * y aun asi entra aqui para su propia ficha desde /profile. Quien decide en cada
+     * peticion es `EmployeePolicy`, que ademas acota por empresa: sin permiso la ruta
+     * responde 403 aunque se escriba a mano.
+     */
+    Route::patch('/employees/{employee}/section/{section}', [EmployeeProfileController::class, 'updateSection'])
+        ->name('employees.section.update');
+    Route::post('/employees/{employee}/requests', [EmployeeRequestController::class, 'store'])
+        ->name('employees.requests.store');
+    Route::get('/employees/{employee}/receipt/{payrollEmployee}', [EmployeeProfileController::class, 'receipt'])
+        ->name('employees.receipt');
+    Route::post('/employee-requests/{employeeRequest}/approve', [EmployeeRequestController::class, 'approve'])
+        ->name('employee-requests.approve');
+    Route::post('/employee-requests/{employeeRequest}/reject', [EmployeeRequestController::class, 'reject'])
+        ->name('employee-requests.reject');
 
     // Empresas (super_admin)
     Route::middleware('permission:companies.index.view')->group(function () {
@@ -120,21 +184,28 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
 
     // Empleados
     Route::middleware('permission:employees.index.view')->group(function () {
+        // `show` se declara aparte porque lo sirve `EmployeeProfileController`: la ficha
+        // de un empleado y «mi perfil» son la misma pantalla. El nombre de la ruta y su
+        // permiso no cambian, y va despues del resource para que `employees/create` no
+        // entre por el binding de `{employee}`.
         Route::resource('employees', EmployeeController::class)
+            ->except(['show'])
             ->middlewareFor(['create', 'store'], 'permission:employees.index.create')
             ->middlewareFor(['edit', 'update'], 'permission:employees.index.edit')
-            ->middlewareFor('destroy', 'permission:employees.index.delete')
-            ->middlewareFor('show', 'permission:employees.show.view');
-        Route::post('/employees/{employee}/access', [EmployeeController::class, 'storeAccess'])
+            ->middlewareFor('destroy', 'permission:employees.index.delete');
+        Route::get('/employees/{employee}', [EmployeeProfileController::class, 'show'])
+            ->name('employees.show')
+            ->middleware('permission:employees.show.view');
+        Route::post('/employees/{employee}/access', [EmployeeAccessController::class, 'store'])
             ->name('employees.access.store')
             ->middleware('permission:employees.access.create');
-        Route::post('/employees/{employee}/access/toggle', [EmployeeController::class, 'toggleAccess'])
+        Route::post('/employees/{employee}/access/toggle', [EmployeeAccessController::class, 'toggle'])
             ->name('employees.access.toggle')
             ->middleware('permission:employees.access.toggle');
-        Route::post('/employees/{employee}/access/role', [EmployeeController::class, 'changeRole'])
+        Route::post('/employees/{employee}/access/role', [EmployeeAccessController::class, 'changeRole'])
             ->name('employees.access.role')
             ->middleware('permission:employees.access.change_role');
-        Route::post('/employees/{employee}/access/reset-password', [EmployeeController::class, 'resetPassword'])
+        Route::post('/employees/{employee}/access/reset-password', [EmployeeAccessController::class, 'resetPassword'])
             ->name('employees.access.reset-password')
             ->middleware('permission:employees.access.reset_password');
         Route::post('/employees/{employee}/deactivate', [EmployeeController::class, 'deactivate'])

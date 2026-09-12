@@ -5,6 +5,7 @@ namespace App\Models;
 use App\Models\Concerns\ResolvesMediaUrlsInArray;
 use App\Notifications\ResetPasswordNotification;
 use App\Services\EffectivePermissionService;
+use App\Support\NotificationPreferences;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -34,15 +35,28 @@ class User extends Authenticatable
         'password',
         'avatar',
         'phone',
+        'job_title',
         'is_active',
         'last_login_at',
         'password_change_required',
+        'password_changed_at',
         'dashboard_layout',
+        'notification_preferences',
     ];
 
+    /**
+     * `two_factor_*` y `pending_email` NO son asignables en masa a proposito: se escriben
+     * solo desde `TwoFactorService` y `ProfileEmailController`, que son los dos sitios que
+     * saben reautenticar antes. Dejarlos aqui abriria la puerta a activarlos de rebote en
+     * cualquier `update()` que reciba el request entero.
+     *
+     * @var list<string>
+     */
     protected $hidden = [
         'password',
         'remember_token',
+        'two_factor_secret',
+        'two_factor_recovery_codes',
     ];
 
     protected function casts(): array
@@ -53,8 +67,51 @@ class User extends Authenticatable
             'is_active' => 'boolean',
             'password_change_required' => 'boolean',
             'last_login_at' => 'datetime',
+            'password_changed_at' => 'datetime',
             'dashboard_layout' => 'array',
+            'notification_preferences' => 'array',
+            // Cifrados en reposo: quien lea la tabla no puede generar codigos validos.
+            'two_factor_secret' => 'encrypted',
+            'two_factor_recovery_codes' => 'encrypted:array',
+            'two_factor_confirmed_at' => 'datetime',
+            'pending_email_requested_at' => 'datetime',
         ];
+    }
+
+    /** La verificacion en dos pasos cuenta solo cuando se confirmo con un codigo real. */
+    public function hasTwoFactorEnabled(): bool
+    {
+        return $this->two_factor_secret !== null && $this->two_factor_confirmed_at !== null;
+    }
+
+    /**
+     * Preferencias de aviso, ya normalizadas contra el catalogo.
+     *
+     * @return array<string, bool>
+     */
+    public function notificationPreferences(): array
+    {
+        return NotificationPreferences::normalize($this->notification_preferences);
+    }
+
+    /**
+     * Compuerta unica de los avisos por correo.
+     *
+     * TODO el que envie uno de los correos del catalogo tiene que pasar por aqui. Ademas
+     * de la preferencia se exige cuenta activa y correo valido: no tiene sentido escribir
+     * a alguien a quien se le revoco el acceso.
+     */
+    public function wantsNotification(string $key): bool
+    {
+        if (! $this->is_active) {
+            return false;
+        }
+
+        if (! filter_var((string) $this->email, FILTER_VALIDATE_EMAIL)) {
+            return false;
+        }
+
+        return $this->notificationPreferences()[$key] ?? false;
     }
 
     public function company(): BelongsTo
