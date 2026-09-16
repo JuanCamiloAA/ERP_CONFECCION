@@ -425,13 +425,18 @@ class PayrollController extends Controller
 
         $peBase = PayrollEmployee::query()->where('payroll_id', $payroll->id);
 
-        if ($user->isEmployee() && ! $user->isAdmin()) {
+        // El empleado sin rol administrativo solo ve su propia fila; la franja de totales
+        // que se arma debajo queda por tanto calculada sobre lo suyo, no sobre la empresa.
+        $scopedToSelf = $user->isEmployee() && ! $user->isAdmin();
+
+        if ($scopedToSelf) {
             $peBase->where('employee_id', $user->employee_id);
         }
 
         $totalsRow = (clone $peBase)
             ->selectRaw('
                 COUNT(*) as employee_count,
+                COALESCE(SUM(net_payment), 0) as total_net,
                 COALESCE(SUM(production_total), 0) as total_production,
                 COALESCE(SUM(daily_work_subtotal), 0) as total_daily,
                 COALESCE(SUM(legal_hourly_subtotal), 0) as total_legal_hourly,
@@ -491,10 +496,27 @@ class PayrollController extends Controller
 
         $idsForDetail = $payrollEmployeeRows->pluck('employee_id')->filter()->values()->all();
 
+        /*
+         * La franja de totales es el agregado del periodo: quien no tenga
+         * `payrolls.show.view_totals` no lo recibe siquiera en las props, para que no se
+         * lea en el inspector aunque la pantalla no lo dibuje. La excepcion es el empleado
+         * sobre su propia liquidacion: ahi las cifras ya son solo suyas.
+         */
+        $canViewTotals = $user->can('viewTotals', $payroll);
+        $showTotals = $canViewTotals || $scopedToSelf;
+
+        // Con la consulta acotada al empleado, el neto de la nomina completa contradiria
+        // las demas celdas: el que manda es la suma de las filas visibles.
+        $net = $scopedToSelf ? (float) ($totalsRow->total_net ?? 0) : (float) $payroll->total_amount;
+
+        if (! $canViewTotals) {
+            $payroll->makeHidden('total_amount');
+        }
+
         return Inertia::render('Payrolls/Show', [
             'payroll' => $payroll,
             'payrollEmployees' => $payrollEmployees,
-            'payrollEmployeeTotals' => [
+            'payrollEmployeeTotals' => $showTotals ? [
                 'employee_count' => (int) ($totalsRow->employee_count ?? 0),
                 'total_production' => (float) ($totalsRow->total_production ?? 0),
                 'total_daily' => (float) ($totalsRow->total_daily ?? 0),
@@ -504,9 +526,11 @@ class PayrollController extends Controller
                 'total_advances' => (float) ($totalsRow->total_advances ?? 0),
                 'total_absence_discount' => (float) ($totalsRow->total_absence_discount ?? 0),
                 'total_deductions' => $totalDeductions,
+                'total_net' => $net,
+                'own_scope' => $scopedToSelf,
                 'show_daily_column' => $showDailyColumn,
                 'show_legal_column' => $showLegalColumn,
-            ],
+            ] : null,
             'workSessionsByEmployee' => $this->workSessionsFor($payroll, $idsForDetail),
             'productionsByEmployee' => $this->productionsFor($payroll, $idsForDetail),
             'payrollConcepts' => $payrollConcepts,
@@ -545,6 +569,12 @@ class PayrollController extends Controller
         }
 
         $employeeId = (int) $payrollEmployee->employee_id;
+
+        // Esta pantalla es la de una persona: el neto de la nomina completa no pinta nada
+        // en ella, y a quien no pueda ver los totales no se le manda ni en las props.
+        if (! $user->can('viewTotals', $payroll)) {
+            $payroll->makeHidden('total_amount');
+        }
 
         return Inertia::render('Payrolls/Employee', [
             'payroll' => $payroll,

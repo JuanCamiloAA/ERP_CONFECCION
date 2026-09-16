@@ -293,9 +293,13 @@ class PermissionHelper
                     'show' => [
                         'display' => 'Detalle de Nomina',
                         'route' => 'payrolls.show',
-                        'actions' => ['view', 'calculate', 'approve', 'pay', 'export', 'edit_time', 'manage_adjustments', 'send_receipts'],
+                        'actions' => ['view', 'view_totals', 'calculate', 'approve', 'pay', 'export', 'edit_time', 'manage_adjustments', 'send_receipts'],
                         'labels' => [
                             'view' => 'Ver detalle',
+                            // Separa «ver la nomina» de «ver cuanto suma»: un empleado con
+                            // acceso al detalle ve su propia liquidacion, no la franja con
+                            // el producido, las deducciones y el neto de toda la empresa.
+                            'view_totals' => 'Ver los totales de la nómina',
                             'calculate' => 'Calcular / recalcular',
                             'approve' => 'Aprobar nómina',
                             'pay' => 'Marcar como pagada',
@@ -777,6 +781,9 @@ class PermissionHelper
                     }
                 }
                 $permissions[] = self::RANKING_OWN_FILTER_PERMISSION;
+                // Quien puede abrir el detalle de la nomina ya ve la liquidacion de cada
+                // empleado: esconderle la suma no protegeria nada.
+                $permissions[] = 'payrolls.show.view_totals';
                 break;
 
             case 'operator':
@@ -790,6 +797,8 @@ class PermissionHelper
                     'productions.ranking.view',
                     self::RANKING_OWN_FILTER_PERMISSION,
                     'payrolls.index.view',
+                    // Sin `payrolls.show.view_totals` a proposito: el operario entra a la
+                    // nomina a ver lo suyo, no lo que se le pago a toda la empresa.
                     'payrolls.show.view',
                     'payrolls.employee.view',
                     'payrolls.employee.receipt',

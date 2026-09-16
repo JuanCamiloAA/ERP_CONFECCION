@@ -41,7 +41,8 @@ interface Props {
         creator?: { id: number; name: string; last_name: string | null } | null;
     };
     payrollEmployees: PaginatedResponse<PayrollEmployee>;
-    payrollEmployeeTotals: PayrollEmployeeTotals;
+    /** Nulo cuando quien mira no tiene `payrolls.show.view_totals`: el servidor no lo manda. */
+    payrollEmployeeTotals: PayrollEmployeeTotals | null;
     workSessionsByEmployee: Record<string, WorkDaySession[]>;
     productionsByEmployee?: Record<string, Production[]>;
     payrollConcepts?: PayrollConcept[];
@@ -51,7 +52,7 @@ interface Props {
 export default function PayrollShow({
     payroll,
     payrollEmployees,
-    payrollEmployeeTotals,
+    payrollEmployeeTotals = null,
     workSessionsByEmployee = {},
     productionsByEmployee = {},
     payrollConcepts = [],
@@ -118,12 +119,13 @@ export default function PayrollShow({
         ? 'Se aplicaran los ajustes de jornada, anticipos e inasistencias que hayas capturado antes de calcular.'
         : 'Esto actualizara el calculo por produccion y jornadas; los ajustes por conceptos manuales que ya registraste se mantienen.';
 
+    // Sin permiso de totales no llega el conteo agregado; las filas visibles dicen lo mismo.
+    const employeeCount = payrollEmployeeTotals?.employee_count ?? rows.length;
+
     const headerMeta = [
         `${formatDate(payroll.period_start)} – ${formatDate(payroll.period_end)}`,
         periodicityName ?? payroll.type,
-        `${formatNumber(payrollEmployeeTotals.employee_count)} ${
-            payrollEmployeeTotals.employee_count === 1 ? 'empleado' : 'empleados'
-        }`,
+        `${formatNumber(employeeCount)} ${employeeCount === 1 ? 'empleado' : 'empleados'}`,
         `actualizada ${formatRelativeDate(payroll.updated_at ?? payroll.created_at)}`,
         payroll.creator ? `creada por ${`${payroll.creator.name} ${payroll.creator.last_name ?? ''}`.trim()}` : null,
     ]
@@ -205,7 +207,9 @@ export default function PayrollShow({
                     <PayrollFlowHeader payroll={payroll} onAction={setConfirmAction} compact />
                 </div>
 
-                <PayrollTotalsStrip totals={payrollEmployeeTotals} net={payroll.total_amount} />
+                {/* La franja del periodo solo la ve quien tiene `payrolls.show.view_totals`;
+                    al empleado le llega acotada a su propia liquidacion. */}
+                {payrollEmployeeTotals && <PayrollTotalsStrip totals={payrollEmployeeTotals} />}
 
                 {rows.length === 0 ? (
                     emptyState

@@ -26,6 +26,17 @@ class PayrollPolicy
         return $payroll->company_id === $user->company_id && $user->can('payrolls.show.view');
     }
 
+    /**
+     * Ver la franja de totales del periodo (producido, deducciones, neto de la empresa).
+     *
+     * Va aparte de `view` porque el empleado con acceso a la nomina entra a lo suyo: la
+     * suma de toda la empresa es informacion de quien la liquida, no de quien cobra.
+     */
+    public function viewTotals(User $user, Payroll $payroll): bool
+    {
+        return $payroll->company_id === $user->company_id && $user->can('payrolls.show.view_totals');
+    }
+
     public function create(User $user): bool
     {
         return $user->can('payrolls.index.create');

@@ -99,6 +99,7 @@ class CompanyDefaultRolesService
             'payrolls.index.create',
             'payrolls.index.export',
             'payrolls.show.view',
+            'payrolls.show.view_totals',
             'payrolls.show.calculate',
             'payrolls.show.export',
             'payrolls.show.edit_time',

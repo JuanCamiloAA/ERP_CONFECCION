@@ -5,6 +5,7 @@ namespace App\Http\Requests\Employee;
 use App\Http\Requests\Concerns\ValidatesAccessPassword;
 use App\Models\Bank;
 use App\Models\Employee;
+use App\Support\CompanyContext;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -50,9 +51,22 @@ class StoreEmployeeRequest extends FormRequest
         $this->merge($merge);
     }
 
+    /**
+     * Empresa contra la que se valida.
+     *
+     * `$user->company_id` no sirve: el super admin lo tiene en nulo y trabaja sobre la
+     * empresa que eligio en el selector. Con el campo crudo, el formulario ofrecia los
+     * bancos de la empresa activa —el controlador si usa el contexto— y la validacion los
+     * rechazaba despues como «banco no valido», dejando el guardado sin efecto.
+     */
+    protected function companyId(): ?int
+    {
+        return CompanyContext::id($this->user());
+    }
+
     public function rules(): array
     {
-        $companyId = $this->user()?->company_id;
+        $companyId = $this->companyId();
 
         $bankRules = [
             'bank_id' => [
@@ -137,7 +151,7 @@ class StoreEmployeeRequest extends FormRequest
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator) {
-            $companyId = $this->user()?->company_id;
+            $companyId = $this->companyId();
             $bankId = $this->input('bank_id');
             if (! $companyId || ! $bankId) {
                 return;
@@ -169,6 +183,9 @@ class StoreEmployeeRequest extends FormRequest
             'ordinary_hours_per_day.required_if' => 'Indica la jornada ordinaria diaria para la modalidad por horas (legal).',
             'bank_key.required' => 'Este banco exige clave de dispersión.',
             'bank_account_type.in' => 'El tipo de cuenta debe ser ahorros o corriente.',
+            'bank_id.exists' => 'El banco seleccionado no pertenece a la empresa activa.',
+            'bank_account_number.regex' => 'El número de cuenta solo admite dígitos, sin espacios ni guiones.',
+            'bank_key.regex' => 'La clave de dispersión solo admite letras y números.',
         ] + $this->accessPasswordMessages();
     }
 
@@ -183,7 +200,7 @@ class StoreEmployeeRequest extends FormRequest
 
         return Bank::query()
             ->withoutGlobalScopes()
-            ->where('company_id', $this->user()?->company_id)
+            ->where('company_id', $this->companyId())
             ->find((int) $bankId);
     }
 

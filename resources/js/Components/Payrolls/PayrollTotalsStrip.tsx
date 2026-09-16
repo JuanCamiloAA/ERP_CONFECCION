@@ -10,14 +10,16 @@ export interface PayrollEmployeeTotals {
     total_advances: number;
     total_absence_discount: number;
     total_deductions: number;
+    /** Neto ya calculado en el servidor: el de la nomina, o el del empleado si va acotada. */
+    total_net: number;
+    /** La franja resume la liquidacion de quien mira, no la de toda la empresa. */
+    own_scope: boolean;
     show_daily_column: boolean;
     show_legal_column: boolean;
 }
 
 interface Props {
     totals: PayrollEmployeeTotals;
-    /** Neto de la nomina (`payroll.total_amount`), que ya trae aplicadas las deducciones. */
-    net: string | number;
 }
 
 /**
@@ -27,7 +29,10 @@ interface Props {
  * telefono: dos lecturas del mismo periodo que no siempre coincidian. Aqui las columnas de
  * jornada y jornada legal se ocultan cuando nadie las usa, como en la tabla.
  */
-export function PayrollTotalsStrip({ totals, net }: Props) {
+export function PayrollTotalsStrip({ totals }: Props) {
+    const net = totals.total_net;
+    const netLabel = totals.own_scope ? 'Tu neto del periodo' : 'Neto a pagar';
+
     const cells = [
         { label: 'Producido', value: totals.total_production, show: true, tone: 'text' as const, sign: '' },
         { label: 'Jornada', value: totals.total_daily, show: totals.show_daily_column, tone: 'text' as const, sign: '' },
@@ -64,7 +69,7 @@ export function PayrollTotalsStrip({ totals, net }: Props) {
                 ))}
 
                 <div className="min-w-0 pl-[14px]" style={{ borderLeft: '1px solid var(--emp-border)' }}>
-                    <p className="emp-kicker">Neto a pagar</p>
+                    <p className="emp-kicker">{netLabel}</p>
                     <p className="mt-0.5 truncate text-[26px] leading-none tabular-nums" style={{ color: 'var(--emp-accent-on)' }}>
                         {formatCurrency(net)}
                     </p>
@@ -93,7 +98,7 @@ export function PayrollTotalsStrip({ totals, net }: Props) {
                     style={{ borderTop: '1px solid var(--emp-row)' }}
                 >
                     <div>
-                        <dt className="emp-kicker">Neto a pagar</dt>
+                        <dt className="emp-kicker">{netLabel}</dt>
                         <dd className="text-[24px] leading-none tabular-nums" style={{ color: 'var(--emp-accent-on)' }}>
                             {formatCurrency(net)}
                         </dd>

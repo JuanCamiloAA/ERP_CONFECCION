@@ -173,6 +173,13 @@ class PayrollModuleTest extends TestCase
         $user = $this->actor();
         $payroll = $this->somePayroll($user);
 
+        // La franja es la del periodo, asi que exige su permiso: se concede aqui para que
+        // la prueba no dependa de lo que tenga asignado el usuario de la base.
+        if (! $user->isSuperAdmin()) {
+            $user->givePermissionTo('payrolls.show.view_totals');
+            $user->unsetRelation('permissions')->flushEffectivePermissionCache();
+        }
+
         $this->actingAs($user)
             ->get(route('payrolls.show', $payroll->id))
             ->assertOk()
@@ -181,11 +188,45 @@ class PayrollModuleTest extends TestCase
                 ->has('payrollEmployees')
                 ->has('payrollEmployeeTotals.total_gross')
                 ->has('payrollEmployeeTotals.total_deductions')
+                ->has('payrollEmployeeTotals.total_net')
                 ->has('payrollEmployeeTotals.show_daily_column')
                 ->has('payrollEmployeeTotals.show_legal_column')
                 ->has('workSessionsByEmployee')
                 ->has('productionsByEmployee')
                 ->has('periodicityName'));
+    }
+
+    /**
+     * Ver la nomina no es ver cuanto suma.
+     *
+     * Quien entra al detalle sin `payrolls.show.view_totals` no recibe el agregado ni
+     * siquiera en las props: el aviso de cierre lleva a esta pantalla y el empleado que lo
+     * abre no puede terminar leyendo el producido y el neto de toda la empresa.
+     */
+    public function test_the_totals_are_not_sent_to_whoever_lacks_the_permission(): void
+    {
+        $user = $this->actor();
+
+        if ($user->isSuperAdmin() || $user->isEmployee()) {
+            // El super admin lo ve todo; al empleado la consulta ya le viene acotada a su
+            // propia liquidacion, asi que ahi la franja son sus cifras y si se dibuja.
+            $this->markTestSkipped('El actor de esta base no sirve para probar la negacion.');
+        }
+
+        $payroll = $this->somePayroll($user);
+
+        $user->syncPermissions(['payrolls.index.view', 'payrolls.show.view']);
+        $user->unsetRelation('permissions')->flushEffectivePermissionCache();
+
+        $this->actingAs($user)
+            ->get(route('payrolls.show', $payroll->id))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Payrolls/Show')
+                ->has('payrollEmployees')
+                ->where('payrollEmployeeTotals', null)
+                // El neto de la nomina viaja en el modelo: tampoco puede ir en las props.
+                ->missing('payroll.total_amount'));
     }
 
     public function test_the_employee_sheet_carries_the_absence_baseline_of_the_whole_payroll(): void

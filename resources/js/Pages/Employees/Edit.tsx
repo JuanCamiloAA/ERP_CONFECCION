@@ -16,6 +16,7 @@ import { PayrollModeField, payrollModeLabel, type PayrollMode } from '@/Componen
 import { ScheduledWorkDaysField } from '@/Components/Employees/ScheduledWorkDaysField';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
+import { collectUnmappedErrors, FormErrorAlert } from '@/Components/UI/FormErrorAlert';
 import AppLayout from '@/Layouts/AppLayout';
 import { formatCurrency, formatRelativeDate } from '@/lib/utils';
 import type { BankOption, Employee } from '@/types';
@@ -47,6 +48,20 @@ const SECTION_FIELDS = {
 } as const;
 
 /**
+ * A que seccion pertenece un campo.
+ *
+ * Sirve para llevar la vista —y en movil el plegado— hasta el campo que el servidor
+ * rechazo, en vez de dejar el mensaje escondido en una seccion cerrada.
+ */
+function sectionOf(field: string): keyof typeof SECTION_FIELDS | null {
+    const entry = Object.entries(SECTION_FIELDS).find(([, fields]) =>
+        (fields as readonly string[]).includes(field),
+    );
+
+    return (entry?.[0] as keyof typeof SECTION_FIELDS | undefined) ?? null;
+}
+
+/**
  * Fecha para un <input type="date">.
  *
  * El modelo castea `hire_date` y la serializa como ISO completo
@@ -63,7 +78,7 @@ const WEEKS_PER_MONTH = 4.33;
 export default function EmployeeEdit({ employee, banks, hasProductions = false }: Props) {
     const flash = usePage<App.PageProps>().props.flash;
 
-    const { data, setData, processing, errors } = useForm({
+    const { data, setData, post, processing, errors, transform } = useForm({
         first_name: employee.first_name,
         last_name: employee.last_name,
         document_type: employee.document_type,
@@ -88,6 +103,9 @@ export default function EmployeeEdit({ employee, banks, hasProductions = false }
         bank_key: employee.bank_key ?? '',
     });
 
+    /** Mensajes de validacion que no tienen campo donde pintarse. */
+    const unmappedErrors = collectUnmappedErrors(errors, Object.keys(data));
+
     /** Movil: una sola seccion abierta a la vez; editar un telefono no debe recorrer todo. */
     const [openSection, setOpenSection] = useState<string | null>('identidad');
     const [confirmReset, setConfirmReset] = useState(false);
@@ -103,14 +121,44 @@ export default function EmployeeEdit({ employee, banks, hasProductions = false }
         }
     }, [flash?.temporary_password]);
 
+    /**
+     * Guardar.
+     *
+     * Va por `post()` del propio formulario y no por `router.post`: el `router` suelto no
+     * alimenta `errors` ni `processing` de `useForm`, asi que una validacion rechazada no
+     * pintaba un solo mensaje y el boton parecia no hacer nada. La peticion sigue saliendo
+     * como POST con `_method` porque lleva la foto y multipart no admite PUT nativo.
+     */
     const submit = (e: FormEvent) => {
         e.preventDefault();
-        router.post(route('employees.update', employee.id), {
-            ...data,
-            bank_id: data.bank_id === '' ? '' : Number(data.bank_id),
+
+        transform((current) => ({
+            ...current,
+            bank_id: current.bank_id === '' ? '' : Number(current.bank_id),
             _method: 'put',
-        } as never, {
+        }));
+
+        post(route('employees.update', employee.id), {
             forceFormData: true,
+            onError: (formErrors) => {
+                const first = Object.keys(formErrors)[0] ?? '';
+                const section = sectionOf(first);
+
+                // En movil la seccion culpable puede estar plegada: se abre, porque si no
+                // el mensaje queda escrito en un trozo de formulario que nadie ve.
+                if (section) {
+                    setOpenSection(section);
+                }
+
+                const blocking = collectUnmappedErrors(formErrors, Object.keys(data));
+                toast.error(blocking[0] ?? 'Revisa los campos marcados en el formulario.');
+
+                window.requestAnimationFrame(() => {
+                    const target = section ? document.getElementById(section) : null;
+                    const top = target ? target.getBoundingClientRect().top + window.scrollY - 80 : 0;
+                    window.scrollTo({ top, behavior: 'smooth' });
+                });
+            },
         });
     };
 
@@ -250,6 +298,9 @@ export default function EmployeeEdit({ employee, banks, hasProductions = false }
 
     const secciones = (
         <>
+            {/* Lo que rechazo el servidor y ningun campo de la pantalla puede mostrar. */}
+            <FormErrorAlert messages={unmappedErrors} />
+
             {hasProductions ? (
                 <p className="emp-note flex items-start gap-2">
                     <Warning size={15} className="mt-0.5 shrink-0" style={{ color: 'var(--emp-accent-line)' }} />

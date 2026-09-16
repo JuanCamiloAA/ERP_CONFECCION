@@ -2,8 +2,10 @@
 
 namespace Tests\Feature;
 
+use App\Models\Bank;
 use App\Models\Employee;
 use App\Models\User;
+use App\Support\TenantContext;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
@@ -230,6 +232,84 @@ class EmployeeModuleTest extends TestCase
         $this->assertDatabaseHas('employees', [
             'id' => $employee->id,
             'address' => 'Direccion de prueba',
+        ]);
+    }
+
+    /**
+     * El super admin guarda contra la empresa que tiene activa en el selector.
+     *
+     * Su `company_id` es nulo —trabaja sobre la empresa elegida—, asi que validar contra
+     * ese campo hacia que el banco del empleado no existiera «para su empresa» y el
+     * formulario completo quedara sin poder guardarse: el aviso de banco invalido ni
+     * siquiera se pintaba y el boton parecia no hacer nada.
+     */
+    public function test_the_super_admin_can_save_an_employee_with_bank_details(): void
+    {
+        $super = User::query()->get()->first(fn (User $u) => $u->isSuperAdmin());
+
+        if ($super === null) {
+            $this->markTestSkipped('No hay super admin en esta base.');
+        }
+
+        $employee = Employee::query()->withoutGlobalScopes()->whereNotNull('company_id')->first();
+
+        if ($employee === null) {
+            $this->markTestSkipped('No hay empleados en esta base.');
+        }
+
+        $bank = Bank::query()
+            ->withoutGlobalScopes()
+            ->where('company_id', $employee->company_id)
+            ->where('is_active', true)
+            ->first();
+
+        if ($bank === null) {
+            $this->markTestSkipped('La empresa del empleado no tiene bancos activos.');
+        }
+
+        $employee->forceFill([
+            'bank_id' => $bank->id,
+            'bank_account_type' => 'ahorros',
+            'bank_account_number' => '12345678',
+            'bank_key' => 'ABC123',
+        ])->save();
+
+        $payload = [
+            'first_name' => $employee->first_name,
+            'last_name' => $employee->last_name,
+            'document_type' => $employee->document_type,
+            'document_number' => $employee->document_number,
+            'phone' => $employee->phone ?? '',
+            'email' => $employee->email ?? '',
+            'address' => 'Direccion del super admin',
+            'hire_date' => $employee->hire_date instanceof \DateTimeInterface
+                ? $employee->hire_date->format('Y-m-d')
+                : (string) $employee->hire_date,
+            'base_salary' => (string) ($employee->base_salary ?? 0),
+            'payroll_mode' => $employee->payroll_mode ?? 'operations',
+            'daily_salary' => $employee->daily_salary !== null ? (string) $employee->daily_salary : '',
+            'minutes_per_full_workday' => (string) ($employee->minutes_per_full_workday ?? 480),
+            'ordinary_hours_per_day' => (string) ($employee->ordinary_hours_per_day ?? 8),
+            'is_exempt_from_overtime' => (bool) $employee->is_exempt_from_overtime,
+            'scheduled_work_days' => $employee->scheduled_work_days ?? [1, 2, 3, 4, 5, 6],
+            'is_active' => (bool) $employee->is_active,
+            'notes' => $employee->notes ?? '',
+            'bank_id' => (string) $bank->id,
+            'bank_account_type' => 'ahorros',
+            'bank_account_number' => '12345678',
+            'bank_key' => 'ABC123',
+            '_method' => 'put',
+        ];
+
+        $this->actingAs($super)
+            ->withSession([TenantContext::SESSION_KEY => (int) $employee->company_id])
+            ->post(route('employees.update', $employee->id), $payload)
+            ->assertSessionHasNoErrors()
+            ->assertRedirect(route('employees.show', $employee->id));
+
+        $this->assertDatabaseHas('employees', [
+            'id' => $employee->id,
+            'address' => 'Direccion del super admin',
         ]);
     }
 
