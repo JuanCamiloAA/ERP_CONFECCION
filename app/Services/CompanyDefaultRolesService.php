@@ -63,6 +63,8 @@ class CompanyDefaultRolesService
             'productions.index.workday_start',
             'productions.index.workday_close',
             'productions.index.workday_others',
+            'productions.detail.view',
+            'productions.history.view',
             'productions.report.view',
             'productions.report.export',
             'productions.ranking.view',

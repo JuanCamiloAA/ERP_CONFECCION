@@ -66,6 +66,8 @@ const OPERATOR_PERMISSIONS = [
     'productions.index.create',
     'productions.index.workday_start',
     'productions.index.workday_close',
+    'productions.detail.view',
+    'productions.history.view',
     'productions.report.view',
     'productions.ranking.view',
     RANKING_PERMISSIONS.ownFilter,

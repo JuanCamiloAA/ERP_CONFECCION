@@ -293,6 +293,12 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::get('/productions/export', [ProductionController::class, 'export'])
             ->name('productions.export')
             ->middleware('permission:productions.index.export');
+        Route::get('/productions/detail', [ProductionController::class, 'detail'])
+            ->name('productions.detail')
+            ->middleware('permission:productions.detail.view');
+        Route::get('/productions/history', [ProductionController::class, 'history'])
+            ->name('productions.history')
+            ->middleware('permission:productions.history.view');
         Route::post('/productions/confirm-day', [ProductionController::class, 'confirmDay'])
             ->name('productions.confirm-day')
             ->middleware('permission:productions.index.confirm_day');

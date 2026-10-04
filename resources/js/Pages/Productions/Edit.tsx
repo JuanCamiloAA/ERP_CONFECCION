@@ -24,9 +24,18 @@ interface Props {
     references: ReferenceWithOps[];
     priceLocked?: boolean;
     statusEditable?: boolean;
+    /** Listado al que se vuelve: el operario no tiene uno en «Mi producción» y regresa al Detalle. */
+    backUrl?: string;
 }
 
-export default function ProductionEdit({ production, employees, references, priceLocked = false, statusEditable = false }: Props) {
+export default function ProductionEdit({
+    production,
+    employees,
+    references,
+    priceLocked = false,
+    statusEditable = false,
+    backUrl = route('productions.index'),
+}: Props) {
     const { data, setData, put, processing, errors } = useForm({
         employee_id: production.employee_id,
         reference_id: production.reference_id,
@@ -100,7 +109,7 @@ export default function ProductionEdit({ production, employees, references, pric
                 >
                     <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-3">
-                            <Link href={route('productions.index')} className="emp-btn emp-btn-ghost shrink-0 px-2">
+                            <Link href={backUrl} className="emp-btn emp-btn-ghost shrink-0 px-2">
                                 <ArrowLeft size={17} />
                                 <span className="max-sm:sr-only">Volver</span>
                             </Link>
@@ -109,7 +118,7 @@ export default function ProductionEdit({ production, employees, references, pric
                                     className="hidden items-center gap-1.5 text-[12px] sm:flex"
                                     style={{ color: 'var(--emp-subtle)' }}
                                 >
-                                    <Link href={route('productions.index')} className="hover:underline">
+                                    <Link href={backUrl} className="hover:underline">
                                         Producción
                                     </Link>
                                     <span>/</span>

@@ -26,13 +26,30 @@ class ProductionModuleTest extends TestCase
         $user = User::query()
             ->whereNotNull('company_id')
             ->get()
-            ->first(fn (User $u) => $u->isSuperAdmin() || $u->can('productions.index.view'));
+            // El operario ya no tiene listado en «Mi producción»: lo suyo esta en el Detalle
+            // y el Historial, que se prueban con `worker()`.
+            ->first(fn (User $u) => ($u->isSuperAdmin() || $u->can('productions.index.view'))
+                && ! $u->isRestrictedProductionAccount());
 
         if ($user === null) {
             $this->markTestSkipped('No hay usuario con permiso productions.index.view en esta base.');
         }
 
         return $user;
+    }
+
+    protected function worker(): User
+    {
+        $worker = User::query()
+            ->whereNotNull('employee_id')
+            ->get()
+            ->first(fn (User $u) => $u->isRestrictedProductionAccount() && $u->can('productions.index.view'));
+
+        if ($worker === null) {
+            $this->markTestSkipped('No hay cuenta de produccion restringida en esta base.');
+        }
+
+        return $worker;
     }
 
     protected function someProduction(User $user): Production
@@ -254,5 +271,91 @@ class ProductionModuleTest extends TestCase
         $this->actingAs($worker)
             ->post(route('productions.confirm', $production->id))
             ->assertForbidden();
+    }
+
+    public function test_the_worker_screen_registers_but_no_longer_lists(): void
+    {
+        $worker = $this->worker();
+
+        $this->actingAs($worker)
+            ->get(route('productions.index'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Productions/Index')
+                ->where('workerMode', true)
+                ->missing('productions')
+                ->has('paymentSummary.unpaid_count')
+                ->has('paymentSummary.unpaid_value')
+                ->has('paymentSummary.pending_count')
+                ->has('paymentSummary.paid_count')
+                ->has('paymentSummary.paid_value'));
+    }
+
+    public function test_the_payment_summary_counts_only_the_worker_own_records(): void
+    {
+        $worker = $this->worker();
+
+        $own = Production::query()->withoutGlobalScopes()
+            ->where('company_id', $worker->company_id)
+            ->where('employee_id', $worker->employee_id);
+
+        $this->actingAs($worker)
+            ->get(route('productions.index'))
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('paymentSummary.unpaid_count', (clone $own)->whereIn('status', Production::PAYABLE_STATUSES)->count())
+                ->where('paymentSummary.paid_count', (clone $own)->where('status', Production::STATUS_PAID)->count()));
+    }
+
+    public function test_detail_lists_only_what_is_not_paid_yet(): void
+    {
+        $user = $this->actor();
+
+        $this->actingAs($user)
+            ->get(route('productions.detail'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Productions/Records')
+                ->where('scope', 'unpaid')
+                ->has('productions.data')
+                ->where('productions.data', fn ($rows) => collect($rows)
+                    ->every(fn ($row) => in_array($row['status'], Production::PAYABLE_STATUSES, true))));
+    }
+
+    public function test_history_lists_only_what_was_paid(): void
+    {
+        $user = $this->actor();
+
+        $this->actingAs($user)
+            ->get(route('productions.history'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->component('Productions/Records')
+                ->where('scope', 'paid')
+                ->where('totals.pending_count', 0)
+                ->where('productions.data', fn ($rows) => collect($rows)
+                    ->every(fn ($row) => $row['status'] === Production::STATUS_PAID)));
+    }
+
+    public function test_the_worker_detail_shows_only_their_own_records(): void
+    {
+        $worker = $this->worker();
+
+        $this->actingAs($worker)
+            ->get(route('productions.detail'))
+            ->assertOk()
+            ->assertInertia(fn (AssertableInertia $page) => $page
+                ->where('workerMode', true)
+                ->where('productions.data', fn ($rows) => collect($rows)
+                    ->every(fn ($row) => (int) $row['employee_id'] === (int) $worker->employee_id)));
+    }
+
+    public function test_detail_and_history_require_their_own_permission(): void
+    {
+        foreach (['productions.detail' => 'productions.detail.view', 'productions.history' => 'productions.history.view'] as $name => $permission) {
+            $route = app('router')->getRoutes()->getByName($name);
+
+            $this->assertNotNull($route, "No existe la ruta {$name}.");
+            $this->assertContains('permission:'.$permission, $route->gatherMiddleware(), "La ruta {$name} no exige {$permission}.");
+        }
     }
 }

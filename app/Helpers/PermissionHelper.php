@@ -253,6 +253,21 @@ class PermissionHelper
                             'workday_others' => 'Abrir o cerrar la jornada de otros',
                         ],
                     ],
+                    // El operario registra en el listado; lo registrado lo consulta aparte,
+                    // partido por el pago: lo que aun no entra en una nomina pagada y lo
+                    // que ya se le pago. Cada mitad se concede por separado.
+                    'detail' => [
+                        'display' => 'Detalle de Produccion (sin pagar)',
+                        'route' => 'productions.detail',
+                        'actions' => ['view'],
+                        'labels' => ['view' => 'Ver la producción sin pagar'],
+                    ],
+                    'history' => [
+                        'display' => 'Historial de Produccion (pagada)',
+                        'route' => 'productions.history',
+                        'actions' => ['view'],
+                        'labels' => ['view' => 'Ver la producción ya pagada'],
+                    ],
                     'report' => [
                         'display' => 'Reportes de Produccion',
                         'route' => 'productions.report',
@@ -793,6 +808,8 @@ class PermissionHelper
                     'productions.index.create',
                     'productions.index.workday_start',
                     'productions.index.workday_close',
+                    'productions.detail.view',
+                    'productions.history.view',
                     'productions.report.view',
                     'productions.ranking.view',
                     self::RANKING_OWN_FILTER_PERMISSION,

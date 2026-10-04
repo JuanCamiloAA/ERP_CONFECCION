@@ -101,7 +101,7 @@ export function ProductionDayGroup({ bucket, onConfirmDay, children }: Props) {
                     </Can>
                 ) : (
                     <span className="text-[12px]" style={{ color: 'var(--emp-subtle)' }}>
-                        Día confirmado
+                        {bucket.rows.every((row) => row.status === 'pagado') ? 'Día pagado' : 'Día confirmado'}
                     </span>
                 )}
             </header>

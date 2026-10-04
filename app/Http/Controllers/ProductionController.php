@@ -34,36 +34,22 @@ class ProductionController extends Controller
     /** Turnos que acepta el filtro del ranking; cualquier otro valor se ignora. */
     protected const RANKING_SHIFTS = ['manana', 'tarde', 'noche'];
 
+    /** Alcances del listado segun el pago: el Detalle muestra lo primero, el Historial lo segundo. */
+    public const SCOPE_UNPAID = 'unpaid';
+
+    public const SCOPE_PAID = 'paid';
+
     public function index(Request $request): Response
     {
         $user = $request->user();
 
-        $query = Production::query()->with([
-            'employee:id,first_name,last_name',
-            'reference:id,code,name',
-            'operation:id,name',
-            'company:id,name',
-        ]);
-
-        $this->applyEmployeeRestriction($query, $user);
-        $filters = $this->applyIndexFilters($query, $request);
-
-        /** Mismo filtro que el listado, sin eager/limit/order: evita fromSub + scope (rompe el SQL) y evita clonar tras paginate(). */
-        $totalsRow = (clone $query)
-            ->withoutEagerLoads()
-            ->reorder()
-            // `pending_count` sale de la misma consulta que el resto: contarlo sobre la
-            // pagina daria «3 por confirmar» cuando hay treinta en el filtro.
-            ->selectRaw('
-                SUM(quantity) as total_quantity,
-                SUM(total_value) as total_value,
-                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as pending_count
-            ', [Production::STATUS_PENDING])
-            ->first();
-
-        $productions = $query->orderByDesc('date')->orderByDesc('id')->paginate(20)->withQueryString();
-
         $workerMode = $user->isRestrictedProductionAccount();
+
+        // El operario solo registra aqui: lo registrado lo consulta en «Detalle» (sin
+        // pagar) y en «Historial» (pagado). Por eso su pantalla no carga el listado.
+        $listing = $workerMode
+            ? ['paymentSummary' => $this->paymentSummary($user)]
+            : $this->listingPayload($request, $user);
 
         $referencesWithOperations = null;
         if ($workerMode) {
@@ -102,7 +88,72 @@ class ProductionController extends Controller
                 ->get(['id', 'first_name', 'last_name']);
         }
 
-        return Inertia::render('Productions/Index', [
+        return Inertia::render('Productions/Index', array_merge($listing, [
+            'workerMode' => $workerMode,
+            'lockedEmployee' => $lockedEmployee,
+            'referencesWithOperations' => $referencesWithOperations ?? [],
+            'workDayBanner' => $workDayBanner,
+            'workDaySelectableEmployees' => $workDaySelectableEmployees,
+        ]));
+    }
+
+    /** Produccion que todavia no entra en una nomina pagada: pendiente o confirmada. */
+    public function detail(Request $request): Response
+    {
+        return $this->renderScopedListing($request, self::SCOPE_UNPAID);
+    }
+
+    /** Produccion que ya se pago en una nomina. */
+    public function history(Request $request): Response
+    {
+        return $this->renderScopedListing($request, self::SCOPE_PAID);
+    }
+
+    protected function renderScopedListing(Request $request, string $scope): Response
+    {
+        $user = $request->user();
+
+        return Inertia::render('Productions/Records', array_merge($this->listingPayload($request, $user, $scope), [
+            'scope' => $scope,
+            'workerMode' => $user->isRestrictedProductionAccount(),
+        ]));
+    }
+
+    /**
+     * Listado paginado con sus filtros y totales: lo comparten el listado general, el
+     * Detalle y el Historial, que solo se distinguen por el alcance.
+     *
+     * @return array<string, mixed>
+     */
+    protected function listingPayload(Request $request, User $user, ?string $scope = null): array
+    {
+        $query = Production::query()->with([
+            'employee:id,first_name,last_name',
+            'reference:id,code,name',
+            'operation:id,name',
+            'company:id,name',
+        ]);
+
+        $this->applyEmployeeRestriction($query, $user);
+        $this->applyPaymentScope($query, $scope);
+        $filters = $this->applyIndexFilters($query, $request);
+
+        /** Mismo filtro que el listado, sin eager/limit/order: evita fromSub + scope (rompe el SQL) y evita clonar tras paginate(). */
+        $totalsRow = (clone $query)
+            ->withoutEagerLoads()
+            ->reorder()
+            // `pending_count` sale de la misma consulta que el resto: contarlo sobre la
+            // pagina daria «3 por confirmar» cuando hay treinta en el filtro.
+            ->selectRaw('
+                SUM(quantity) as total_quantity,
+                SUM(total_value) as total_value,
+                SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as pending_count
+            ', [Production::STATUS_PENDING])
+            ->first();
+
+        $productions = $query->orderByDesc('date')->orderByDesc('id')->paginate(20)->withQueryString();
+
+        return [
             'productions' => $productions,
             'filters' => $filters,
             'totals' => [
@@ -110,15 +161,69 @@ class ProductionController extends Controller
                 'total_value' => (float) ($totalsRow->total_value ?? 0),
                 'pending_count' => (int) ($totalsRow->pending_count ?? 0),
             ],
-            'employees' => $workerMode ? [] : $this->employeesList(),
+            'employees' => $user->isRestrictedProductionAccount() ? [] : $this->employeesList(),
             'references' => Reference::active()->orderBy('code')->get(['id', 'code', 'name']),
             'operations' => Operation::active()->orderBy('name')->get(['id', 'name']),
-            'workerMode' => $workerMode,
-            'lockedEmployee' => $lockedEmployee,
-            'referencesWithOperations' => $referencesWithOperations ?? [],
-            'workDayBanner' => $workDayBanner,
-            'workDaySelectableEmployees' => $workDaySelectableEmployees,
-        ]);
+        ];
+    }
+
+    /**
+     * Lo que dicen los botones de Detalle e Historial del operario: cuantos registros y
+     * cuanto dinero hay a cada lado del pago. Una sola consulta para los dos.
+     *
+     * @return array{unpaid_count: int, unpaid_value: float, pending_count: int, paid_count: int, paid_value: float}
+     */
+    protected function paymentSummary(User $user): array
+    {
+        $query = Production::query();
+        $this->applyEmployeeRestriction($query, $user);
+
+        [$pending, $confirmed] = Production::PAYABLE_STATUSES;
+
+        $row = $query->selectRaw('
+            SUM(CASE WHEN status IN (?, ?) THEN 1 ELSE 0 END) as unpaid_count,
+            SUM(CASE WHEN status IN (?, ?) THEN total_value ELSE 0 END) as unpaid_value,
+            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as pending_count,
+            SUM(CASE WHEN status = ? THEN 1 ELSE 0 END) as paid_count,
+            SUM(CASE WHEN status = ? THEN total_value ELSE 0 END) as paid_value
+        ', [
+            $pending, $confirmed,
+            $pending, $confirmed,
+            Production::STATUS_PENDING,
+            Production::STATUS_PAID,
+            Production::STATUS_PAID,
+        ])->first();
+
+        return [
+            'unpaid_count' => (int) ($row->unpaid_count ?? 0),
+            'unpaid_value' => (float) ($row->unpaid_value ?? 0),
+            'pending_count' => (int) ($row->pending_count ?? 0),
+            'paid_count' => (int) ($row->paid_count ?? 0),
+            'paid_value' => (float) ($row->paid_value ?? 0),
+        ];
+    }
+
+    /** Limita la consulta a un lado del pago; sin alcance (el listado general) no toca nada. */
+    protected function applyPaymentScope($query, ?string $scope): void
+    {
+        if ($scope === self::SCOPE_UNPAID) {
+            $query->whereIn('status', Production::PAYABLE_STATUSES);
+        } elseif ($scope === self::SCOPE_PAID) {
+            $query->where('status', Production::STATUS_PAID);
+        }
+    }
+
+    /**
+     * Donde vuelve quien edita un registro: el operario no tiene listado en la pantalla de
+     * registro, asi que regresa al Detalle si puede verlo.
+     */
+    protected function listRouteFor(?User $user): string
+    {
+        if ($user?->isRestrictedProductionAccount() && $user->can('productions.detail.view')) {
+            return 'productions.detail';
+        }
+
+        return 'productions.index';
     }
 
     public function create(Request $request): Response|RedirectResponse
@@ -175,6 +280,7 @@ class ProductionController extends Controller
             'references' => $this->referencesForProductionForm($production),
             'priceLocked' => $request->user()?->isRestrictedProductionAccount() ?? false,
             'statusEditable' => ! ($request->user()?->isRestrictedProductionAccount() ?? false),
+            'backUrl' => route($this->listRouteFor($request->user())),
         ]);
     }
 
@@ -184,7 +290,7 @@ class ProductionController extends Controller
         // de cuadrar con la produccion que la respalda.
         if ($production->isPaid()) {
             return redirect()
-                ->route('productions.index')
+                ->route($this->listRouteFor($request->user()))
                 ->with('error', 'Esta produccion ya fue pagada en una nomina y no se puede modificar.');
         }
 
@@ -199,20 +305,20 @@ class ProductionController extends Controller
         }
         $production->update($payload);
 
-        return redirect()->route('productions.index')->with('success', 'Produccion actualizada.');
+        return redirect()->route($this->listRouteFor($user))->with('success', 'Produccion actualizada.');
     }
 
     public function destroy(Production $production): RedirectResponse
     {
+        // Se elimina desde un listado (el general, el Detalle o el Historial): se vuelve a
+        // ese mismo, con sus filtros, y no al general.
         if (Payroll::paidPeriodCoversDate((int) $production->company_id, $production->date)) {
-            return redirect()
-                ->route('productions.index')
-                ->with('error', 'No se puede eliminar produccion de un periodo de nomina ya pagado.');
+            return back()->with('error', 'No se puede eliminar produccion de un periodo de nomina ya pagado.');
         }
 
         $production->delete();
 
-        return redirect()->route('productions.index')->with('success', 'Produccion eliminada.');
+        return back()->with('success', 'Produccion eliminada.');
     }
 
     /**
@@ -296,6 +402,9 @@ class ProductionController extends Controller
         ]);
 
         $this->applyEmployeeRestriction($query, $user);
+        // El Detalle y el Historial exportan solo su lado del pago, igual que lo que muestran.
+        $scope = $request->input('scope');
+        $this->applyPaymentScope($query, in_array($scope, [self::SCOPE_UNPAID, self::SCOPE_PAID], true) ? $scope : null);
         $this->applyIndexFilters($query, $request);
 
         $filename = 'produccion-'.now()->format('Ymd-Hi').'.csv';
