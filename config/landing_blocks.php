@@ -293,6 +293,13 @@ return [
                 'help' => 'Solo en tarjetas de plan. Vacío para no mostrarlo.',
                 'max' => 40,
             ],
+            'featured_label' => [
+                'type' => 'text',
+                'label' => 'Etiqueta del plan destacado',
+                'help' => 'Sale sobre el plan marcado como destacado en Planes de membresía. Vacío para no mostrarla.',
+                'max' => 24,
+                'show_if' => ['field' => 'presentation', 'value' => 'plans'],
+            ],
             'note' => ['type' => 'textarea', 'label' => 'Nota al pie', 'max' => 240, 'rows' => 2],
         ],
     ],

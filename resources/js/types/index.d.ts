@@ -109,8 +109,11 @@ export interface Company {
     is_active: boolean;
     settings: Record<string, unknown> | null;
     membership_plan_id?: number | null;
+    billing_cycle_id?: number | null;
+    membership_status?: MembershipStatus;
     membership_started_at?: string | null;
     membership_ends_at?: string | null;
+    grace_ends_at?: string | null;
     membership_plan?: MembershipPlan | null;
     staff_users_count?: number;
     created_at: string;
@@ -365,7 +368,10 @@ export interface PaymentMethod {
     holder_name: string;
 }
 
-export type BillingChargeStatus = 'pendiente' | 'pagado' | 'fallido';
+export type BillingChargeStatus = 'pendiente' | 'pagado' | 'fallido' | 'anulado';
+
+/** Estado de la membresia; lo mueve el servidor (ver MembershipService). */
+export type MembershipStatus = 'prueba' | 'activa' | 'gracia' | 'suspendida';
 
 export interface BillingCharge {
     id: number;
@@ -379,6 +385,16 @@ export interface BillingCharge {
 /** Estado de la membresia de la empresa que pinta «Mi empresa». */
 export interface Membership {
     plan: { name: string; slug: string; price_monthly: number | null; features: string[] } | null;
+    /** Periodo de cobro: cada cuanto paga y con que descuento. */
+    cycle: { name: string; months: number; discount_percent: number } | null;
+    /** Precio del periodo vigente, ya con su descuento. */
+    cycle_price: number | null;
+    status: MembershipStatus;
+    status_label: string;
+    /** Hasta cuando dura la gracia; despues se suspende. */
+    grace_ends_at: string | null;
+    /** Lo que cubriria un pago hecho hoy. */
+    quote: { amount: number; concept: string; starts_at: string; ends_at: string } | null;
     started_at: string | null;
     ends_at: string | null;
     /** Dias hasta el vencimiento; negativo si ya paso, null si no hay fecha limite. */

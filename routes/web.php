@@ -37,6 +37,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\RoleController;
 use App\Http\Controllers\SettingController;
 use App\Http\Controllers\SuperAdmin\ActiveCompanyController;
+use App\Http\Controllers\SuperAdmin\BillingCycleController;
 use App\Http\Controllers\SuperAdmin\DashboardWidgetController;
 use App\Http\Controllers\SuperAdmin\DataImportController;
 use App\Http\Controllers\SuperAdmin\DataImportPresetController;
@@ -162,6 +163,10 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
             ->middlewareFor(['create', 'store'], 'permission:companies.index.create')
             ->middlewareFor(['edit', 'update'], 'permission:companies.index.edit')
             ->middlewareFor('destroy', 'permission:companies.index.delete');
+        // Pago de la membresia recibido por fuera de la pasarela (transferencia, efectivo).
+        Route::post('/companies/{company}/membership-payments', [CompanyController::class, 'storeMembershipPayment'])
+            ->name('companies.membership-payments.store')
+            ->middleware('permission:companies.index.edit');
         Route::post('/companies/set-active', [CompanyController::class, 'setActive'])->name('companies.set-active');
     });
 
@@ -568,6 +573,12 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::put('landing/globals', [LandingCmsController::class, 'updateGlobals'])->name('landing.globals');
 
         Route::resource('membership-plans', MembershipPlanController::class)->except(['show']);
+
+        // Periodos de pago (mensual, trimestral...): no se borran, se desactivan.
+        Route::get('billing-cycles', [BillingCycleController::class, 'index'])->name('billing-cycles.index');
+        Route::post('billing-cycles', [BillingCycleController::class, 'store'])->name('billing-cycles.store');
+        Route::put('billing-cycles/{billing_cycle}', [BillingCycleController::class, 'update'])->name('billing-cycles.update');
+        Route::post('billing-cycles/{billing_cycle}/toggle', [BillingCycleController::class, 'toggle'])->name('billing-cycles.toggle');
 
         Route::post('dashboard-widgets/preview', [DashboardWidgetController::class, 'preview'])->name('dashboard-widgets.preview');
         // GET y PUT comparten nombre: la pantalla de visibilidad y el guardado de la misma.

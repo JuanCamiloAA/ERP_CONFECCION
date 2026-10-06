@@ -9,12 +9,15 @@ class MembershipPlan extends Model
 {
     protected $fillable = [
         'name',
+        'description',
         'slug',
         'max_staff_users',
         'max_employees',
         'features_json',
         'price_monthly',
+        'trial_days',
         'is_active',
+        'is_featured',
         'sort_order',
     ];
 
@@ -23,7 +26,9 @@ class MembershipPlan extends Model
         return [
             'features_json' => 'array',
             'is_active' => 'boolean',
+            'is_featured' => 'boolean',
             'price_monthly' => 'decimal:2',
+            'trial_days' => 'integer',
         ];
     }
 

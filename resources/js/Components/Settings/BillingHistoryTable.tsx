@@ -9,6 +9,7 @@ const STATUS_LABEL: Record<BillingChargeStatus, string> = {
     pendiente: 'Pendiente',
     pagado: 'Pagado',
     fallido: 'Fallido',
+    anulado: 'Anulado',
 };
 
 /** Solo el fallido rompe la escala de grises: es el único que pide hacer algo. */
@@ -16,6 +17,7 @@ const STATUS_COLOR: Record<BillingChargeStatus, string> = {
     pendiente: 'var(--emp-muted)',
     pagado: 'var(--emp-ok)',
     fallido: 'var(--emp-danger)',
+    anulado: 'var(--emp-subtle)',
 };
 
 /**

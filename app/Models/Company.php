@@ -15,6 +15,27 @@ class Company extends Model
 {
     use HasFactory, ResolvesMediaUrlsInArray, SoftDeletes;
 
+    /*
+     * Estado de la membresia. Lo mueve `MembershipService` (y el comando `membership:process`),
+     * nunca un update suelto: cada cambio deja su renglon en la bitacora.
+     */
+    public const MEMBERSHIP_TRIAL = 'prueba';
+
+    public const MEMBERSHIP_ACTIVE = 'activa';
+
+    /** Vencio sin pagar: sigue trabajando normal hasta `grace_ends_at`. */
+    public const MEMBERSHIP_GRACE = 'gracia';
+
+    /** La gracia paso sin pago: sus usuarios solo pueden entrar a pagar. */
+    public const MEMBERSHIP_SUSPENDED = 'suspendida';
+
+    public const MEMBERSHIP_LABELS = [
+        self::MEMBERSHIP_TRIAL => 'Prueba',
+        self::MEMBERSHIP_ACTIVE => 'Activa',
+        self::MEMBERSHIP_GRACE => 'En gracia',
+        self::MEMBERSHIP_SUSPENDED => 'Suspendida',
+    ];
+
     /**
      * @var list<string>
      */
@@ -30,6 +51,9 @@ class Company extends Model
         'is_active',
         'settings',
         'membership_plan_id',
+        'billing_cycle_id',
+        // `membership_status` y `grace_ends_at` no van aqui a proposito: solo los mueve
+        // `MembershipService` con forceFill, para que ningun formulario los cambie de lado.
         'membership_started_at',
         'membership_ends_at',
         'payment_gateway',
@@ -43,6 +67,7 @@ class Company extends Model
         'settings' => 'array',
         'membership_started_at' => 'datetime',
         'membership_ends_at' => 'datetime',
+        'grace_ends_at' => 'datetime',
         'auto_debit_enabled' => 'boolean',
         'next_charge_at' => 'date',
     ];
@@ -50,6 +75,16 @@ class Company extends Model
     public function membershipPlan(): BelongsTo
     {
         return $this->belongsTo(MembershipPlan::class, 'membership_plan_id');
+    }
+
+    public function billingCycle(): BelongsTo
+    {
+        return $this->belongsTo(BillingCycle::class);
+    }
+
+    public function membershipEvents(): HasMany
+    {
+        return $this->hasMany(CompanyMembershipEvent::class)->latest('created_at')->latest('id');
     }
 
     /** Una tarjeta activa por empresa; la tabla admite historico si algun dia hay varias. */
@@ -139,17 +174,27 @@ class Company extends Model
         return $today->gt($limit);
     }
 
+    public function isSuspended(): bool
+    {
+        return $this->membership_status === self::MEMBERSHIP_SUSPENDED;
+    }
+
+    public function membershipLabel(): string
+    {
+        return self::MEMBERSHIP_LABELS[$this->membership_status] ?? (string) $this->membership_status;
+    }
+
     /**
      * Motivo por el que un usuario de empresa NO puede autenticarse, o null si la empresa permite acceso corporativo.
+     *
+     * La membresia vencida ya no bloquea la entrada: pasa por gracia y, si se suspende, sus
+     * usuarios entran pero solo pueden ir a pagar (ver `EnsureUserBelongsToCompany`). Cerrarles
+     * la puerta del todo era dejarlos sin forma de renovar por su cuenta.
      */
     public function corporateAuthenticationBlockReason(?Carbon $today = null): ?string
     {
         if (! $this->is_active) {
             return 'Tu empresa esta inactiva. Contacta al soporte.';
-        }
-
-        if ($this->isMembershipEnded($today)) {
-            return 'El periodo configurado como fecha limite en el maestro de empresas ha vencido. Contacta al soporte para renovarlo.';
         }
 
         return null;

@@ -24,7 +24,10 @@ const TONE_COLOR: Record<Tone, string> = {
 
 function state(membership: Membership): { label: string; tone: Tone } {
     if (! membership.is_active) return { label: 'Empresa inactiva', tone: 'danger' };
+    if (membership.status === 'suspendida') return { label: 'Suspendida', tone: 'danger' };
+    if (membership.status === 'gracia') return { label: 'En gracia', tone: 'warn' };
     if (membership.is_expired) return { label: 'Vencida', tone: 'danger' };
+    if (membership.status === 'prueba') return { label: 'Prueba', tone: 'warn' };
     if (membership.days_left !== null && membership.days_left <= EXPIRING_SOON_DAYS) {
         return { label: 'Por vencer', tone: 'warn' };
     }
@@ -81,19 +84,42 @@ export function MembershipSection({ membership }: { membership: Membership }) {
             }
         >
             {/* ---------------------------------------------------------- plan */}
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
                 <Field label="Plan" value={membership.plan?.name ?? 'Sin plan asignado'} />
                 <Field
-                    label="Precio mensual"
+                    label={membership.cycle && membership.cycle.months > 1 ? `Precio ${membership.cycle.name.toLowerCase()}` : 'Precio mensual'}
                     value={
-                        membership.plan?.price_monthly != null
-                            ? formatCurrency(membership.plan.price_monthly)
-                            : 'No definido'
+                        membership.cycle_price != null
+                            ? `${formatCurrency(membership.cycle_price)}${
+                                  membership.cycle && membership.cycle.discount_percent > 0
+                                      ? ` (−${membership.cycle.discount_percent} %)`
+                                      : ''
+                              }`
+                            : membership.plan?.price_monthly != null
+                              ? formatCurrency(membership.plan.price_monthly)
+                              : 'No definido'
                     }
                 />
+                <Field label="Periodo de cobro" value={membership.cycle?.name ?? 'Mensual'} />
                 <Field label="Inicio" value={membership.started_at ? formatDate(membership.started_at) : '—'} />
                 <Field label="Vencimiento" value={expiry()} tone={membership.is_expired ? 'danger' : undefined} />
             </div>
+
+            {membership.status === 'gracia' || membership.status === 'suspendida' ? (
+                <p className="emp-note mt-4 flex items-start gap-2">
+                    <WarningCircle size={14} className="mt-0.5 shrink-0" />
+                    <span>
+                        {membership.status === 'gracia'
+                            ? `La membresía venció. Tienes hasta el ${
+                                  membership.grace_ends_at ? formatDate(membership.grace_ends_at) : '—'
+                              } para pagarla; después el acceso queda limitado a esta pantalla.`
+                            : 'La membresía está suspendida: tu equipo no puede usar el sistema hasta que se pague.'}
+                        {membership.quote
+                            ? ` El próximo periodo cuesta ${formatCurrency(membership.quote.amount)}.`
+                            : ''}
+                    </span>
+                </p>
+            ) : null}
 
             {/* -------------------------------------------------------- límites */}
             <div

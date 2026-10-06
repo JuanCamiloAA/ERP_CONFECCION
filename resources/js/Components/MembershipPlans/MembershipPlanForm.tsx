@@ -20,6 +20,9 @@ export interface PlanFormPlan {
     features_json: string[] | null;
     is_active: boolean;
     sort_order: number;
+    trial_days?: number;
+    description?: string | null;
+    is_featured?: boolean;
 }
 
 interface Props {
@@ -29,12 +32,15 @@ interface Props {
 
 type FormFields = {
     name: string;
+    description: string;
     slug: string;
     max_staff_users: string;
     max_employees: string;
     price_monthly: string;
+    trial_days: string;
     features_text: string;
     is_active: boolean;
+    is_featured: boolean;
     sort_order: string;
 };
 
@@ -68,12 +74,15 @@ export function MembershipPlanForm({ plan }: Props) {
     const initial: FormFields = useMemo(
         () => ({
             name: plan?.name ?? '',
+            description: plan?.description ?? '',
             slug: plan?.slug ?? '',
             max_staff_users: plan?.max_staff_users != null ? String(plan.max_staff_users) : '',
             max_employees: plan?.max_employees != null ? String(plan.max_employees) : '',
             price_monthly: plan?.price_monthly != null ? String(plan.price_monthly) : '',
+            trial_days: String(plan?.trial_days ?? 0),
             features_text: (plan?.features_json ?? []).join('\n'),
             is_active: plan?.is_active ?? true,
+            is_featured: plan?.is_featured ?? false,
             sort_order: String(plan?.sort_order ?? 0),
         }),
         [plan],
@@ -93,12 +102,15 @@ export function MembershipPlanForm({ plan }: Props) {
         // distinguir «vacio» (ilimitado) de «cero».
         transform((d) => ({
             name: d.name,
+            description: d.description.trim() === '' ? null : d.description.trim(),
             slug: slugify(d.slug),
             max_staff_users: d.max_staff_users === '' ? null : Number(d.max_staff_users),
             max_employees: d.max_employees === '' ? null : Number(d.max_employees),
             price_monthly: d.price_monthly === '' ? null : Number(d.price_monthly),
+            trial_days: Number(d.trial_days) || 0,
             features_json: featureLines(d.features_text).length ? featureLines(d.features_text) : null,
             is_active: d.is_active,
+            is_featured: d.is_featured,
             sort_order: Number(d.sort_order) || 0,
         }));
 
@@ -170,6 +182,17 @@ export function MembershipPlanForm({ plan }: Props) {
                                 error={errors.sort_order}
                                 description="Menor primero, en listados y selectores"
                             />
+                            <div className="sm:col-span-2">
+                                <Textarea
+                                    label="Descripción corta"
+                                    value={data.description}
+                                    onChange={(e) => setData('description', e.target.value)}
+                                    error={(errors as Record<string, string>).description}
+                                    rows={2}
+                                    maxLength={200}
+                                    description="Para quién es el plan. Sale bajo el nombre en la landing."
+                                />
+                            </div>
                             <Input
                                 type="number"
                                 label="Precio mensual"
@@ -177,6 +200,16 @@ export function MembershipPlanForm({ plan }: Props) {
                                 onChange={(e) => setData('price_monthly', e.target.value)}
                                 error={errors.price_monthly}
                                 description="Vacío = sin precio publicado"
+                            />
+                            <Input
+                                type="number"
+                                min={0}
+                                max={365}
+                                label="Días de prueba"
+                                value={data.trial_days}
+                                onChange={(e) => setData('trial_days', e.target.value)}
+                                error={(errors as Record<string, string>).trial_days}
+                                description="0 = sin prueba. Aplica al crear una empresa sin fecha de vencimiento"
                             />
                         </div>
                     </Card>
@@ -206,7 +239,10 @@ export function MembershipPlanForm({ plan }: Props) {
                     </Card>
 
                     <Card>
-                        <CardHeader title="Características" description="Una por línea." />
+                        <CardHeader
+                            title="Características"
+                            description="Una por línea. Los límites de usuarios y empleados se muestran solos: no los repitas aquí."
+                        />
                         <div className="mt-4 space-y-4">
                             <Textarea
                                 label="Caracteristicas"
@@ -221,6 +257,12 @@ export function MembershipPlanForm({ plan }: Props) {
                                 label="Plan activo"
                                 description="Los inactivos no se ofrecen al asignar plan a una empresa"
                             />
+                            <Switch
+                                checked={data.is_featured}
+                                onChange={(v) => setData('is_featured', v)}
+                                label="Destacar en la landing"
+                                description="Lleva borde de acento y la etiqueta «Más elegido» en la sección de planes"
+                            />
                         </div>
                     </Card>
                 </div>
@@ -232,12 +274,15 @@ export function MembershipPlanForm({ plan }: Props) {
                     <PlanCard
                         plan={{
                             name: data.name,
+                            description: data.description,
+                            is_featured: data.is_featured,
                             slug: data.slug,
                             max_staff_users: data.max_staff_users === '' ? null : Number(data.max_staff_users),
                             max_employees: data.max_employees === '' ? null : Number(data.max_employees),
                             price_monthly: data.price_monthly === '' ? null : data.price_monthly,
                             features_json: featureLines(data.features_text),
                             is_active: data.is_active,
+                            trial_days: Number(data.trial_days) || 0,
                         }}
                         className="lg:sticky lg:top-6"
                     />

@@ -31,12 +31,15 @@ class UpdateMembershipPlanRequest extends FormRequest
 
         return [
             'name' => ['required', 'string', 'max:120'],
+            'description' => ['nullable', 'string', 'max:200'],
             'slug' => ['required', 'string', 'max:80', 'regex:/^[a-z0-9\-]+$/', Rule::unique('membership_plans', 'slug')->ignore($planId)],
             'max_staff_users' => ['nullable', 'integer', 'min:0'],
             'max_employees' => ['nullable', 'integer', 'min:0'],
             'features_json' => ['nullable', 'array'],
             'price_monthly' => ['nullable', 'numeric', 'min:0'],
+            'trial_days' => ['nullable', 'integer', 'min:0', 'max:365'],
             'is_active' => ['sometimes', 'boolean'],
+            'is_featured' => ['sometimes', 'boolean'],
             'sort_order' => ['nullable', 'integer', 'min:0', 'max:65535'],
         ];
     }

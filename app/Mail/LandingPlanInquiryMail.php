@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Models\BillingCycle;
 use App\Models\MembershipPlan;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -20,6 +21,7 @@ class LandingPlanInquiryMail extends Mailable
     public function __construct(
         public array $payload,
         public ?MembershipPlan $plan,
+        public ?BillingCycle $cycle = null,
     ) {}
 
     public function envelope(): Envelope

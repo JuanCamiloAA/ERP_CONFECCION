@@ -41,6 +41,12 @@ class StoreLandingPlanInquiryRequest extends FormRequest
                 'integer',
                 Rule::exists('membership_plans', 'id')->where('is_active', true),
             ],
+            // El periodo que la persona tenia elegido en la landing al pedir el plan.
+            'billing_cycle_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('billing_cycles', 'id')->where('is_active', true),
+            ],
         ];
     }
 

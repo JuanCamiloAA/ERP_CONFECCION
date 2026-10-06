@@ -2,9 +2,11 @@
 
 namespace App\Services\Landing;
 
+use App\Models\BillingCycle;
 use App\Models\Company;
 use App\Models\MembershipPlan;
 use App\Services\Files\MediaUrlResolver;
+use App\Services\Membership\MembershipPricing;
 use RuntimeException;
 
 /**
@@ -116,9 +118,16 @@ class LandingDataSources
         };
     }
 
-    /** @return list<array<string, mixed>> */
+    /**
+     * Cada plan con su precio en cada periodo de cobro activo. El precio se calcula aqui, con
+     * `MembershipPricing`, para que la landing muestre lo mismo que despues se cobra.
+     *
+     * @return list<array<string, mixed>>
+     */
     private function membershipPlans(): array
     {
+        $cycles = BillingCycle::query()->active()->ordered()->get();
+
         return MembershipPlan::query()
             ->where('is_active', true)
             ->orderBy('sort_order')
@@ -126,8 +135,22 @@ class LandingDataSources
             ->get()
             ->map(fn (MembershipPlan $plan) => [
                 'id' => $plan->id,
+                'slug' => $plan->slug,
                 'name' => $plan->name,
+                'description' => $plan->description,
+                'is_featured' => (bool) $plan->is_featured,
+                'trial_days' => (int) $plan->trial_days,
                 'price' => $plan->price_monthly !== null ? (float) $plan->price_monthly : null,
+                // Sin precio no hay nada que mostrar por periodo: la tarjeta dice «a convenir».
+                'prices' => $plan->price_monthly === null ? [] : $cycles->map(fn (BillingCycle $cycle) => [
+                    'cycle_id' => $cycle->id,
+                    'code' => $cycle->code,
+                    'name' => $cycle->name,
+                    'months' => $cycle->months,
+                    'discount_percent' => $cycle->discount_percent,
+                    'price' => MembershipPricing::priceFor($plan, $cycle),
+                    'monthly' => MembershipPricing::monthlyEquivalent($plan, $cycle),
+                ])->values()->all(),
                 'lines' => array_values(array_filter([
                     $plan->max_staff_users !== null
                         ? 'Hasta '.$plan->max_staff_users.' usuarios de escritorio (staff)'

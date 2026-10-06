@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\Landing\StoreLandingPlanInquiryRequest;
 use App\Mail\LandingPlanInquiryMail;
 use App\Models\LandingGlobal;
+use App\Models\BillingCycle;
 use App\Models\MembershipPlan;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -23,12 +24,16 @@ class LandingPlanInquiryController extends Controller
                 ->find((int) $data['membership_plan_id']);
         }
 
+        $cycle = ! empty($data['billing_cycle_id'])
+            ? BillingCycle::query()->active()->find((int) $data['billing_cycle_id'])
+            : null;
+
         $recipients = $this->notificationRecipients();
         if ($recipients->isEmpty()) {
             return back()->with('error', 'No se pudo enviar la solicitud: no hay correos de destino configurados para super administradores.');
         }
 
-        Mail::to($recipients->all())->send(new LandingPlanInquiryMail($data, $plan));
+        Mail::to($recipients->all())->send(new LandingPlanInquiryMail($data, $plan, $cycle));
 
         return back()->with('success', 'Su solicitud fue enviada. Nos pondremos en contacto pronto.');
     }

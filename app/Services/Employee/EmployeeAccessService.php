@@ -6,6 +6,7 @@ use App\Models\Employee;
 use App\Models\EmployeeAuditLog;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\UserPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -20,7 +21,10 @@ use Illuminate\Support\Str;
  */
 class EmployeeAccessService
 {
-    public function __construct(protected EmployeeAuditLogger $audit) {}
+    public function __construct(
+        protected EmployeeAuditLogger $audit,
+        protected UserPermissionService $permissions,
+    ) {}
 
     /**
      * Contrasena de la cuenta: la que envio el administrador o una temporal generada aqui.
@@ -78,6 +82,8 @@ class EmployeeAccessService
 
         if ($role) {
             $user->assignRole($role);
+            // Nace con los permisos de su rol; despues se ajusta por usuario.
+            $this->permissions->initializeFromRole($user, $role);
         }
 
         $employee->user_id = $user->id;
@@ -131,6 +137,7 @@ class EmployeeAccessService
         $previous = $employee->user->roles->first();
 
         $employee->user->syncRoles([$role]);
+        $this->permissions->switchRole($employee->user, $previous, $role);
 
         $this->audit->log(
             $employee,

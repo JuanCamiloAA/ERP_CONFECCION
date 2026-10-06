@@ -26,6 +26,9 @@ class UpdateCompanyRequest extends FormRequest
             'is_active' => ['nullable', 'boolean'],
             'settings' => ['nullable', 'array'],
             'membership_plan_id' => ['nullable', 'integer', 'exists:membership_plans,id'],
+            'billing_cycle_id' => ['nullable', 'integer', 'exists:billing_cycles,id'],
+            // Por que se toco la membresia; queda en la bitacora. Opcional.
+            'membership_reason' => ['nullable', 'string', 'max:255'],
             'membership_started_at' => ['nullable', 'date'],
             'membership_ends_at' => ['nullable', 'date', 'after_or_equal:membership_started_at'],
         ];
@@ -35,6 +38,10 @@ class UpdateCompanyRequest extends FormRequest
     {
         if ($this->input('membership_plan_id') === '' || $this->input('membership_plan_id') === null) {
             $this->merge(['membership_plan_id' => null]);
+        }
+        // Solo si viene: un formulario que no lo manda no debe borrarle el periodo a la empresa.
+        if ($this->exists('billing_cycle_id') && $this->input('billing_cycle_id') === '') {
+            $this->merge(['billing_cycle_id' => null]);
         }
         foreach (['membership_started_at', 'membership_ends_at'] as $key) {
             if ($this->input($key) === '') {

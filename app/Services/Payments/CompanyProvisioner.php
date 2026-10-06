@@ -3,12 +3,14 @@
 namespace App\Services\Payments;
 
 use App\Helpers\PermissionHelper;
+use App\Models\BillingCycle;
 use App\Models\Company;
 use App\Models\CompanyBillingCharge;
 use App\Models\CompanySignup;
 use App\Models\Role;
 use App\Models\User;
 use App\Services\CompanyDefaultRolesService;
+use App\Services\Membership\MembershipService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -27,7 +29,10 @@ use Illuminate\Support\Facades\DB;
  */
 class CompanyProvisioner
 {
-    public function __construct(protected CompanyDefaultRolesService $defaultRoles) {}
+    public function __construct(
+        protected CompanyDefaultRolesService $defaultRoles,
+        protected MembershipService $membership,
+    ) {}
 
     /**
      * @return array{company: Company, user: User}
@@ -36,6 +41,8 @@ class CompanyProvisioner
     {
         return DB::transaction(function () use ($signup) {
             $plan = $signup->membershipPlan;
+            // El alta paga el primer mes: nace en el periodo mensual.
+            $cycle = BillingCycle::default();
             $startsAt = Carbon::today();
             // Primer mes pagado: la membresia vale hasta el mismo dia del mes siguiente.
             $endsAt = $startsAt->copy()->addMonth();
@@ -47,11 +54,14 @@ class CompanyProvisioner
                 'email' => $signup->company_email,
                 'is_active' => true,
                 'membership_plan_id' => $signup->membership_plan_id,
+                'billing_cycle_id' => $cycle?->id,
                 'membership_started_at' => $startsAt,
                 'membership_ends_at' => $endsAt,
                 'payment_gateway' => PaymentGatewayResolver::PROVIDER,
                 'next_charge_at' => $endsAt,
             ]);
+
+            $this->membership->provision($company, $cycle);
 
             // Crea admin, supervisor, contable, consulta y operario de esta empresa.
             $this->defaultRoles->ensureDefaultRolesForCompany($company, false);
@@ -82,12 +92,19 @@ class CompanyProvisioner
             CompanyBillingCharge::create([
                 'company_id' => $company->id,
                 'membership_plan_id' => $signup->membership_plan_id,
+                'billing_cycle_id' => $cycle?->id,
                 'amount' => $signup->amount_in_cents / 100,
                 'currency' => $signup->currency,
                 'concept' => 'Primer mes — Plan '.($plan?->name ?? 'membresía'),
+                'reference' => $signup->reference,
                 'status' => CompanyBillingCharge::STATUS_PAID,
+                'method' => CompanyBillingCharge::METHOD_CHECKOUT,
+                'period_starts_at' => $startsAt,
+                'period_ends_at' => $endsAt,
                 'gateway_reference' => $signup->transaction_id,
+                'attempts' => 1,
                 'charged_at' => $signup->paid_at ?? now(),
+                'paid_at' => $signup->paid_at ?? now(),
             ]);
 
             $signup->forceFill([

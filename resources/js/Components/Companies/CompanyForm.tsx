@@ -6,6 +6,7 @@ import { Card, CardHeader } from '@/Components/UI/Card';
 import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import { Input } from '@/Components/UI/Input';
 import { PageHeader } from '@/Components/UI/PageHeader';
+import { Select } from '@/Components/UI/Select';
 import { StickySaveBar } from '@/Components/UI/StickySaveBar';
 import { Switch } from '@/Components/UI/Switch';
 import { Textarea } from '@/Components/UI/Textarea';
@@ -23,6 +24,7 @@ export interface CompanyFormCompany {
     logo: string | null;
     is_active: boolean;
     membership_plan_id: number | null;
+    billing_cycle_id?: number | null;
     membership_started_at: string | null;
     membership_ends_at: string | null;
     staff_users_count?: number;
@@ -30,8 +32,17 @@ export interface CompanyFormCompany {
     membership_plan?: { max_staff_users: number | null; max_employees: number | null } | null;
 }
 
+/** Periodo de cobro de la membresía (mensual, trimestral...). */
+export interface BillingCycleOption {
+    id: number;
+    name: string;
+    months: number;
+    discount_percent: number;
+}
+
 interface Props {
     plans: PlanOption[];
+    cycles: BillingCycleOption[];
     /** Ausente al crear. */
     company?: CompanyFormCompany;
 }
@@ -45,9 +56,19 @@ type FormFields = {
     logo: File | null;
     is_active: boolean;
     membership_plan_id: string;
+    billing_cycle_id: string;
     membership_started_at: string;
     membership_ends_at: string;
+    membership_reason: string;
 };
+
+/** Campos que, si cambian al editar, dejan renglon en la bitacora de la membresia. */
+const MEMBERSHIP_KEYS: (keyof FormFields)[] = [
+    'membership_plan_id',
+    'billing_cycle_id',
+    'membership_started_at',
+    'membership_ends_at',
+];
 
 /**
  * Formulario unico de crear y editar empresa.
@@ -56,7 +77,7 @@ type FormFields = {
  * del plan solo existia en editar). Uno solo obliga a que cualquier campo nuevo aparezca en
  * los dos sitios.
  */
-export function CompanyForm({ plans, company }: Props) {
+export function CompanyForm({ plans, cycles, company }: Props) {
     const editing = company !== undefined;
 
     const initial: FormFields = useMemo(
@@ -69,8 +90,10 @@ export function CompanyForm({ plans, company }: Props) {
             logo: null,
             is_active: company?.is_active ?? true,
             membership_plan_id: company?.membership_plan_id != null ? String(company.membership_plan_id) : '',
+            billing_cycle_id: company?.billing_cycle_id != null ? String(company.billing_cycle_id) : '',
             membership_started_at: company?.membership_started_at?.slice(0, 10) ?? '',
             membership_ends_at: company?.membership_ends_at?.slice(0, 10) ?? '',
+            membership_reason: '',
         }),
         [company],
     );
@@ -118,6 +141,7 @@ export function CompanyForm({ plans, company }: Props) {
     };
 
     const selectedPlan = plans.find((plan) => String(plan.id) === data.membership_plan_id) ?? null;
+    const membershipTouched = editing && MEMBERSHIP_KEYS.some((key) => data[key] !== initial[key]);
 
     return (
         <form onSubmit={submit} className="space-y-6">
@@ -226,6 +250,19 @@ export function CompanyForm({ plans, company }: Props) {
                                 emptyLabel={editing ? 'Sin plan' : 'Predeterminado (primer plan activo)'}
                                 error={errors.membership_plan_id}
                             />
+                            <Select
+                                label="Periodo de cobro"
+                                value={data.billing_cycle_id}
+                                onChange={(e) => setData('billing_cycle_id', String(e.target.value))}
+                                options={cycles.map((cycle) => ({
+                                    value: String(cycle.id),
+                                    label: cycle.discount_percent > 0 ? `${cycle.name} (−${cycle.discount_percent} %)` : cycle.name,
+                                }))}
+                                placeholder="Predeterminado (mensual)"
+                                searchable={false}
+                                error={errors.billing_cycle_id}
+                                description="Cada cuánto paga. Aplica desde la próxima renovación."
+                            />
                             <Input
                                 type="date"
                                 label={editing ? 'Inicio membresía' : 'Inicio membresía (opcional)'}
@@ -239,7 +276,22 @@ export function CompanyForm({ plans, company }: Props) {
                                 value={data.membership_ends_at}
                                 onChange={(e) => setData('membership_ends_at', e.target.value)}
                                 error={errors.membership_ends_at}
+                                description={
+                                    editing
+                                        ? 'Alargarla reactiva una empresa en gracia o suspendida.'
+                                        : 'Vacía = sin vencimiento, o los días de prueba del plan si los tiene.'
+                                }
                             />
+                            {membershipTouched ? (
+                                <Input
+                                    label="Motivo del cambio (opcional)"
+                                    value={data.membership_reason}
+                                    onChange={(e) => setData('membership_reason', e.target.value)}
+                                    error={(errors as Record<string, string>).membership_reason}
+                                    description="Queda en la bitácora de la membresía."
+                                    maxLength={255}
+                                />
+                            ) : null}
                         </div>
                     </Card>
 

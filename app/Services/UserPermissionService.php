@@ -39,6 +39,66 @@ class UserPermissionService
         $this->assertEditable($target);
         $this->assertSameCompany($actor, $target);
 
+        $this->replaceAll($target, $permissionNames);
+    }
+
+    /**
+     * Permisos con que nace un usuario: los de la plantilla de su rol.
+     *
+     * Desde que el rol es solo una plantilla, lo que un usuario puede hacer sale de
+     * `model_has_permissions`, no de su rol: asignarle el rol sin copiar la plantilla lo
+     * dejaba entrando sin poder abrir nada. Despues cada usuario se ajusta por su cuenta.
+     *
+     * El super admin no lleva permisos uno a uno, y un usuario sin empresa no tiene donde
+     * aplicarlos: en esos casos no hace nada.
+     */
+    public function initializeFromRole(User $target, ?Role $role): void
+    {
+        if (! $role || $role->name === 'super_admin' || ! $target->company_id) {
+            return;
+        }
+
+        // Se relee el rol: quien llama acaba de asignarlo y la relacion puede venir vieja.
+        if ($target->load('roles')->isSuperAdmin()) {
+            return;
+        }
+
+        $this->replaceAll($target, $role->permissions()->pluck('name')->all());
+    }
+
+    /**
+     * Cambio de rol: entra lo que el rol nuevo tiene y el anterior no, y sale lo que el
+     * anterior tenia y el nuevo no. Las excepciones de la persona —lo que se le dio o se le
+     * quito a mano— no se tocan: «cambiar su rol no borra estas excepciones».
+     */
+    public function switchRole(User $target, ?Role $previous, Role $next): void
+    {
+        if ($next->name === 'super_admin' || ! $target->company_id || $target->load('roles')->isSuperAdmin()) {
+            return;
+        }
+
+        if ($previous !== null && (int) $previous->getKey() === (int) $next->getKey()) {
+            return;
+        }
+
+        // Venia de super admin: no tenia permisos uno a uno, asi que arranca de la plantilla.
+        if ($previous !== null && $previous->name === 'super_admin') {
+            $this->initializeFromRole($target, $next);
+
+            return;
+        }
+
+        $old = $previous ? $previous->permissions()->pluck('name')->all() : [];
+        $new = $next->permissions()->pluck('name')->all();
+
+        $this->applyDelta($target, array_values(array_diff($new, $old)), array_values(array_diff($old, $new)));
+    }
+
+    /**
+     * @param  list<string>  $permissionNames
+     */
+    protected function replaceAll(User $target, array $permissionNames): void
+    {
         $ids = $this->resolveIds($permissionNames);
 
         DB::transaction(function () use ($target, $ids): void {

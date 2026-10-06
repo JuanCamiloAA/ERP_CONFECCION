@@ -4,6 +4,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { AppNavbar } from '@/Components/Layout/AppNavbar';
 import { CommandPalette } from '@/Components/Layout/CommandPalette';
+import { MembershipNotice } from '@/Components/Layout/MembershipNotice';
 import { MobileTabBar } from '@/Components/Layout/MobileTabBar';
 import { SidebarGroups } from '@/Components/Layout/SidebarGroups';
 import { SidebarRail } from '@/Components/Layout/SidebarRail';
@@ -227,6 +228,7 @@ export default function AppLayout({ children, title }: AppLayoutProps) {
                         }}
                     >
                         <div className="mx-auto" style={{ maxWidth: 'var(--main-max)' }}>
+                            <MembershipNotice company={activeCompany ?? null} />
                             {children}
                         </div>
                     </main>

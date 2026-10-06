@@ -14,7 +14,7 @@ import {
     VirtuesBlock,
 } from '@/Components/Public/Blocks';
 import { BlockShell } from '@/Components/Public/BlockShell';
-import { DataBlock } from '@/Components/Public/DataBlock';
+import { DataBlock, type PlanCycleChoice } from '@/Components/Public/DataBlock';
 import '../../../css/public.css';
 
 type Dict = Record<string, unknown>;
@@ -233,7 +233,7 @@ function PublicFooter({ data }: { data: Dict }) {
  */
 export default function PublicLanding({ blocks, meta = {}, preview = false, appearanceDefaults = {} }: Props) {
     // Plan elegido en una tarjeta de precio; abre el formulario de solicitud.
-    const [planSolicitado, setPlanSolicitado] = useState<{ id: number; name: string } | null>(null);
+    const [planSolicitado, setPlanSolicitado] = useState<{ id: number; name: string; cycle: PlanCycleChoice | null } | null>(null);
     const header = blocks.find((b) => b.type === 'header');
     const footer = blocks.find((b) => b.type === 'footer');
 
@@ -279,7 +279,7 @@ export default function PublicLanding({ blocks, meta = {}, preview = false, appe
                         data={block.data}
                         rows={block.rows ?? []}
                         error={block.error}
-                        onPlanClick={(id, name) => setPlanSolicitado({ id, name })}
+                        onPlanClick={(id, name, cycle) => setPlanSolicitado({ id, name, cycle })}
                     />
                 );
             default:

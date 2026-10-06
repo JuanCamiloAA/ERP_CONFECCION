@@ -20,6 +20,13 @@
             @if($plan->price_monthly !== null)
                 <x-mail.info-row label="Precio mensual" :value="'$ '.number_format((float) $plan->price_monthly, 0, ',', '.')" />
             @endif
+            @if($cycle)
+                @php($cyclePrice = \App\Services\Membership\MembershipPricing::priceFor($plan, $cycle))
+                <x-mail.info-row label="Periodo de cobro" :value="$cycle->name.($cycle->discount_percent > 0 ? ' (−'.$cycle->discount_percent.' %)' : '')" />
+                @if($cyclePrice !== null && $cycle->months > 1)
+                    <x-mail.info-row label="Precio del periodo" :value="'$ '.number_format($cyclePrice, 0, ',', '.')" />
+                @endif
+            @endif
         @else
             <x-mail.info-row label="Plan" value="No indicado (consulta general)" />
         @endif

@@ -9,7 +9,7 @@ import { PageHeader } from '@/Components/UI/PageHeader';
 import { Pagination } from '@/Components/UI/Pagination';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/Components/UI/Table';
 import { ViewToggle } from '@/Components/UI/ViewToggle';
-import { PlanCard } from '@/Components/MembershipPlans/PlanCard';
+import { PlanCard, type PlanCyclePrice } from '@/Components/MembershipPlans/PlanCard';
 import { useViewMode } from '@/hooks/useViewMode';
 import AppLayout from '@/Layouts/AppLayout';
 import type { PaginatedResponse } from '@/types';
@@ -24,12 +24,15 @@ interface PlanRow {
     features_json: string[] | null;
     is_active: boolean;
     sort_order: number;
+    trial_days: number;
     companies_count: number;
 }
 
 interface Props {
     plans: PaginatedResponse<PlanRow>;
     featuredPlanId: number | null;
+    /** id del plan => su precio en cada periodo de cobro activo. */
+    cyclePrices: Record<number, PlanCyclePrice[]>;
 }
 
 const money = new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', maximumFractionDigits: 0 });
@@ -38,7 +41,7 @@ function limit(value: number | null): string {
     return value == null ? 'Ilimitado' : String(value);
 }
 
-export default function MembershipPlansIndex({ plans, featuredPlanId }: Props) {
+export default function MembershipPlansIndex({ plans, featuredPlanId, cyclePrices }: Props) {
     const [confirm, setConfirm] = useState<PlanRow | null>(null);
     // Por defecto tarjetas: esta pantalla se abre mas veces para comparar planes que para
     // corregir un campo suelto.
@@ -99,6 +102,7 @@ export default function MembershipPlansIndex({ plans, featuredPlanId }: Props) {
                             <PlanCard
                                 key={plan.id}
                                 plan={plan}
+                                cyclePrices={cyclePrices[plan.id] ?? []}
                                 highlighted={plan.id === featuredPlanId}
                                 footer={
                                     <>
@@ -185,8 +189,8 @@ export default function MembershipPlansIndex({ plans, featuredPlanId }: Props) {
                 title="Eliminar plan"
                 message={
                     confirm && confirm.companies_count > 0
-                        ? `${confirm.companies_count} ${confirm.companies_count === 1 ? 'empresa quedara' : 'empresas quedaran'} sin plan asignado y sin limites de usuarios.`
-                        : 'Las empresas con este plan quedaran sin plan asignado.'
+                        ? `Lo tienen ${confirm.companies_count} ${confirm.companies_count === 1 ? 'empresa' : 'empresas'}: no se puede borrar. Desactívalo desde Editar plan.`
+                        : 'Se borra del catálogo. Si ya tiene cobros registrados, no se podrá borrar: desactívalo en su lugar.'
                 }
                 confirmText="Eliminar"
                 variant="danger"

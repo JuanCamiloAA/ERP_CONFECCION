@@ -5,11 +5,16 @@ namespace App\Http\Controllers;
 use App\Contracts\ObjectStorageInterface;
 use App\Http\Requests\Company\StoreCompanyRequest;
 use App\Http\Requests\Company\UpdateCompanyRequest;
+use App\Models\BillingCycle;
 use App\Models\Company;
+use App\Models\CompanyBillingCharge;
+use App\Models\CompanyMembershipEvent;
 use App\Models\MembershipPlan;
 use App\Models\Scopes\CompanyScope;
 use App\Services\CompanyDefaultRolesService;
 use App\Services\Files\StoredFileDeleter;
+use App\Services\Membership\MembershipPricing;
+use App\Services\Membership\MembershipService;
 use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -25,7 +30,14 @@ class CompanyController extends Controller
     public function __construct(
         protected ObjectStorageInterface $objectStorage,
         protected StoredFileDeleter $storedFileDeleter,
+        protected MembershipService $membership,
     ) {}
+
+    /** Campos de la membresia: no se guardan con un update suelto sino por `MembershipService`. */
+    protected const MEMBERSHIP_FIELDS = ['membership_plan_id', 'billing_cycle_id', 'membership_started_at', 'membership_ends_at'];
+
+    /** Renglones de la bitacora que se muestran al editar; los mas viejos no se consultan. */
+    protected const MEMBERSHIP_EVENTS_LIMIT = 30;
 
     /** Dias antes del vencimiento a partir de los cuales una membresia «esta por vencer». */
     protected const EXPIRING_WINDOW_DAYS = 45;
@@ -312,7 +324,8 @@ class CompanyController extends Controller
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->orderBy('name')
-                ->get(['id', 'name', 'slug', 'max_staff_users', 'max_employees', 'price_monthly']),
+                ->get(['id', 'name', 'slug', 'max_staff_users', 'max_employees', 'price_monthly', 'trial_days']),
+            'billingCycles' => $this->billingCycleOptions(),
         ]);
     }
 
@@ -329,7 +342,12 @@ class CompanyController extends Controller
                 ->value('id');
         }
 
+        $cycle = ! empty($data['billing_cycle_id']) ? BillingCycle::query()->find($data['billing_cycle_id']) : null;
+
         $company = Company::create($data);
+
+        // Periodo de pago, estado (o prueba, si el plan la trae) y primer renglon de la bitacora.
+        $this->membership->provision($company, $cycle, $request->user());
 
         if ($request->hasFile('logo')) {
             $uploaded = $this->objectStorage->upload(
@@ -346,7 +364,7 @@ class CompanyController extends Controller
 
     public function edit(Company $company): Response
     {
-        $company->loadMissing(['membershipPlan:id,name,max_staff_users,max_employees']);
+        $company->loadMissing(['membershipPlan:id,name,max_staff_users,max_employees,price_monthly', 'billingCycle']);
         $company->loadCount([
             'users as staff_users_count' => fn ($q) => $q->whereNull('employee_id'),
             // Sin quitar CompanyScope contaria los empleados de la empresa seleccionada, no
@@ -360,14 +378,26 @@ class CompanyController extends Controller
                 ->where('is_active', true)
                 ->orderBy('sort_order')
                 ->orderBy('name')
-                ->get(['id', 'name', 'slug', 'max_staff_users', 'max_employees', 'price_monthly']),
+                ->get(['id', 'name', 'slug', 'max_staff_users', 'max_employees', 'price_monthly', 'trial_days']),
+            'billingCycles' => $this->billingCycleOptions(),
+            'membershipAdmin' => $this->membershipAdminPayload($company),
         ]);
     }
 
     public function update(UpdateCompanyRequest $request, Company $company): RedirectResponse
     {
         $data = $request->validated();
-        unset($data['logo']);
+        $reason = $data['membership_reason'] ?? null;
+        unset($data['logo'], $data['membership_reason']);
+
+        // La membresia pasa por el servicio: recalcula el estado con las fechas nuevas (alargar
+        // el vencimiento de una suspendida la reactiva) y deja el cambio en la bitacora.
+        $membershipChanges = array_intersect_key($data, array_flip(self::MEMBERSHIP_FIELDS));
+        $data = array_diff_key($data, $membershipChanges);
+
+        if ($membershipChanges !== []) {
+            $this->membership->manualUpdate($company, $membershipChanges, $reason, $request->user());
+        }
 
         if ($request->hasFile('logo')) {
             $this->storedFileDeleter->deleteIfPresent($company->getAttributes()['logo'] ?? null);
@@ -381,6 +411,32 @@ class CompanyController extends Controller
         $company->update($data);
 
         return redirect()->route('companies.index')->with('success', 'Empresa actualizada.');
+    }
+
+    /**
+     * Pago recibido por fuera (transferencia, efectivo): renueva un periodo y reactiva la
+     * empresa si estaba en gracia o suspendida. El valor por defecto es el del periodo.
+     */
+    public function storeMembershipPayment(Request $request, Company $company): RedirectResponse
+    {
+        abort_unless($request->user()?->isSuperAdmin(), 403);
+
+        $data = $request->validate([
+            'note' => ['required', 'string', 'max:120'],
+            'amount' => ['nullable', 'numeric', 'min:1', 'max:9999999999'],
+        ], [
+            'note.required' => 'Escribe de dónde salió el pago (transferencia, efectivo...).',
+        ]);
+
+        $charge = $this->membership->recordManualPayment(
+            $company,
+            $request->user(),
+            $data['note'],
+            isset($data['amount']) ? (float) $data['amount'] : null,
+        );
+
+        return back()->with('success', 'Pago registrado. La membresía quedó renovada hasta el '
+            .$charge->period_ends_at?->format('d/m/Y').'.');
     }
 
     public function destroy(Company $company): RedirectResponse
@@ -414,5 +470,72 @@ class CompanyController extends Controller
         session()->forget(TenantContext::LEGACY_SESSION_KEY);
 
         return back()->with('success', 'Empresa activa cambiada.');
+    }
+
+    /**
+     * @return list<array{id: int, name: string, months: int, discount_percent: int}>
+     */
+    protected function billingCycleOptions(): array
+    {
+        return BillingCycle::query()
+            ->active()
+            ->ordered()
+            ->get(['id', 'name', 'months', 'discount_percent'])
+            ->map(fn (BillingCycle $cycle) => [
+                'id' => $cycle->id,
+                'name' => $cycle->name,
+                'months' => $cycle->months,
+                'discount_percent' => $cycle->discount_percent,
+            ])
+            ->all();
+    }
+
+    /**
+     * Lo que el super admin necesita para administrar la membresia: estado, precio del
+     * periodo, ultimos cobros y la bitacora.
+     *
+     * @return array<string, mixed>
+     */
+    protected function membershipAdminPayload(Company $company): array
+    {
+        $plan = $company->membershipPlan;
+        $cycle = $company->billingCycle;
+
+        return [
+            'status' => $company->membership_status,
+            'status_label' => $company->membershipLabel(),
+            'grace_ends_at' => $company->grace_ends_at?->toIso8601String(),
+            'days_left' => MembershipService::daysLeft($company),
+            'cycle_price' => $plan && $cycle ? MembershipPricing::priceFor($plan, $cycle) : null,
+            'charges' => $company->billingCharges()
+                ->limit(10)
+                ->get()
+                ->map(fn (CompanyBillingCharge $charge) => [
+                    'id' => $charge->id,
+                    'date' => ($charge->paid_at ?? $charge->charged_at ?? $charge->created_at)?->toIso8601String(),
+                    'concept' => $charge->concept,
+                    'amount' => (float) $charge->amount,
+                    'currency' => $charge->currency,
+                    'status' => $charge->status,
+                    'status_label' => $charge->statusLabel(),
+                    'method_label' => CompanyBillingCharge::METHOD_LABELS[$charge->method] ?? null,
+                    'reference' => $charge->reference,
+                    'failure_reason' => $charge->failure_reason,
+                ])
+                ->all(),
+            'events' => $company->membershipEvents()
+                ->with('user:id,name,last_name')
+                ->limit(self::MEMBERSHIP_EVENTS_LIMIT)
+                ->get()
+                ->map(fn (CompanyMembershipEvent $event) => [
+                    'id' => $event->id,
+                    'type' => $event->type,
+                    'label' => $event->label(),
+                    'data' => $event->data ?? [],
+                    'user' => $event->user ? trim($event->user->name.' '.$event->user->last_name) : null,
+                    'created_at' => $event->created_at?->toIso8601String(),
+                ])
+                ->all(),
+        ];
     }
 }

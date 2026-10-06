@@ -1,4 +1,5 @@
 import {
+    ArrowPathIcon,
     ArrowUpTrayIcon,
     BanknotesIcon,
     BuildingLibraryIcon,
@@ -215,6 +216,14 @@ export const NAV_AREAS: AreaDefinition[] = [
                 label: 'Planes de membresía',
                 route: 'super-admin.membership-plans.index',
                 icon: CreditCardIcon,
+                superAdminOnly: true,
+            },
+            {
+                // «De cobro» y no «de pago»: «Periodicidad de pagos» ya es la de la nomina.
+                key: 'billing-cycles',
+                label: 'Periodos de cobro',
+                route: 'super-admin.billing-cycles.index',
+                icon: ArrowPathIcon,
                 superAdminOnly: true,
             },
             {

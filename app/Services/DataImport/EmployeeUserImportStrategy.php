@@ -7,6 +7,7 @@ use App\Models\DataImportBatch;
 use App\Models\Employee;
 use App\Models\Role;
 use App\Models\User;
+use App\Services\UserPermissionService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -241,6 +242,8 @@ class EmployeeUserImportStrategy implements ImportStrategyInterface
                 ]);
 
                 $newUser->assignRole($role);
+                // Igual que al crearlo a mano: nace con los permisos de su rol.
+                app(UserPermissionService::class)->initializeFromRole($newUser, $role);
 
                 $target->user_id = $newUser->id;
                 $target->save();

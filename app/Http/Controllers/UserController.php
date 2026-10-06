@@ -154,6 +154,8 @@ class UserController extends Controller
             $role = $this->resolveRoleForTargetCompany($role, $user, $authUser);
             $this->assertRoleAssignableToUser($role, $user, $authUser);
             $user->syncRoles([$role]);
+            // Nace con los permisos de su rol; despues se ajusta por usuario.
+            app(UserPermissionService::class)->initializeFromRole($user, $role);
         }
 
         return redirect()->route('users.index')->with('success', 'Usuario creado.');
@@ -313,7 +315,11 @@ class UserController extends Controller
             if ($role) {
                 $role = $this->resolveRoleForTargetCompany($role, $user, $authUser);
                 $this->assertRoleAssignableToUser($role, $user, $authUser);
+                $previous = $user->roles()->first();
                 $user->syncRoles([$role]);
+                // Cambiar de rol trae lo del rol nuevo y quita lo del anterior; lo que se le
+                // ajusto a mano a esta persona se conserva.
+                app(UserPermissionService::class)->switchRole($user, $previous, $role);
             }
         }
 

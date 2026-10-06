@@ -5,9 +5,12 @@ namespace App\Http\Controllers;
 use App\Contracts\ObjectStorageInterface;
 use App\Models\Company;
 use App\Models\CompanyBillingCharge;
+use App\Models\CompanyMembershipEvent;
 use App\Models\PayrollPeriodicity;
 use App\Models\Scopes\CompanyScope;
 use App\Services\Files\StoredFileDeleter;
+use App\Services\Membership\MembershipPricing;
+use App\Services\Membership\MembershipService;
 use App\Support\OperationDifficulty;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +29,7 @@ class SettingController extends Controller
     public function __construct(
         protected ObjectStorageInterface $objectStorage,
         protected StoredFileDeleter $storedFileDeleter,
+        protected MembershipService $membership,
     ) {}
 
     public function index(Request $request): Response
@@ -77,12 +81,26 @@ class SettingController extends Controller
      */
     protected function membershipPayload(Company $company): array
     {
-        $company->loadMissing(['membershipPlan', 'paymentMethod']);
+        $company->loadMissing(['membershipPlan', 'billingCycle', 'paymentMethod']);
         $plan = $company->membershipPlan;
+        $cycle = $company->billingCycle;
         $card = $company->paymentMethod;
 
         $endsAt = $company->membership_ends_at;
-        $daysLeft = $endsAt ? Carbon::today()->diffInDays(Carbon::parse($endsAt)->startOfDay(), false) : null;
+        $daysLeft = MembershipService::daysLeft($company);
+
+        // Lo que costaria el proximo periodo, con el precio y el descuento del periodo de
+        // pago que tiene la empresa. Sin plan o sin precio no hay cifra que mostrar.
+        $quote = null;
+        if ($plan) {
+            $next = $this->membership->quote($company);
+            $quote = $next['amount'] === null ? null : [
+                'amount' => $next['amount'],
+                'concept' => $next['concept'],
+                'starts_at' => $next['starts']->toDateString(),
+                'ends_at' => $next['ends']->toDateString(),
+            ];
+        }
 
         $staffUsed = $company->users()->whereNull('employee_id')->count();
         $employeesUsed = $company->employees()->withoutGlobalScope(CompanyScope::class)->count();
@@ -94,6 +112,17 @@ class SettingController extends Controller
                 'price_monthly' => $plan->price_monthly !== null ? (float) $plan->price_monthly : null,
                 'features' => array_values($plan->features_json ?? []),
             ] : null,
+            'cycle' => $cycle ? [
+                'name' => $cycle->name,
+                'months' => $cycle->months,
+                'discount_percent' => $cycle->discount_percent,
+            ] : null,
+            // Precio del periodo vigente: el mensual por los meses, con su descuento.
+            'cycle_price' => $plan && $cycle ? MembershipPricing::priceFor($plan, $cycle) : null,
+            'status' => $company->membership_status,
+            'status_label' => $company->membershipLabel(),
+            'grace_ends_at' => $company->grace_ends_at?->toIso8601String(),
+            'quote' => $quote,
             'started_at' => $company->membership_started_at?->toDateString(),
             'ends_at' => $endsAt?->toDateString(),
             // Negativo = ya vencio. Null = sin fecha limite.
@@ -118,7 +147,7 @@ class SettingController extends Controller
             ] : null,
             'auto_debit_enabled' => (bool) $company->auto_debit_enabled,
             'next_charge_at' => $company->next_charge_at?->toDateString() ?? $endsAt?->toDateString(),
-            'next_charge_amount' => $plan?->price_monthly !== null ? (float) $plan->price_monthly : null,
+            'next_charge_amount' => $quote['amount'] ?? null,
             'billing_charges' => $company->billingCharges()
                 ->limit(self::BILLING_HISTORY_LIMIT)
                 ->get()
@@ -218,11 +247,12 @@ class SettingController extends Controller
 
         $company->forceFill([
             'auto_debit_enabled' => $enabled,
-            // Sin fecha propia, la primera renovacion cae el dia que vence la membresia.
-            'next_charge_at' => $enabled
-                ? ($company->next_charge_at ?? $company->membership_ends_at?->toDateString())
-                : $company->next_charge_at,
+            // El cobro cae el dia que vence la membresia. No se reusa una fecha vieja: una
+            // que ya paso haria cobrar en la proxima ronda aunque falten semanas.
+            'next_charge_at' => $enabled ? $company->membership_ends_at?->toDateString() : null,
         ])->save();
+
+        $this->membership->record($company, CompanyMembershipEvent::AUTO_RENEW_TOGGLED, ['enabled' => $enabled], $request->user());
 
         return back()->with('success', $enabled
             ? 'Renovación automática activada.'

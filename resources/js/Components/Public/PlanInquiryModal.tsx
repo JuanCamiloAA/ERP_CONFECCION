@@ -10,13 +10,15 @@ import { FormEvent, useEffect } from 'react';
  */
 
 interface Props {
-    plan: { id: number; name: string } | null;
+    /** `cycle`: el periodo de cobro que estaba elegido en las tarjetas de plan. */
+    plan: { id: number; name: string; cycle?: { id: number; name: string } | null } | null;
     onClose: () => void;
 }
 
 export function PlanInquiryModal({ plan, onClose }: Props) {
     const { data, setData, post, processing, errors, reset, clearErrors } = useForm({
         membership_plan_id: null as number | null,
+        billing_cycle_id: null as number | null,
         company_name: '',
         company_tax_id: '',
         company_phone: '',
@@ -29,7 +31,7 @@ export function PlanInquiryModal({ plan, onClose }: Props) {
 
     useEffect(() => {
         if (plan) {
-            setData('membership_plan_id', plan.id);
+            setData((current) => ({ ...current, membership_plan_id: plan.id, billing_cycle_id: plan.cycle?.id ?? null }));
             clearErrors();
         }
         // Solo debe reaccionar al plan elegido; setData y clearErrors son estables.
@@ -101,6 +103,7 @@ export function PlanInquiryModal({ plan, onClose }: Props) {
                     <div>
                         <p className="text-[17px]" style={{ color: 'var(--pub-text)' }}>
                             Solicitar el plan {plan.name}
+                            {plan.cycle ? ` · ${plan.cycle.name}` : ''}
                         </p>
                         <p className="mt-0.5 text-[13px]" style={{ color: 'var(--pub-gray-3)' }}>
                             Déjanos tus datos y te contactamos.
