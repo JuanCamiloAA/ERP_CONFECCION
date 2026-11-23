@@ -164,13 +164,14 @@ class PermissionHelper
                     'index' => [
                         'display' => 'Listado de Referencias',
                         'route' => 'references.index',
-                        'actions' => ['view', 'create', 'edit', 'delete', 'duplicate', 'export_excel', 'export_pdf', 'recalculate_difficulty'],
+                        'actions' => ['view', 'create', 'edit', 'delete', 'duplicate', 'reprogram', 'export_excel', 'export_pdf', 'recalculate_difficulty'],
                         'labels' => [
                             'view' => 'Ver listado',
                             'create' => 'Crear referencia',
                             'edit' => 'Editar referencia',
                             'delete' => 'Eliminar referencia',
                             'duplicate' => 'Duplicar referencia',
+                            'reprogram' => 'Reprogramar producción (nuevo lote y valores)',
                             'export_excel' => 'Exportar Excel',
                             'export_pdf' => 'Exportar PDF',
                             'recalculate_difficulty' => 'Recalcular dificultad',

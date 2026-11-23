@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Reference;
 
-use App\Models\Production;
 use App\Models\Reference;
+use App\Support\ReferenceLotTotals;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -72,14 +72,13 @@ class UpdateReferenceRequest extends FormRequest
                 return;
             }
 
+            // Solo la programacion vigente: lo producido en las anteriores ya no limita el
+            // lote de hoy (para eso esta reprogramar).
             $newLot = (int) $this->input('lot_total_quantity');
-            $perOpTotals = Production::query()
-                ->withoutGlobalScopes()
-                ->where('reference_id', $reference->id)
-                ->selectRaw('SUM(quantity) as s')
-                ->groupBy('operation_id')
-                ->pluck('s');
-            $maxRegisteredSingleOperation = (int) ($perOpTotals->max() ?? 0);
+            $maxRegisteredSingleOperation = ReferenceLotTotals::progress(
+                ReferenceLotTotals::byOperation((int) $reference->id, $reference->currentLotNumber()),
+                null,
+            )['max'];
 
             if ($newLot < $maxRegisteredSingleOperation) {
                 $validator->errors()->add(

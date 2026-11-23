@@ -37,6 +37,11 @@ interface Props {
     onMinutos?: (operationId: number, minutos: number) => void;
     /** Vista: sin fila de captura, sin papelera y con el precio como texto. */
     readOnly?: boolean;
+    /**
+     * Solo al reprogramar: precio de cada operacion en la programacion que se cierra. Con el,
+     * la linea que no estaba se marca «Nueva» y la que cambia de precio muestra el anterior.
+     */
+    previousPrices?: Record<number, number>;
     className?: string;
 }
 
@@ -77,8 +82,37 @@ export function ReferenceOperationsTable({
     onPrecio,
     onMinutos,
     readOnly = false,
+    previousPrices,
     className,
 }: Props) {
+    /** «Nueva» o «antes $X» frente a la programacion anterior; nada si no se compara. */
+    const esNueva = (l: RefOperation) => previousPrices !== undefined && previousPrices[l.operation_id] === undefined;
+    const precioAnterior = (l: RefOperation): number | null => {
+        const antes = previousPrices?.[l.operation_id];
+
+        return antes !== undefined && Math.abs(antes - Number(l.price)) > 0.001 ? antes : null;
+    };
+
+    const marcaNueva = (
+        <span
+            className="ml-2 rounded-full px-2 py-0.5 text-[11px]"
+            style={{ backgroundColor: 'var(--ref-accent-soft)', color: 'var(--ref-accent-on)' }}
+        >
+            Nueva
+        </span>
+    );
+
+    const notaAntes = (l: RefOperation) => {
+        const antes = precioAnterior(l);
+        if (antes === null) return null;
+
+        return (
+            <span className="mt-0.5 block text-[11px]" style={{ color: Number(l.price) > antes ? 'var(--ref-ok)' : 'var(--ref-danger)' }}>
+                antes {formatCurrency(antes, currency)}
+            </span>
+        );
+    };
+
     const [busqueda, setBusqueda] = useState('');
     const [elegida, setElegida] = useState<OperationOption | null>(null);
     const [precio, setPrecio] = useState('');
@@ -399,6 +433,7 @@ export function ReferenceOperationsTable({
                                 <tr key={l.operation_id} style={{ borderTop: '1px solid var(--ref-border-table)' }}>
                                     <td className="px-3 py-2" style={{ color: inactiva(l) ? 'var(--ref-muted)' : 'var(--ref-text)' }}>
                                         {l.name}
+                                        {esNueva(l) ? marcaNueva : null}
                                         {inactiva(l) ? (
                                             <span
                                                 className="ml-2 rounded-full px-2 py-0.5 text-[11px]"
@@ -419,11 +454,15 @@ export function ReferenceOperationsTable({
                                                 onChange={(e) => onPrecio(l.operation_id, numero(e.target.value))}
                                                 onKeyDown={(e) => e.key === 'Enter' && e.preventDefault()}
                                                 className="w-full rounded-md border border-transparent bg-transparent px-1.5 py-1 text-[13px] hover:border-[color:var(--ref-border)]"
-                                                style={{ color: 'var(--ref-text)' }}
+                                                style={{
+                                                    color: 'var(--ref-text)',
+                                                    ...(precioAnterior(l) !== null ? { borderColor: 'var(--ref-accent)' } : {}),
+                                                }}
                                             />
                                         ) : (
                                             <span style={{ color: 'var(--ref-text)' }}>{formatCurrency(l.price, currency)}</span>
                                         )}
+                                        {notaAntes(l)}
                                     </td>
                                     <td className="px-3 py-2">
                                         {onMinutos && !readOnly ? (
@@ -529,6 +568,7 @@ export function ReferenceOperationsTable({
                             <div className="min-w-0">
                                 <p className="truncate text-[14px]" style={{ color: inactiva(l) ? 'var(--ref-muted)' : 'var(--ref-text)' }}>
                                     {l.name}
+                                    {esNueva(l) ? marcaNueva : null}
                                     {inactiva(l) ? (
                                         <span className="ml-2 text-[11px]" style={{ color: 'var(--ref-subtle)' }}>
                                             · Inactiva
@@ -580,6 +620,7 @@ export function ReferenceOperationsTable({
                                         {formatCurrency(l.price, currency)}
                                     </p>
                                 )}
+                                {notaAntes(l)}
                                 <p className="mt-0.5 text-[12px]" style={{ color: 'var(--ref-muted)' }}>
                                     {peso.toFixed(0)}% del costo
                                 </p>

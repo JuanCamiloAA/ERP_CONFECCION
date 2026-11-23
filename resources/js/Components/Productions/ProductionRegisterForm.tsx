@@ -12,6 +12,8 @@ export interface ReferenceWithOps {
     name: string;
     image?: string | null;
     lot_total_quantity?: number | null;
+    /** Programacion vigente: el saldo del lote es el de esta programacion. */
+    lot_number?: number;
     productions_sum_quantity?: number | null;
     productions_quantity_by_operation?: Record<string, number>;
     operations: ReferenceOperationPivot[];
@@ -237,6 +239,7 @@ export function ProductionRegisterForm({
             id: r.id,
             title: `${r.code} · ${r.name}`,
             subtitle: [
+                Number(r.lot_number ?? 1) > 1 ? `Prog. ${r.lot_number}` : null,
                 `${r.operations.length} ${r.operations.length === 1 ? 'operacion' : 'operaciones'}`,
                 pendingOps != null ? `${pendingOps} pendientes` : null,
             ]
@@ -361,7 +364,7 @@ export function ProductionRegisterForm({
                     primary={selectedReference ? `${selectedReference.code} · ${selectedReference.name}` : undefined}
                     secondary={
                         selectedReference && lotCapInfo.cap != null
-                            ? `Lote ${formatNumber(lotCapInfo.cap)}${
+                            ? `${Number(selectedReference.lot_number ?? 1) > 1 ? `Prog. ${selectedReference.lot_number} · ` : ''}Lote ${formatNumber(lotCapInfo.cap)}${
                                   lotCapInfo.remaining != null ? ` · disponibles ${formatNumber(lotCapInfo.remaining)}` : ''
                               }`
                             : undefined
@@ -405,7 +408,9 @@ export function ProductionRegisterForm({
 
                 {lotCapInfo.cap != null ? (
                     <p className="emp-note">
-                        Tope del lote (por operación): <strong>{formatNumber(lotCapInfo.cap)}</strong> unidades.
+                        Tope del lote (por operación)
+                        {Number(selectedReference?.lot_number ?? 1) > 1 ? `, programación ${selectedReference?.lot_number}` : ''}:{' '}
+                        <strong>{formatNumber(lotCapInfo.cap)}</strong> unidades.
                         {lotCapInfo.registeredThisOperation != null ? (
                             <>
                                 {' '}

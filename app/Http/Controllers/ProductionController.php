@@ -17,6 +17,7 @@ use App\Models\User;
 use App\Services\Productions\ProductionRankingExport;
 use App\Services\ProductionReportService;
 use App\Services\WorkDaySessionService;
+use App\Support\ReferenceLotTotals;
 use App\Support\TenantContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -278,10 +279,37 @@ class ProductionController extends Controller
             'production' => $production,
             'employees' => $this->employeesList(),
             'references' => $this->referencesForProductionForm($production),
+            'productionLot' => $this->productionLotContext($production),
             'priceLocked' => $request->user()?->isRestrictedProductionAccount() ?? false,
             'statusEditable' => ! ($request->user()?->isRestrictedProductionAccount() ?? false),
             'backUrl' => route($this->listRouteFor($request->user())),
         ]);
+    }
+
+    /**
+     * Lote contra el que se corrige el registro mientras siga en su referencia.
+     *
+     * Un registro de una programacion ya cerrada se mide contra el lote que tenia esa
+     * programacion, no contra el de la vigente: el formulario usa estos numeros en lugar de
+     * los de la referencia hasta que se elija otra.
+     *
+     * @return array{lot_number: int, is_current: bool, lot_total_quantity: int|null, quantity_by_operation: array<string, int>|\stdClass}
+     */
+    protected function productionLotContext(Production $production): array
+    {
+        $reference = Reference::query()->withoutGlobalScopes()->find($production->reference_id);
+        $lotNumber = max(1, (int) ($production->lot_number ?? 1));
+
+        $byOperation = collect(ReferenceLotTotals::byOperation((int) $production->reference_id, $lotNumber))
+            ->mapWithKeys(fn ($qty, $id) => [(string) $id => $qty])
+            ->all();
+
+        return [
+            'lot_number' => $lotNumber,
+            'is_current' => $reference === null || $lotNumber === $reference->currentLotNumber(),
+            'lot_total_quantity' => $reference?->lotQuantityFor($lotNumber),
+            'quantity_by_operation' => $byOperation === [] ? new \stdClass : $byOperation,
+        ];
     }
 
     public function update(UpdateProductionRequest $request, Production $production): RedirectResponse
@@ -413,7 +441,7 @@ class ProductionController extends Controller
             $writer = Writer::createFromStream(fopen('php://output', 'w'));
             $writer->setOutputBOM(Bom::Utf8);
             $writer->insertOne([
-                'Fecha', 'Empleado', 'Referencia', 'Nombre referencia', 'Operacion',
+                'Fecha', 'Empleado', 'Referencia', 'Nombre referencia', 'Programacion', 'Operacion',
                 'Cantidad', 'Precio unitario', 'Valor', 'Turno', 'Estado', 'Observaciones',
             ]);
 
@@ -425,6 +453,7 @@ class ProductionController extends Controller
                         trim(($row->employee?->first_name ?? '').' '.($row->employee?->last_name ?? '')),
                         $row->reference?->code,
                         $row->reference?->name,
+                        (int) ($row->lot_number ?: 1),
                         $row->operation?->name,
                         (int) $row->quantity,
                         (float) $row->unit_price,
@@ -879,9 +908,47 @@ class ProductionController extends Controller
             }
         }
 
+        if ($editing) {
+            $this->keepEditingOperation($references, $editing);
+        }
+
         $this->hydrateProductionQuantitiesByOperation($references);
 
         return $references;
+    }
+
+    /**
+     * Si al reprogramar se quito del detalle la operacion de un registro viejo, se agrega a
+     * su referencia solo para el formulario de edicion, con el precio del registro. Sin
+     * esto el selector quedaria sin la operacion y el registro cambiaria de operacion al
+     * guardarlo.
+     *
+     * @param  Collection<int, Reference>  $references
+     */
+    protected function keepEditingOperation($references, Production $editing): void
+    {
+        $reference = $references->first(fn ($r) => (int) $r->id === (int) $editing->reference_id);
+
+        if (! $reference || $reference->operations->contains(fn ($op) => (int) $op->id === (int) $editing->operation_id)) {
+            return;
+        }
+
+        $operation = Operation::query()->withoutGlobalScopes()->find($editing->operation_id);
+
+        if (! $operation) {
+            return;
+        }
+
+        $operation->setAttribute('pivot', [
+            'reference_id' => (int) $reference->id,
+            'operation_id' => (int) $operation->id,
+            'price' => (string) $editing->unit_price,
+            'estimated_minutes' => null,
+            'difficulty_level' => null,
+            'is_active' => false,
+        ]);
+
+        $reference->operations->push($operation);
     }
 
     /**
@@ -893,18 +960,8 @@ class ProductionController extends Controller
             return;
         }
 
-        $refIds = $references->pluck('id');
-        $rows = Production::query()
-            ->withoutGlobalScopes()
-            ->selectRaw('reference_id, operation_id, SUM(quantity) as qty')
-            ->whereIn('reference_id', $refIds)
-            ->groupBy('reference_id', 'operation_id')
-            ->get();
-
-        $map = [];
-        foreach ($rows as $row) {
-            $map[(int) $row->reference_id][(int) $row->operation_id] = (int) $row->qty;
-        }
+        // Solo la programacion vigente: al reprogramar, el saldo del lote vuelve a empezar.
+        $map = ReferenceLotTotals::currentByOperation($references->pluck('id'));
 
         foreach ($references as $ref) {
             $byOp = $map[(int) $ref->id] ?? [];
@@ -936,7 +993,17 @@ class ProductionController extends Controller
 
     protected function resolveUnitPriceForUpdate(?User $user, array $data, Production $production): float
     {
+        // Misma referencia y misma operacion: el precio es el de cuando se registro. Tomarlo
+        // del detalle de hoy le pondria a un registro viejo el precio de una programacion
+        // posterior (o el precio base, si la linea se quito al reprogramar).
+        $sameLine = (int) $data['reference_id'] === (int) $production->reference_id
+            && (int) $data['operation_id'] === (int) $production->operation_id;
+
         if ($user?->isRestrictedProductionAccount()) {
+            if ($sameLine) {
+                return (float) $production->unit_price;
+            }
+
             return $this->unitPriceFromReferenceOperation((int) $data['reference_id'], (int) $data['operation_id']);
         }
 

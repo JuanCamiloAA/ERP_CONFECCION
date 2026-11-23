@@ -254,6 +254,12 @@ Route::middleware(['auth', 'force.password', 'company'])->group(function () {
         Route::post('/references/{reference}/duplicate', [ReferenceController::class, 'duplicate'])
             ->name('references.duplicate')
             ->middleware('permission:references.index.duplicate');
+        Route::get('/references/{reference}/reprogram', [ReferenceController::class, 'reprogramForm'])
+            ->name('references.reprogram')
+            ->middleware('permission:references.index.reprogram');
+        Route::post('/references/{reference}/reprogram', [ReferenceController::class, 'reprogram'])
+            ->name('references.reprogram.store')
+            ->middleware('permission:references.index.reprogram');
         Route::post('/references/{reference}/recalculate-difficulty', [ReferenceController::class, 'recalculateDifficulties'])
             ->name('references.operations.recalculate')
             ->middleware('permission:references.operations.recalculate');

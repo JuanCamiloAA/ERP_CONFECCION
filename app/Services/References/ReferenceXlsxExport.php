@@ -273,6 +273,9 @@ class ReferenceXlsxExport
         /* --------------------------------------------------- Produccion del lote */
 
         $sheet->row([XlsxCell::text('Producción registrada', XlsxStyle::SECTION)]);
+        // Las cifras de abajo son de la programacion vigente: una referencia reprogramada
+        // vuelve a contar su lote desde cero.
+        $this->pair($sheet, 'Programación vigente', XlsxCell::number($reference['lot_number'] ?? 1, XlsxStyle::INTEGER));
         $this->pair($sheet, 'Unidades de la operación más avanzada', XlsxCell::number($reference['produced_max_per_operation'], XlsxStyle::INTEGER));
         $this->pair($sheet, 'Unidades pendientes del lote', XlsxCell::number($reference['pending_units'], XlsxStyle::INTEGER));
         $this->pair($sheet, 'Avance del lote', XlsxCell::number($reference['progress_ratio'], XlsxStyle::PERCENT));

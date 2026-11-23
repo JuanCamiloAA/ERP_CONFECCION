@@ -23,8 +23,10 @@ interface Props {
     reference: Reference & { operations: ReferenceOperationPivot[] };
     operations: OperationOption[];
     comparison: ReferenceEconomicsComparison;
-    /** Maximo acumulado en una sola operacion: lo que bloquea el codigo y limita el lote. */
+    /** Maximo acumulado en una sola operacion de la programacion vigente: limita el lote. */
     producedMax?: number;
+    /** Hay produccion en alguna programacion: bloquea el codigo. */
+    hasProduction?: boolean;
 }
 
 /** Minutos de la linea; cero es «sin medir», no un tiempo real. */
@@ -35,7 +37,7 @@ function lineMinutes(op: ReferenceOperationPivot): number {
     return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-export default function ReferenceEdit({ reference, operations, comparison, producedMax = 0 }: Props) {
+export default function ReferenceEdit({ reference, operations, comparison, producedMax = 0, hasProduction = false }: Props) {
     const page = usePage<App.PageProps>();
     const thresholds = page.props.difficultyMinuteThresholds ?? DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS;
     const companyCurrency = comparison.currency;
@@ -185,7 +187,8 @@ export default function ReferenceEdit({ reference, operations, comparison, produ
         .filter(([clave]) => !clave.startsWith('operations') && !camposConCampo.includes(clave))
         .map(([, mensaje]) => String(mensaje));
 
-    const codigoBloqueado = producedMax > 0;
+    const codigoBloqueado = hasProduction || producedMax > 0;
+    const programacion = Number(reference.lot_number ?? 1);
 
     /* ------------------------------------------------------------ fragmentos */
 
@@ -276,7 +279,7 @@ export default function ReferenceEdit({ reference, operations, comparison, produ
                 </ReferenceEconomicsBlock>
             ) : null}
 
-            <ReferenceEconomicsBlock kicker="Producción registrada">
+            <ReferenceEconomicsBlock kicker={programacion > 1 ? `Producción · programación ${programacion}` : 'Producción registrada'}>
                 <p className="text-[15px]" style={{ color: 'var(--ref-text)' }}>
                     {producedMax.toLocaleString('es-CO')}
                     {lotQty > 0 ? <span style={{ color: 'var(--ref-muted)' }}> de {lotQty.toLocaleString('es-CO')}</span> : null}
@@ -649,6 +652,18 @@ export default function ReferenceEdit({ reference, operations, comparison, produ
                                     >
                                         Esta referencia ya tiene <strong style={{ color: 'var(--ref-text)' }}>{producedMax.toLocaleString('es-CO')} unidades producidas</strong>.
                                         Cambiar precios de operaciones altera el costo de aquí en adelante; lo ya registrado conserva el precio con el que se pagó.
+                                        <Can permission="references.index.reprogram">
+                                            {' '}
+                                            ¿Llegó un pedido nuevo de esta prenda?{' '}
+                                            <Link
+                                                href={route('references.reprogram', reference.id)}
+                                                className="underline"
+                                                style={{ color: 'var(--ref-text)' }}
+                                            >
+                                                Reprográmala
+                                            </Link>{' '}
+                                            con su propia cantidad y valores; el lote vuelve a contar desde cero y esta programación queda en el historial.
+                                        </Can>
                                     </p>
                                 ) : null}
                             </>,

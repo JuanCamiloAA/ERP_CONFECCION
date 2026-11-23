@@ -1,5 +1,13 @@
 import { Head, Link, router } from '@inertiajs/react';
-import { ArrowPathIcon, ArrowRightIcon, PencilSquareIcon, PlusIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
+import {
+    ArrowPathIcon,
+    ArrowPathRoundedSquareIcon,
+    ArrowRightIcon,
+    PencilSquareIcon,
+    PlusIcon,
+    TagIcon,
+    TrashIcon,
+} from '@heroicons/react/24/outline';
 import { useMemo, useState } from 'react';
 import { ReferenceExportMenu } from '@/Components/References/ReferenceExportMenu';
 import { Badge } from '@/Components/UI/Badge';
@@ -48,6 +56,21 @@ function operationsProgress(ref: ReferenceRow) {
     const pct = hasLot && total > 0 ? Math.round((done / total) * 100) : null;
 
     return { total, done, pct, hasLot };
+}
+
+/** Marca de la programacion vigente; solo aparece cuando la referencia ya se reprogramo. */
+function LotTag({ reference }: { reference: ReferenceRow }) {
+    const n = Number(reference.lot_number ?? 1);
+    if (n <= 1) return null;
+
+    return (
+        <span
+            className="ml-1.5 inline-flex items-center rounded-full bg-indigo-50 px-1.5 py-px align-middle text-[10px] font-medium text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300"
+            title={`Reprogramada: va en la programación ${n}`}
+        >
+            Prog. {n}
+        </span>
+    );
 }
 
 /** Formatea un monto opcional; "—" cuando no hay valor configurado. */
@@ -114,6 +137,14 @@ export default function ReferencesIndex({ references, filters }: Props) {
                 label: 'Editar',
                 icon: <PencilSquareIcon className="h-4 w-4" />,
                 href: route('references.edit', ref.id),
+            });
+        }
+        if (perms.can('references.index.reprogram')) {
+            actions.push({
+                key: 'reprogram',
+                label: 'Reprogramar',
+                icon: <ArrowPathRoundedSquareIcon className="h-4 w-4" />,
+                href: route('references.reprogram', ref.id),
             });
         }
         if (perms.can('references.index.delete')) {
@@ -233,6 +264,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
                                                 className="block truncate text-base font-semibold text-slate-900 dark:text-slate-100"
                                             >
                                                 {ref.code}
+                                                <LotTag reference={ref} />
                                             </Link>
                                             <p className="truncate text-xs text-slate-500 dark:text-slate-400">{ref.name}</p>
                                         </div>
@@ -359,6 +391,7 @@ export default function ReferencesIndex({ references, filters }: Props) {
                                                     >
                                                         {ref.code}
                                                     </Link>
+                                                    <LotTag reference={ref} />
                                                     <p className="text-xs text-slate-500">{ref.name}</p>
                                                 </div>
                                             </div>
@@ -401,6 +434,11 @@ export default function ReferencesIndex({ references, filters }: Props) {
                                         </TableCell>
                                         <TableCell align="right">
                                             <div className="flex justify-end gap-1">
+                                                <Can permission="references.index.reprogram">
+                                                    <Link href={route('references.reprogram', ref.id)} title="Reprogramar: nuevo lote con su cantidad y valores">
+                                                        <Button variant="ghost" size="sm" icon={<ArrowPathRoundedSquareIcon className="h-4 w-4" />} />
+                                                    </Link>
+                                                </Can>
                                                 <Can permission="references.index.edit">
                                                     <Link href={route('references.edit', ref.id)}>
                                                         <Button variant="ghost" size="sm" icon={<PencilSquareIcon className="h-4 w-4" />} />

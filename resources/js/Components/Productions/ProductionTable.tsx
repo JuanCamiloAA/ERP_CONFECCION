@@ -215,7 +215,8 @@ export function ProductionRow({ production, grouped = false, showYear = false, s
                     {production.operation?.name ?? '—'}
                 </span>
                 <span className="block truncate text-[12px]" style={{ color: 'var(--emp-muted)' }}>
-                    {production.reference?.code} · {production.reference?.name}
+                    {production.reference?.code}
+                    {Number(production.lot_number ?? 1) > 1 ? ` (prog. ${production.lot_number})` : ''} · {production.reference?.name}
                 </span>
             </div>
 

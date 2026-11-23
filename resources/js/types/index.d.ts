@@ -315,6 +315,10 @@ export interface Reference {
     is_active: boolean;
     /** Tope del lote: maximo de unidades registrables por operacion en produccion para esta referencia. */
     lot_total_quantity?: number | null;
+    /** Programacion vigente (1, 2, 3…). Sube cada vez que se reprograma la referencia. */
+    lot_number?: number;
+    /** Inicio de la programacion vigente; null en la primera (arranca con la referencia). */
+    lot_started_at?: string | null;
     /** Suma de cantidades en produccion (todas las operaciones; informativo). */
     productions_sum_quantity?: number | null;
     /** Maximo entre operaciones de la suma registrada por operacion (listado referencias). */
@@ -325,6 +329,26 @@ export interface Reference {
     operations_count?: number;
     created_at: string;
     updated_at: string;
+}
+
+/** Una programacion de la referencia (la vigente o una ya cerrada), con lo producido en ella. */
+export interface ReferenceLotSummary {
+    lot_number: number;
+    is_current: boolean;
+    lot_total_quantity: number | null;
+    payment_per_unit: number | null;
+    operational_cost_per_unit: number;
+    started_at: string | null;
+    ended_at: string | null;
+    /** Quien la cerro al reprogramar. */
+    closed_by: string | null;
+    /** Unidades de la operacion mas avanzada. */
+    produced_max: number;
+    operations_completed: number;
+    operations_total: number;
+    records: number;
+    /** Valor de los registros de produccion de la programacion (lo que se paga a los operarios). */
+    production_value: number;
 }
 
 export interface Operation {
@@ -434,6 +458,8 @@ export interface Production {
     company?: { id: number; name: string } | null;
     employee_id: number;
     reference_id: number;
+    /** Programacion de la referencia en la que se registro. */
+    lot_number?: number;
     operation_id: number;
     quantity: number;
     unit_price: string | number;

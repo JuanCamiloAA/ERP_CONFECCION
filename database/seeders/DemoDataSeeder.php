@@ -386,10 +386,14 @@ class DemoDataSeeder extends Seeder
     protected function seedAdvances(Company $company, $employees): void
     {
         foreach ($employees->take(5) as $employee) {
+            $amount = rand(100000, 500000);
+
             Advance::withoutGlobalScopes()->create([
                 'company_id' => $company->id,
                 'employee_id' => $employee->id,
-                'amount' => rand(100000, 500000),
+                'amount' => $amount,
+                // Un anticipo nuevo arranca sin descuentos: el saldo pendiente es el monto completo.
+                'remaining_amount' => $amount,
                 'date' => now()->subDays(rand(1, 20))->format('Y-m-d'),
                 'reason' => collect(['Adelanto quincena', 'Imprevisto familiar', 'Servicios publicos', 'Salud'])->random(),
                 'status' => Advance::STATUS_PENDING,

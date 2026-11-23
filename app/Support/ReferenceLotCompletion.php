@@ -2,12 +2,12 @@
 
 namespace App\Support;
 
-use App\Models\Production;
 use App\Models\Reference;
 use App\Models\ReferenceOperation;
 
 /**
- * Cuando, para cada operacion asociada a la referencia, la suma de produccion alcanza el tope del lote,
+ * Cuando, para cada operacion asociada a la referencia, la suma de produccion de la
+ * programacion vigente alcanza el tope del lote,
  * inactiva la referencia y todas sus operaciones en el pivote, de modo que dejan de aparecer
  * en los selectores de produccion (Reference::active() + pivot is_active).
  */
@@ -36,14 +36,13 @@ final class ReferenceLotCompletion
             return;
         }
 
+        // Solo cuenta la programacion vigente: al reprogramar el conteo vuelve a cero y la
+        // referencia sigue abierta aunque las programaciones anteriores cubrieran su lote.
+        $produced = ReferenceLotTotals::byOperation($referenceId, $reference->currentLotNumber());
+
         $allComplete = true;
         foreach ($operationIdsOnPivot as $opId) {
-            $sumForOp = (int) Production::query()
-                ->withoutGlobalScopes()
-                ->where('reference_id', $referenceId)
-                ->where('operation_id', $opId)
-                ->sum('quantity');
-            if ($sumForOp < $lot) {
+            if (($produced[(int) $opId] ?? 0) < $lot) {
                 $allComplete = false;
                 break;
             }

@@ -41,6 +41,7 @@ class Production extends Model
         'company_id',
         'employee_id',
         'reference_id',
+        'lot_number',
         'operation_id',
         'quantity',
         'unit_price',
@@ -54,6 +55,7 @@ class Production extends Model
 
     protected $casts = [
         'date' => 'date',
+        'lot_number' => 'integer',
         'quantity' => 'integer',
         'unit_price' => 'decimal:2',
         'total_value' => 'decimal:2',
@@ -64,6 +66,30 @@ class Production extends Model
         static::saving(function (Production $production) {
             $production->total_value = round(((float) $production->quantity) * ((float) $production->unit_price), 2);
         });
+
+        // Cada registro queda en la programacion vigente de su referencia. Se resuelve aqui
+        // y no en cada formulario para que ningun camino de alta (registro, importacion,
+        // semillas) pueda dejarlo en la programacion equivocada.
+        static::creating(function (Production $production) {
+            if (! $production->lot_number && $production->reference_id) {
+                $production->lot_number = self::currentLotOf((int) $production->reference_id);
+            }
+        });
+
+        // Mover un registro a otra referencia lo lleva a la programacion vigente de esa
+        // otra; si se queda en la misma, conserva la suya aunque ya este cerrada.
+        static::updating(function (Production $production) {
+            if ($production->isDirty('reference_id') && $production->reference_id) {
+                $production->lot_number = self::currentLotOf((int) $production->reference_id);
+            }
+        });
+    }
+
+    protected static function currentLotOf(int $referenceId): int
+    {
+        $lot = Reference::query()->withoutGlobalScopes()->whereKey($referenceId)->value('lot_number');
+
+        return max(1, (int) ($lot ?? 1));
     }
 
     public function isPaid(): bool

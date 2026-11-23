@@ -1,10 +1,19 @@
 import { Head, Link, router, usePage } from '@inertiajs/react';
-import { ArrowDownTrayIcon, ArrowLeftIcon, DocumentDuplicateIcon, PencilSquareIcon, TagIcon, TrashIcon } from '@heroicons/react/24/outline';
+import {
+    ArrowDownTrayIcon,
+    ArrowLeftIcon,
+    ArrowPathRoundedSquareIcon,
+    DocumentDuplicateIcon,
+    PencilSquareIcon,
+    TagIcon,
+    TrashIcon,
+} from '@heroicons/react/24/outline';
 import { useMemo, useState } from 'react';
 import { ReferenceEconomicsBlock, ReferenceEconomicsPanel } from '@/Components/References/ReferenceEconomicsPanel';
 import { ReferenceExportMenu } from '@/Components/References/ReferenceExportMenu';
 import { ReferenceFormLayout } from '@/Components/References/ReferenceFormLayout';
 import { ReferenceFormSection } from '@/Components/References/ReferenceFormSection';
+import { ReferenceLotHistory } from '@/Components/References/ReferenceLotHistory';
 import { ReferenceOperationsTable, type RefOperation } from '@/Components/References/ReferenceOperationsTable';
 import { Can } from '@/Components/UI/Can';
 import { ConfirmDialog } from '@/Components/UI/ConfirmDialog';
@@ -12,7 +21,7 @@ import { ZoomableImage } from '@/Components/UI/ImageLightbox';
 import AppLayout from '@/Layouts/AppLayout';
 import { DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS } from '@/lib/difficulty';
 import { formatCurrency } from '@/lib/utils';
-import type { Reference, ReferenceEconomicsComparison, ReferenceOperationPivot } from '@/types';
+import type { Reference, ReferenceEconomicsComparison, ReferenceLotSummary, ReferenceOperationPivot } from '@/types';
 
 interface Props {
     reference: Reference & {
@@ -24,6 +33,8 @@ interface Props {
         operations_completed_count?: number | null;
     };
     comparison: ReferenceEconomicsComparison;
+    /** Programaciones, de la vigente a la primera. */
+    lots?: ReferenceLotSummary[];
 }
 
 /**
@@ -44,7 +55,7 @@ function lineMinutes(op: ReferenceOperationPivot): number | null {
  * la pantalla comparte armazon, secciones y panel con crear y editar, y se distingue por
  * no tener numeros de paso ni controles de captura.
  */
-export default function ReferenceShow({ reference, comparison }: Props) {
+export default function ReferenceShow({ reference, comparison, lots = [] }: Props) {
     const thresholds = usePage<App.PageProps>().props.difficultyMinuteThresholds ?? DEFAULT_DIFFICULTY_MINUTE_THRESHOLDS;
     const [confirmarDuplicar, setConfirmarDuplicar] = useState(false);
     const [confirmarEliminar, setConfirmarEliminar] = useState(false);
@@ -59,6 +70,7 @@ export default function ReferenceShow({ reference, comparison }: Props) {
     const margen = pago - costo;
 
     const producidas = Number(reference.productions_max_per_operation ?? 0);
+    const programacion = Number(reference.lot_number ?? 1);
 
     /** El detalle, en la forma que espera la tabla compartida. */
     const lineas: RefOperation[] = useMemo(
@@ -169,6 +181,16 @@ export default function ReferenceShow({ reference, comparison }: Props) {
                             Eliminar
                         </button>
                     </Can>
+                    <Can permission="references.index.reprogram">
+                        <Link
+                            href={route('references.reprogram', reference.id)}
+                            className="ref-btn"
+                            title="Nuevo lote de la misma referencia, con su cantidad y sus valores"
+                        >
+                            <ArrowPathRoundedSquareIcon className="h-4 w-4" />
+                            Reprogramar
+                        </Link>
+                    </Can>
                     <Can permission="references.index.edit">
                         <Link href={route('references.edit', reference.id)} className="ref-btn ref-btn-primary">
                             <PencilSquareIcon className="h-4 w-4" />
@@ -202,6 +224,16 @@ export default function ReferenceShow({ reference, comparison }: Props) {
                     buttonClassName="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
                     trigger={<ArrowDownTrayIcon className="h-5 w-5" style={{ color: 'var(--ref-muted)' }} />}
                 />
+                <Can permission="references.index.reprogram">
+                    <Link
+                        href={route('references.reprogram', reference.id)}
+                        aria-label="Reprogramar referencia"
+                        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg"
+                        style={{ color: 'var(--ref-muted)' }}
+                    >
+                        <ArrowPathRoundedSquareIcon className="h-5 w-5" />
+                    </Link>
+                </Can>
                 <Can permission="references.index.create">
                     <button
                         type="button"
@@ -244,7 +276,7 @@ export default function ReferenceShow({ reference, comparison }: Props) {
 
     const panel = (
         <ReferenceEconomicsPanel paymentPerUnit={pago} productionCostPerUnit={costo} lote={lote} currency={currency}>
-            <ReferenceEconomicsBlock kicker="Operaciones completadas">
+            <ReferenceEconomicsBlock kicker={programacion > 1 ? `Operaciones completadas · programación ${programacion}` : 'Operaciones completadas'}>
                 <p className="text-[15px]" style={{ color: 'var(--ref-text)' }}>
                     {conLote ? (
                         <>
@@ -410,7 +442,7 @@ export default function ReferenceShow({ reference, comparison }: Props) {
                         {caja(
                             'Cantidad total del lote',
                             lote > 0 ? lote.toLocaleString('es-CO') : '—',
-                            'Tope de unidades por operación.',
+                            programacion > 1 ? `Programación ${programacion} · tope por operación.` : 'Tope de unidades por operación.',
                         )}
                         <div className="col-span-2 sm:col-span-1">
                             {caja(
@@ -441,6 +473,13 @@ export default function ReferenceShow({ reference, comparison }: Props) {
                         onQuitar={() => {}}
                     />
                 </ReferenceFormSection>
+
+                {/* ------------------------------------------- Programaciones */}
+                {lots.length > 1 ? (
+                    <ReferenceFormSection title="Programaciones" summary={`${lots.length} programaciones de esta referencia`}>
+                        <ReferenceLotHistory lots={lots} currency={currency} />
+                    </ReferenceFormSection>
+                ) : null}
             </ReferenceFormLayout>
 
             <ConfirmDialog

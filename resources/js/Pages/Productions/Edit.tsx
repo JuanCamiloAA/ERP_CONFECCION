@@ -13,15 +13,25 @@ interface ReferenceWithOps {
     code: string;
     name: string;
     lot_total_quantity?: number | null;
+    lot_number?: number;
     productions_sum_quantity?: number | null;
     productions_quantity_by_operation?: Record<string, number>;
     operations: ReferenceOperationPivot[];
+}
+
+/** Lote de la programacion a la que pertenece el registro (puede ser una ya cerrada). */
+interface ProductionLot {
+    lot_number: number;
+    is_current: boolean;
+    lot_total_quantity: number | null;
+    quantity_by_operation: Record<string, number>;
 }
 
 interface Props {
     production: Production;
     employees: Employee[];
     references: ReferenceWithOps[];
+    productionLot?: ProductionLot;
     priceLocked?: boolean;
     statusEditable?: boolean;
     /** Listado al que se vuelve: el operario no tiene uno en «Mi producción» y regresa al Detalle. */
@@ -32,6 +42,7 @@ export default function ProductionEdit({
     production,
     employees,
     references,
+    productionLot,
     priceLocked = false,
     statusEditable = false,
     backUrl = route('productions.index'),
@@ -58,26 +69,27 @@ export default function ProductionEdit({
     );
     const availableOperations = selectedReference?.operations ?? [];
 
+    /**
+     * Mientras el registro siga en su referencia se mide contra SU programacion (puede ser
+     * una ya cerrada por reprogramar); si se pasa a otra referencia, entra en la vigente de
+     * esa otra, igual que decide el servidor.
+     */
+    const sameReference = Number(data.reference_id) === production.reference_id;
+    const lotCap = sameReference && productionLot ? productionLot.lot_total_quantity : (selectedReference?.lot_total_quantity ?? null);
+    const lotNumber = sameReference && productionLot ? productionLot.lot_number : Number(selectedReference?.lot_number ?? 1);
+
     const lotMaxQuantity = useMemo(() => {
-        const ref = selectedReference;
-        if (!ref || ref.lot_total_quantity == null) return null;
+        if (!selectedReference || lotCap == null) return null;
         const opId = Number(data.operation_id);
         if (!opId) return null;
-        const map = ref.productions_quantity_by_operation ?? {};
+        const map =
+            (sameReference && productionLot ? productionLot.quantity_by_operation : selectedReference.productions_quantity_by_operation) ?? {};
         const sumForOp = Number(map[String(opId)] ?? 0);
-        const sameLine =
-            Number(data.reference_id) === production.reference_id && Number(data.operation_id) === production.operation_id;
+        const sameLine = sameReference && Number(data.operation_id) === production.operation_id;
         const usedExcludingThisRow = sameLine ? sumForOp - production.quantity : sumForOp;
 
-        return Math.max(0, ref.lot_total_quantity - usedExcludingThisRow);
-    }, [
-        selectedReference,
-        data.reference_id,
-        data.operation_id,
-        production.reference_id,
-        production.operation_id,
-        production.quantity,
-    ]);
+        return Math.max(0, lotCap - usedExcludingThisRow);
+    }, [selectedReference, lotCap, sameReference, productionLot, data.operation_id, production.operation_id, production.quantity]);
 
     useEffect(() => {
         if (lotMaxQuantity != null && lotMaxQuantity > 0 && data.quantity > lotMaxQuantity) {
@@ -88,6 +100,12 @@ export default function ProductionEdit({
 
     useEffect(() => {
         if (!priceLocked || !data.operation_id || availableOperations.length === 0) return;
+        // Misma referencia y operacion: vale el precio con el que se registro, aunque la
+        // referencia se haya reprogramado despues con otro.
+        if (sameReference && Number(data.operation_id) === production.operation_id) {
+            setData('unit_price', String(production.unit_price ?? ''));
+            return;
+        }
         const op = availableOperations.find((o) => o.id === Number(data.operation_id));
         if (op) setData('unit_price', String(op.pivot.price));
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -176,10 +194,13 @@ export default function ProductionEdit({
                                 }))}
                             />
 
-                            {selectedReference?.lot_total_quantity != null ? (
+                            {lotCap != null ? (
                                 <p className="emp-note sm:col-span-2">
-                                    Tope del lote por operación:{' '}
-                                    <strong>{formatNumber(selectedReference.lot_total_quantity)}</strong> · en este
+                                    Tope del lote por operación
+                                    {lotNumber > 1 || (sameReference && productionLot && !productionLot.is_current)
+                                        ? ` (programación ${lotNumber}${sameReference && productionLot && !productionLot.is_current ? ', ya cerrada' : ''})`
+                                        : ''}
+                                    : <strong>{formatNumber(lotCap)}</strong> · en este
                                     movimiento puedes dejar hasta{' '}
                                     <strong>{lotMaxQuantity != null ? formatNumber(lotMaxQuantity) : '—'}</strong> unidades.
                                     {lotMaxQuantity === 0 ? ' No hay saldo disponible para esta operación.' : ''}

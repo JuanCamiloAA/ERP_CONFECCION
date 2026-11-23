@@ -34,11 +34,25 @@ class Reference extends Model
         'image',
         'is_active',
         'lot_total_quantity',
+        'lot_number',
+        'lot_started_at',
+    ];
+
+    /**
+     * Toda referencia nace en la programacion 1. Se declara aqui y no solo en la base para
+     * que una referencia recien creada lo lleve antes de volver a leerse.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'lot_number' => 1,
     ];
 
     protected $casts = [
         'is_active' => 'boolean',
         'lot_total_quantity' => 'integer',
+        'lot_number' => 'integer',
+        'lot_started_at' => 'datetime',
         'payment_per_unit' => 'decimal:2',
         'operational_cost_per_unit_fixed' => 'decimal:2',
         'operational_lot_qty_at_cost_fix' => 'integer',
@@ -64,6 +78,36 @@ class Reference extends Model
     public function productions(): HasMany
     {
         return $this->hasMany(Production::class);
+    }
+
+    /** Programaciones ya cerradas, de la mas reciente a la mas antigua. */
+    public function lots(): HasMany
+    {
+        return $this->hasMany(ReferenceLot::class)->orderByDesc('lot_number');
+    }
+
+    /** Programacion vigente: la que cuenta contra el tope del lote. */
+    public function currentLotNumber(): int
+    {
+        return max(1, (int) ($this->lot_number ?? 1));
+    }
+
+    /**
+     * Tope del lote de una programacion: el de la referencia si es la vigente, el que quedo
+     * guardado al cerrarla si es una anterior.
+     */
+    public function lotQuantityFor(int $lotNumber): ?int
+    {
+        if ($lotNumber === $this->currentLotNumber()) {
+            return $this->lot_total_quantity !== null ? (int) $this->lot_total_quantity : null;
+        }
+
+        $quantity = ReferenceLot::query()
+            ->where('reference_id', $this->id)
+            ->where('lot_number', $lotNumber)
+            ->value('lot_total_quantity');
+
+        return $quantity !== null ? (int) $quantity : null;
     }
 
     public function scopeActive(Builder $query): Builder

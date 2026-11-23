@@ -2,9 +2,9 @@
 
 namespace App\Services\References;
 
-use App\Models\Production;
 use App\Models\Reference;
 use App\Support\OperationDifficulty;
+use App\Support\ReferenceLotTotals;
 use Illuminate\Support\Collection;
 
 /**
@@ -89,6 +89,7 @@ class ReferenceExportData
             'name' => (string) $reference->name,
             'description' => $reference->description,
             'is_active' => (bool) $reference->is_active,
+            'lot_number' => $reference->currentLotNumber(),
             'status_label' => $reference->is_active ? 'Activa' : 'Inactiva',
             'image_url' => $reference->toArray()['image'] ?? null,
             'created_at' => $reference->created_at?->format('d/m/Y'),
@@ -156,29 +157,16 @@ class ReferenceExportData
     }
 
     /**
-     * Produccion acumulada por referencia y operacion.
-     *
-     * Sin scopes: la produccion de una referencia de la empresa activa puede haberse
-     * registrado con otro company_id historico, y aun asi es produccion suya.
+     * Produccion acumulada por referencia y operacion, de la programacion vigente
+     * (ver ReferenceLotTotals).
      *
      * @param  list<int>  $referenceIds
      * @return array<int, array<int, int>>
      */
     protected function producedByOperation(array $referenceIds): array
     {
-        if ($referenceIds === []) {
-            return [];
-        }
-
-        return Production::query()
-            ->withoutGlobalScopes()
-            ->selectRaw('reference_id, operation_id, SUM(quantity) as op_sum')
-            ->whereIn('reference_id', $referenceIds)
-            ->groupBy('reference_id', 'operation_id')
-            ->get()
-            ->groupBy('reference_id')
-            ->map(fn ($rows) => $rows->pluck('op_sum', 'operation_id')->map(fn ($v) => (int) $v)->all())
-            ->all();
+        // De la programacion vigente: es la que se compara contra el lote que se exporta.
+        return ReferenceLotTotals::currentByOperation($referenceIds);
     }
 
     /**

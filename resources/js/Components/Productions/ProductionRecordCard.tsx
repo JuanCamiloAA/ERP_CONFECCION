@@ -28,7 +28,8 @@ export function ProductionRecordCard({ production, showCompany = false, onConfir
                     {production.operation?.name ?? '—'}
                 </p>
                 <p className="mt-0.5 truncate text-[12px] tabular-nums" style={{ color: 'var(--emp-muted)' }}>
-                    {production.reference?.code} · {formatNumber(production.quantity)} und ×{' '}
+                    {production.reference?.code}
+                    {Number(production.lot_number ?? 1) > 1 ? ` (prog. ${production.lot_number})` : ''} · {formatNumber(production.quantity)} und ×{' '}
                     {formatCurrency(production.unit_price)}
                 </p>
                 {showCompany && production.company?.name ? (

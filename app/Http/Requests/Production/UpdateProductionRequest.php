@@ -45,7 +45,17 @@ class UpdateProductionRequest extends FormRequest
             $referenceIdIn = $this->input('reference_id');
             $operationIdIn = $this->input('operation_id');
 
-            if ($referenceIdIn && $operationIdIn) {
+            // Un registro de una programacion ya cerrada que conserva su referencia y su
+            // operacion no tiene por que encontrar esa linea en el detalle de hoy: al
+            // reprogramar la linea pudo quitarse o cerrarse, y existia cuando se registro.
+            // El tope de su lote se sigue validando abajo.
+            $stored = $this->route('production');
+            $closedLotLine = $stored instanceof Production
+                && (int) $stored->reference_id === (int) $referenceIdIn
+                && (int) $stored->operation_id === (int) $operationIdIn
+                && (int) ($stored->lot_number ?: 1) !== (int) (Reference::query()->withoutGlobalScopes()->whereKey($stored->reference_id)->value('lot_number') ?? 1);
+
+            if ($referenceIdIn && $operationIdIn && ! $closedLotLine) {
                 $reference = Reference::find($referenceIdIn);
                 if ($reference) {
                     $exists = $reference->operations()
@@ -64,12 +74,18 @@ class UpdateProductionRequest extends FormRequest
             $operationId = (int) $this->input('operation_id', 0);
             $quantity = (int) $this->input('quantity', 0);
             if ($referenceId && $operationId && $quantity > 0) {
+                // Si el registro sigue en su referencia, se mide contra SU programacion
+                // (puede ser una ya cerrada); si cambia de referencia, entra en la vigente.
+                $sameReference = $production instanceof Production
+                    && (int) $production->reference_id === $referenceId;
+
                 ReferenceLotCapacity::assertWithinLot(
                     $validator,
                     $referenceId,
                     $operationId,
                     $quantity,
-                    $production?->id
+                    $production?->id,
+                    $sameReference ? (int) ($production->lot_number ?: 1) : null,
                 );
             }
 

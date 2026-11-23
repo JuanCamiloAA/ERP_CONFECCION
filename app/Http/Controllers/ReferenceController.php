@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Contracts\ObjectStorageInterface;
+use App\Http\Requests\Reference\ReprogramReferenceRequest;
 use App\Http\Requests\Reference\StoreReferenceRequest;
 use App\Http\Requests\Reference\UpdateReferenceRequest;
 use App\Models\Operation;
@@ -11,9 +12,11 @@ use App\Models\Reference;
 use App\Services\Files\StoredFileDeleter;
 use App\Services\References\ReferenceDifficultySync;
 use App\Services\References\ReferenceExportData;
+use App\Services\References\ReferenceReprogrammer;
 use App\Services\References\ReferenceXlsxExport;
 use App\Support\OperationDifficulty;
 use App\Support\ReferenceLotCompletion;
+use App\Support\ReferenceLotTotals;
 use App\Support\TenantContext;
 use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
@@ -59,29 +62,17 @@ class ReferenceController extends Controller
 
         $ids = $references->getCollection()->pluck('id');
         if ($ids->isNotEmpty()) {
-            // Produccion acumulada por operacion (una fila por referencia+operacion).
-            $perOperation = Production::query()
-                ->withoutGlobalScopes()
-                ->selectRaw('reference_id, operation_id, SUM(quantity) as op_sum')
-                ->whereIn('reference_id', $ids)
-                ->groupBy('reference_id', 'operation_id')
-                ->get()
-                ->groupBy('reference_id');
+            // Produccion de la programacion vigente, por operacion: es la que se mide
+            // contra el lote. Lo de programaciones anteriores es historia.
+            $perOperation = ReferenceLotTotals::currentByOperation($ids);
 
             $references->getCollection()->each(function (Reference $ref) use ($perOperation) {
-                $sums = $perOperation->get($ref->id) ?? collect();
-                $lot = $ref->lot_total_quantity !== null ? (int) $ref->lot_total_quantity : null;
+                $progress = ReferenceLotTotals::progress($perOperation[$ref->id] ?? [], $ref->lot_total_quantity);
 
-                $ref->setAttribute('productions_max_per_operation', (int) $sums->max('op_sum'));
-
+                $ref->setAttribute('productions_max_per_operation', $progress['max']);
                 // Una operacion se considera completa cuando su produccion acumulada cubre
                 // el lote. Sin lote definido no hay meta contra la cual compararla.
-                $ref->setAttribute(
-                    'operations_completed_count',
-                    $lot !== null && $lot > 0
-                        ? $sums->filter(fn ($row) => (int) $row->op_sum >= $lot)->count()
-                        : 0
-                );
+                $ref->setAttribute('operations_completed_count', $progress['completed']);
             });
         }
 
@@ -256,6 +247,8 @@ class ReferenceController extends Controller
         return Inertia::render('References/Show', [
             'reference' => $reference,
             'comparison' => $this->buildEconomicsComparison($reference),
+            // Programaciones de la referencia, de la vigente a la primera.
+            'lots' => ReferenceLotTotals::history($reference),
         ]);
     }
 
@@ -268,36 +261,69 @@ class ReferenceController extends Controller
             'operations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price', 'estimated_minutes', 'difficulty_level']),
             'comparison' => $this->buildEconomicsComparison($reference),
             'producedMax' => $this->productionProgress($reference)['max'],
+            // El codigo se bloquea con produccion en CUALQUIER programacion: los registros
+            // viejos tambien lo citan. El lote, en cambio, solo mira la vigente.
+            'hasProduction' => Production::query()->withoutGlobalScopes()
+                ->where('reference_id', $reference->id)
+                ->exists(),
         ]);
     }
 
     /**
-     * Avance de una referencia, con las dos cifras que se miden contra el lote.
-     *
-     * - `max`: unidades producidas de la operacion mas avanzada. Es lo comparable contra
-     *   el lote; `productions_sum_quantity` suma todas las operaciones, asi que una
-     *   prenda de ocho pasos daria un 800% de avance.
-     * - `completed`: cuantas operaciones ya cubren el lote completo. Mismo criterio que
-     *   usa el listado (ver index), para que la ficha y la tabla no discrepen.
+     * Formulario para reprogramar: cantidad, valor por unidad y precio de cada operacion de
+     * la programacion nueva, con la vigente al lado para comparar.
+     */
+    public function reprogramForm(Reference $reference): Response
+    {
+        $reference->load(['operations', 'company']);
+
+        $current = $reference->currentLotNumber();
+        $byOperation = ReferenceLotTotals::byOperation((int) $reference->id, $current);
+        $progress = ReferenceLotTotals::progress($byOperation, $reference->lot_total_quantity);
+
+        return Inertia::render('References/Reprogram', [
+            'reference' => $reference,
+            // Catalogo para agregar operaciones que la programacion nueva si lleva.
+            'operations' => Operation::active()->orderBy('name')->get(['id', 'name', 'base_price', 'estimated_minutes', 'difficulty_level']),
+            'comparison' => $this->buildEconomicsComparison($reference),
+            'currentLot' => [
+                'lot_number' => $current,
+                'started_at' => ($reference->lot_started_at ?? $reference->created_at)?->toIso8601String(),
+                'produced_max' => $progress['max'],
+                'operations_completed' => $progress['completed'],
+                'operations_total' => $reference->operations->count(),
+                // Claves string: en JSON un arreglo con claves numericas sueltas llega como
+                // lista si empiezan en 0.
+                'produced_by_operation' => collect($byOperation)->mapWithKeys(fn ($qty, $id) => [(string) $id => $qty]),
+            ],
+        ]);
+    }
+
+    public function reprogram(ReprogramReferenceRequest $request, Reference $reference, ReferenceReprogrammer $reprogrammer): RedirectResponse
+    {
+        $closed = $reprogrammer->reprogram($reference, $request->validated(), $request->user());
+
+        return redirect()->route('references.show', $reference)->with('success', sprintf(
+            'Referencia reprogramada: la programación %d quedó en el historial y la %d arranca con un lote de %s unidades.',
+            $closed->lot_number,
+            $reference->currentLotNumber(),
+            number_format((int) $reference->lot_total_quantity, 0, ',', '.'),
+        ));
+    }
+
+    /**
+     * Avance de la programacion vigente, con las dos cifras que se miden contra el lote
+     * (ver ReferenceLotTotals::progress). Mismo criterio que el listado, para que la ficha
+     * y la tabla no discrepen.
      *
      * @return array{max: int, completed: int}
      */
     protected function productionProgress(Reference $reference): array
     {
-        $sums = Production::query()
-            ->withoutGlobalScopes()
-            ->where('reference_id', $reference->id)
-            ->selectRaw('operation_id, SUM(quantity) as op_sum')
-            ->groupBy('operation_id')
-            ->pluck('op_sum');
-
-        $lot = (int) ($reference->lot_total_quantity ?? 0);
-
-        return [
-            'max' => (int) $sums->max(),
-            // Sin lote definido no hay meta contra la cual dar una operacion por completa.
-            'completed' => $lot > 0 ? $sums->filter(fn ($sum) => (int) $sum >= $lot)->count() : 0,
-        ];
+        return ReferenceLotTotals::progress(
+            ReferenceLotTotals::byOperation((int) $reference->id, $reference->currentLotNumber()),
+            $reference->lot_total_quantity,
+        );
     }
 
     public function update(UpdateReferenceRequest $request, Reference $reference): RedirectResponse
@@ -323,11 +349,14 @@ class ReferenceController extends Controller
                 ->whereNotIn('operation_id', collect($operations)->pluck('operation_id')->all())
                 ->pluck('operation_id');
 
-            // Quitar una linea ya producida dejaria producciones apuntando a un detalle
-            // que no existe, y con el la trazabilidad de lo que se pago.
+            // Quitar una linea ya producida EN LA PROGRAMACION VIGENTE dejaria esa
+            // produccion sin el detalle con el que se pago. La de programaciones cerradas
+            // no se pierde: su detalle quedo en la foto de esa programacion.
             if ($quitadas->isNotEmpty()) {
                 $conProduccion = Production::query()->withoutGlobalScopes()
                     ->where('reference_id', $reference->id)
+                    ->where('lot_number', $reference->currentLotNumber())
+                    ->whereNull('deleted_at')
                     ->whereIn('operation_id', $quitadas)
                     ->pluck('operation_id')
                     ->unique();
